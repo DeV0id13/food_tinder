@@ -23,6 +23,9 @@ def test_session_authentication_enforces_csrf(settings, django_user_model):
     user = django_user_model.objects.create_user("csrf@example.com", "Foundation_123")
     client.force_login(user)
     assert client.post("/csrf-test/", {}).status_code == 403
-    client.get("/admin/login/")
+    response = client.get("/api/v1/auth/session/")
+    assert response.status_code == 200
+    assert response.cookies["csrftoken"].value
     token = client.cookies["csrftoken"].value
+    assert client.post("/csrf-test/", {}).status_code == 403
     assert client.post("/csrf-test/", {}, HTTP_X_CSRFTOKEN=token).status_code == 200

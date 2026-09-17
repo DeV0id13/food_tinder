@@ -58,7 +58,10 @@
 `AUTH_USER_MODEL=accounts.User` задан до первой миграции. Поля username нет;
 единственный логин — обязательный email. В FoodTinder весь email считается
 регистронезависимым, нормализуется в нижний регистр, а уникальность дополнительно
-защищена индексом PostgreSQL на `lower(email)`. Пароли, permissions, группы,
+защищена индексом PostgreSQL на `lower(email)`. Методы `create_user()` и
+`create_superuser()` проверяют нормализованный email стандартным Django `validate_email`;
+пустой или некорректный email приводит к `ValidationError` до сохранения пользователя.
+Пароли, permissions, группы,
 сессии и админка используют стандартные механизмы Django.
 
 Пароль: минимум 10 символов, только `A-Z`, `a-z`, `0-9` и `_`;
@@ -86,6 +89,9 @@ Health проверяет работоспособность HTTP-процесс
 По умолчанию новые DRF endpoints требуют аутентификации.
 Session response запрещён для кеширования. Signup/login/profile CRUD пока отсутствуют;
 для ручной проверки сессии можно войти в Admin и открыть session endpoint в том же браузере.
+Для инициализации CSRF frontend вызывает `GET /api/v1/auth/session/`: endpoint
+устанавливает cookie `csrftoken` даже для анонимного пользователя через `ensure_csrf_cookie`.
+Затем frontend передаёт значение cookie в заголовке `X-CSRFToken` изменяющих запросов.
 
 ## Requirements
 
@@ -98,11 +104,17 @@ Session response запрещён для кеширования. Signup/login/pr
 
 Команды выполняются из корня проекта; подходят для PowerShell и обычной Unix shell.
 
-1. Клонировать репозиторий и перейти на основную ветку:
+1. Клонировать репозиторий (основная стабильная ветка — `master`):
 
    ```sh
-   git clone --branch main https://github.com/DeV0id13/food_tinder.git
+   git clone https://github.com/DeV0id13/food_tinder.git
    cd food_tinder
+   ```
+
+   Для разработки текущего этапа переключиться на его ветку:
+
+   ```sh
+   git switch feat/stage_one
    ```
 
 2. Создать `.env` из `.env.example` с новыми случайными секретами:
@@ -203,11 +215,15 @@ Django прекращает запуск без DJANGO_SECRET_KEY, POSTGRES_DB, 
 
 - `DJANGO_DEBUG=false`, конкретные `DJANGO_ALLOWED_HOSTS` (список через запятую).
 - `CSRF_TRUSTED_ORIGINS` — точные HTTPS origins браузерного приложения.
-- При DEBUG=false по умолчанию включены secure session/CSRF cookies, HTTPS redirect
-  и HSTS. Эти настройки можно явно менять через `SESSION_COOKIE_SECURE`,
-  `CSRF_COOKIE_SECURE`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS`,
-  `SECURE_HSTS_INCLUDE_SUBDOMAINS`, `SECURE_HSTS_PRELOAD`.
-  Учитывайте HTTPS на поддоменах перед включением HSTS includeSubDomains/preload.
+- При DEBUG=false по умолчанию включены secure session/CSRF cookies и HTTPS redirect.
+  Эти настройки можно явно менять через `SESSION_COOKIE_SECURE`,
+  `CSRF_COOKIE_SECURE`, `SECURE_SSL_REDIRECT`.
+- HSTS по умолчанию выключен независимо от DEBUG:
+  `DJANGO_SECURE_HSTS_SECONDS=0`, `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false`,
+  `DJANGO_SECURE_HSTS_PRELOAD=false`. Включайте HSTS только после подтверждения
+  корректной HTTPS-конфигурации production-домена; отдельно проверьте поддомены
+  перед включением includeSubDomains и preload. Прежние имена переменных
+  `SECURE_HSTS_*` без префикса `DJANGO_` больше не используются.
 - Same-origin deployment использует Django sessions и CSRF middleware.
   Для будущих изменяющих запросов frontend должен передавать `X-CSRFToken`.
 - `DJANGO_TRUST_PROXY_HEADERS=true` допустим только за доверенным TLS proxy,
@@ -227,7 +243,8 @@ docker build --target production -t foodtinder-backend:prod .
 ```
 
 При развёртывании передайте environment variables, выполните `python manage.py migrate`,
-`python manage.py collectstatic --noinput` и `python manage.py check --deploy --fail-level WARNING`
-в production окружении. TLS termination и раздача `staticfiles/` / `media/`
+`python manage.py collectstatic --noinput` и `python manage.py check --deploy`
+в production окружении. Пока HSTS выключен, deploy check выдаёт ожидаемое предупреждение;
+рассмотрите остальные предупреждения отдельно. TLS termination и раздача `staticfiles/` / `media/`
 должны обеспечиваться платформой размещения; Gunicorn их не обслуживает.
 Production deployment и внешние сервисы в этот scaffold не входят.

@@ -23,10 +23,12 @@ def test_health(client):
 
 @pytest.mark.django_db
 def test_anonymous_session(client):
+    assert "csrftoken" not in client.cookies
     response = client.get("/api/v1/auth/session/")
     assert response.status_code == 200
     assert response.json() == {"authenticated": False, "id": None, "email": None}
     assert "no-store" in response["Cache-Control"]
+    assert response.cookies["csrftoken"].value
 
 
 @pytest.mark.django_db
@@ -42,8 +44,11 @@ def test_email_user_and_session(client):
     assert authenticate(email="READER@example.com", password=PASSWORD) == user
     assert authenticate(email=user.email, password="incorrect") is None
     assert client.login(email=user.email, password=PASSWORD)
+    assert "csrftoken" not in client.cookies
     response = client.get("/api/v1/auth/session/")
+    assert response.status_code == 200
     assert response.json() == {"authenticated": True, "id": user.pk, "email": user.email}
+    assert response.cookies["csrftoken"].value
     user.is_active = False
     user.save(update_fields=["is_active"])
     assert authenticate(email=user.email, password=PASSWORD) is None
@@ -59,10 +64,13 @@ def test_email_unique_even_when_bypassing_save(email):
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("email", ["", " ", None])
-def test_email_required(email):
-    with pytest.raises(ValueError, match="email"):
-        get_user_model().objects.create_user(email, PASSWORD)
+@pytest.mark.parametrize("email", ["", " ", None, "not-an-email"])
+@pytest.mark.parametrize("method", ["create_user", "create_superuser"])
+def test_invalid_email_rejected(email, method):
+    User = get_user_model()
+    with pytest.raises(ValidationError):
+        getattr(User.objects, method)(email, PASSWORD)
+    assert not User.objects.exists()
 
 
 @pytest.mark.django_db
