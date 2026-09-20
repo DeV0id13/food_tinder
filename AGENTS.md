@@ -20,7 +20,9 @@ FoodTinder — десктопное веб-приложение: выбор ре
 ## Архитектура
 
 - Сохраняй модульный монолит: Python 3.12+, Django, DRF, Django ORM и PostgreSQL 16+.
-- Используй версии зависимостей из `requirements/`, не обновляй их попутно.
+- Используй версии зависимостей из `[dependency-groups]` в `pyproject.toml`,
+  не обновляй их попутно. Установка: `python -m pip install --group dev` или
+  `--group prod` (pip >= 25.1). Обе группы включают `base`.
 - Сохраняй Django sessions и `SessionAuthentication`; frontend и `/api/` рассчитаны
   на один origin. Не заменяй это JWT и не отключай CSRF ради подключения интерфейса.
 - `accounts` владеет пользователями, профилями и аутентификацией.

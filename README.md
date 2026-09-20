@@ -13,7 +13,8 @@
 - Docker / Docker Compose; Gunicorn в production image.
 - pytest, pytest-django, Ruff.
 
-Прямые зависимости закреплены точными версиями в `requirements/{base,dev,prod}.txt`.
+Прямые Python-зависимости закреплены точными версиями в `[dependency-groups]`
+файла `pyproject.toml`: группы `base`, `dev` и `prod`.
 Окружение development не устанавливает Gunicorn; production не устанавливает инструменты тестирования.
 
 ## Architecture
@@ -45,11 +46,10 @@
 ├── common/
 ├── tests/
 ├── docker/init_env.py
-├── requirements/        # base.txt, dev.txt, prod.txt
 ├── Dockerfile
 ├── compose.yaml
 ├── .env.example
-├── pyproject.toml
+├── pyproject.toml       # Python dependencies, pytest, Ruff
 └── README.md
 ```
 
@@ -100,6 +100,40 @@ Session response запрещён для кеширования. Signup/login/pr
 - Свободный локальный порт 8000.
 - Python на хосте не обязателен: все команды ниже выполняются в контейнерах.
 
+## Python dependencies
+
+Все прямые Python-зависимости объявлены в `pyproject.toml` стандартными
+[группами PEP 735](https://packaging.python.org/en/latest/specifications/dependency-groups/).
+Настройки pytest и Ruff находятся в том же файле.
+
+| Группа | Состав |
+| --- | --- |
+| `base` | Django, DRF, psycopg и Pillow |
+| `dev` | `base` + pytest, pytest-django и Ruff |
+| `prod` | `base` + Gunicorn |
+
+Для установки групп нужен **pip >= 25.1**. Dockerfile обеспечивает эту версию
+и устанавливает нужную группу автоматически. Приложение запускается из исходников;
+сборка собственного Python-пакета для установки зависимостей не требуется.
+
+При работе в активированном virtualenv или CI выполняйте из корня репозитория:
+
+```sh
+python -m pip install "pip>=25.1"
+python -m pip install --group dev
+```
+
+Для отдельного production-окружения вместо `--group dev` используйте `--group prod`.
+При необходимости установить только общие библиотеки — `--group base`.
+Группы `dev` и `prod` включают `base`, перечислять общие библиотеки повторно не нужно.
+Установка группы добавляет зависимости, но не удаляет ранее установленные пакеты:
+development и production должны использовать отдельные окружения.
+
+После изменения зависимостей пересоберите соответствующий Docker target.
+Прямые версии закреплены; отдельный lock-файл транзитивных зависимостей пока не используется.
+Переменные окружения и PostgreSQL для запуска Django настраиваются как обычно:
+установка группы сама по себе не загружает `.env` и не запускает БД.
+
 ## Local Development
 
 Команды выполняются из корня проекта; подходят для PowerShell и обычной Unix shell.
@@ -111,10 +145,10 @@ Session response запрещён для кеширования. Signup/login/pr
    cd food_tinder
    ```
 
-   Для разработки текущего этапа переключиться на его ветку:
+   Для разработки отдельной задачи создать ветку от актуального `master`, например:
 
    ```sh
-   git switch feat/stage_one
+   git switch -c feat/ft-01-accounts
    ```
 
 2. Создать `.env` из `.env.example` с новыми случайными секретами:
