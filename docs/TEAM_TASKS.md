@@ -35,7 +35,7 @@ CI/CD и настройки автоматического запуска про
 но не менять чужие models.py, migrations, fixtures или импортировать чужие тестовые helpers.
 
 За интегратором закреплены все общие пути: `config/**`, `common/**`, корневой `README.md`,
-`AGENTS.md`, этот документ и контракт, `requirements/**`, `pyproject.toml`, `Dockerfile`,
+`AGENTS.md`, этот документ и контракт, `pyproject.toml`, `Dockerfile`,
 `compose.yaml`, `docker/**`, `.env.example`, `.gitignore`, существующие корневые тесты,
 `tests/conftest.py`, `tests/__init__.py`. Новые общие пути также сначала обсуждаются с ним.
 `.github/**` зарезервирован для последующей работы девопса.
