@@ -1,0 +1,51 @@
+// All amounts and nutrition values are illustrative, per one serving.
+const ingredient = (id,name,quantity,unit,group) => ({id,name,quantity,unit,group});
+const i = {
+ tomato:q=>ingredient('tomato','Помидоры',q,'г','Овощи и зелень'),
+ cucumber:q=>ingredient('cucumber','Огурцы',q,'г','Овощи и зелень'),
+ avocado:q=>ingredient('avocado','Авокадо',q,'шт.','Овощи и зелень'),
+ spinach:q=>ingredient('spinach','Шпинат',q,'г','Овощи и зелень'),
+ greens:q=>ingredient('greens','Салатный микс',q,'г','Овощи и зелень'),
+ lemon:q=>ingredient('lemon','Лимон',q,'шт.','Овощи и зелень'),
+ garlic:q=>ingredient('garlic','Чеснок',q,'г','Овощи и зелень'),
+ pepper:q=>ingredient('pepper','Сладкий перец',q,'г','Овощи и зелень'),
+ carrot:q=>ingredient('carrot','Морковь',q,'г','Овощи и зелень'),
+ pumpkin:q=>ingredient('pumpkin','Тыква',q,'г','Овощи и зелень'),
+ egg:q=>ingredient('egg','Яйца',q,'шт.','Молочное и яйца'),
+ feta:q=>ingredient('feta','Фета',q,'г','Молочное и яйца'),
+ yogurt:q=>ingredient('yogurt','Греческий йогурт',q,'г','Молочное и яйца'),
+ milk:q=>ingredient('milk','Молоко',q,'мл','Молочное и яйца'),
+ cream:q=>ingredient('cream','Сливки',q,'мл','Молочное и яйца'),
+ cheese:q=>ingredient('cheese','Пармезан',q,'г','Молочное и яйца'),
+ salmon:q=>ingredient('salmon','Филе лосося',q,'г','Рыба и птица'),
+ chicken:q=>ingredient('chicken','Куриное филе',q,'г','Рыба и птица'),
+ berries:q=>ingredient('berries','Ягоды',q,'г','Фрукты и ягоды'),
+ banana:q=>ingredient('banana','Бананы',q,'шт.','Фрукты и ягоды'),
+ oats:q=>ingredient('oats','Овсяные хлопья',q,'г','Бакалея'),
+ quinoa:q=>ingredient('quinoa','Киноа',q,'г','Бакалея'),
+ pasta:q=>ingredient('pasta','Паста',q,'г','Бакалея'),
+ chickpea:q=>ingredient('chickpea','Нут консервированный (без жидкости)',q,'г','Бакалея'),
+ rice:q=>ingredient('rice','Рис',q,'г','Бакалея'),
+ bread:q=>ingredient('bread','Цельнозерновой хлеб',q,'г','Бакалея'),
+ flour:q=>ingredient('flour','Мука',q,'г','Бакалея'),
+ olive:q=>ingredient('olive','Оливковое масло',q,'мл','Бакалея'),
+ honey:q=>ingredient('honey','Мёд',q,'г','Бакалея'),
+ pesto:q=>ingredient('pesto','Песто',q,'г','Бакалея'),
+ salt:q=>ingredient('salt','Соль',q,'г','Бакалея'),
+};
+export const meals = [{id:'breakfast',name:'Завтрак',icon:'sunrise'}, {id:'lunch',name:'Обед',icon:'sun'}, {id:'dinner',name:'Ужин',icon:'moon'}];
+export const recipes = [
+{id:'green-bowl',name:'Зелёный боул с киноа',subtitle:'Свежий, хрустящий и очень твой.',category:'lunch',time:25,kcal:420,protein:15,fat:20,carbs:46,tags:['Без мяса','Много овощей'],photo:'salad',description:'Киноа, свежие овощи и нежный авокадо с лёгкой лимонной заправкой. Обед, после которого хочется продолжить день.',ingredients:[i.quinoa(60),i.avocado(.5),i.tomato(100),i.cucumber(80),i.greens(30),i.lemon(.25),i.olive(10),i.salt(1)],steps:['Промой киноа и отвари в воде по инструкции на упаковке. Дай немного остыть.','Нарежь помидоры, огурец и авокадо. Выложи в миску вместе с салатным миксом и киноа.','Смешай лимонный сок, масло и соль. Полей боул и перемешай перед подачей.']},
+{id:'avocado-toast',name:'Тост с авокадо и яйцом',subtitle:'Маленький ритуал хорошего утра.',category:'breakfast',time:15,kcal:390,protein:17,fat:22,carbs:31,tags:['Быстро','Сытный завтрак'],photo:'avocado',description:'Хрустящий хлеб, кремовый авокадо и яйцо. Простой завтрак, который всегда кстати.',ingredients:[i.bread(70),i.avocado(.5),i.egg(1),i.tomato(80),i.lemon(.25),i.salt(1)],steps:['Подрумянь хлеб в тостере или на сухой сковороде.','Разомни авокадо с лимонным соком и солью. Яйцо свари до желаемой готовности.','Намажь хлеб авокадо, добавь яйцо и подай с помидорами.']},
+{id:'pesto-pasta',name:'Паста с песто и томатами',subtitle:'Итальянское настроение за 20 минут.',category:'dinner',time:20,kcal:510,protein:17,fat:19,carbs:67,tags:['Без мяса','Быстро'],photo:'pasta',description:'Зелёный песто, сладкие томаты и немного пармезана. Уютный ужин без долгого стояния у плиты.',ingredients:[i.pasta(90),i.pesto(25),i.tomato(100),i.cheese(15),i.olive(5),i.salt(1)],steps:['Отвари пасту по инструкции, сохрани немного воды от варки.','Прогрей нарезанные помидоры с маслом на сковороде.','Добавь пасту, песто и ложку воды от варки. Перемешай и посыпь пармезаном.']},
+{id:'berry-oats',name:'Овсянка с ягодами',subtitle:'Для неспешного начала дня.',category:'breakfast',time:10,kcal:350,protein:12,fat:9,carbs:54,tags:['Быстро','Без мяса'],photo:'berries',description:'Тёплая овсянка на молоке с ягодами и каплей мёда. Подойдут свежие или замороженные ягоды.',ingredients:[i.oats(50),i.milk(180),i.berries(80),i.honey(10)],steps:['Вари хлопья на молоке по инструкции на упаковке, помешивая.','Переложи кашу в миску и добавь ягоды.','Дай немного остыть и добавь мёд.']},
+{id:'salmon-rice',name:'Лосось с рисом и зеленью',subtitle:'Красивый ужин без особого повода.',category:'dinner',time:30,kcal:580,protein:35,fat:25,carbs:52,tags:['Много белка','Рыба'],photo:'salmon',description:'Нежное филе, рассыпчатый рис и свежая зелень. Лимон объединит всё на тарелке.',ingredients:[i.salmon(150),i.rice(60),i.greens(40),i.lemon(.25),i.olive(5),i.salt(1)],steps:['Отвари рис по инструкции. Разогрей духовку до 190 °C.','Смажь лосось маслом, посоли, добавь лимон и запекай до полной готовности.','Подавай рыбу с рисом и салатным миксом.']},
+{id:'chickpea-salad',name:'Салат с нутом и фетой',subtitle:'Побольше цвета в середине дня.',category:'lunch',time:15,kcal:430,protein:19,fat:21,carbs:39,tags:['Без мяса','Без плиты'],photo:'salad',description:'Сытный нут, свежие овощи и солоноватая фета. Всё, что нужно для быстрого обеда.',ingredients:[i.chickpea(120),i.feta(50),i.tomato(100),i.cucumber(100),i.greens(30),i.olive(10),i.lemon(.25)],steps:['Слей жидкость с нута и промой его. Нарежь овощи.','Смешай нут, овощи и зелень, раскроши фету.','Заправь маслом и лимонным соком.']},
+{id:'banana-pancakes',name:'Банановые панкейки',subtitle:'Выходной можно устроить в любой день.',category:'breakfast',time:25,kcal:460,protein:16,fat:12,carbs:70,tags:['Без мяса','Для настроения'],photo:'pancakes',description:'Мягкие панкейки со спелым бананом. Добавь йогурт и ягоды прямо перед подачей.',ingredients:[i.banana(1),i.egg(1),i.flour(50),i.milk(60),i.yogurt(50),i.berries(50),i.olive(5)],steps:['Разомни банан и смешай с яйцом, молоком и мукой.','Слегка смажь сковороду маслом и выпекай небольшие панкейки с обеих сторон до готовности.','Подай с йогуртом и ягодами.']},
+{id:'pumpkin-soup',name:'Тыквенный крем-суп',subtitle:'Обед в самом уютном его виде.',category:'lunch',time:35,kcal:370,protein:8,fat:17,carbs:47,tags:['Без мяса','Тёплый и уютный'],photo:'soup',description:'Бархатистый суп из тыквы и моркови со сливками. Хрустящий тост — идеальная пара.',ingredients:[i.pumpkin(250),i.carrot(60),i.cream(50),i.garlic(3),i.bread(50),i.olive(5),i.salt(1)],steps:['Нарежь тыкву и морковь. Прогрей чеснок с маслом в кастрюле.','Добавь овощи, залей водой, чтобы слегка покрыть их, и вари до мягкости.','Измельчи блендером, добавь сливки и соль, прогрей. Подай с тостом.']},
+{id:'chicken-bowl',name:'Боул с курицей и овощами',subtitle:'Когда нужен по-настоящему сытный обед.',category:'lunch',time:30,kcal:540,protein:41,fat:15,carbs:57,tags:['Много белка','Сытный'],photo:'salad',description:'Куриное филе, киноа и сочные овощи с йогуртовой заправкой.',ingredients:[i.chicken(150),i.quinoa(60),i.tomato(100),i.cucumber(80),i.greens(30),i.yogurt(40),i.olive(5),i.salt(1)],steps:['Отвари киноа по инструкции.','Нарежь курицу, посоли и обжарь с маслом до полной готовности.','Выложи киноа, курицу и нарезанные овощи в миску. Добавь йогурт.']},
+{id:'yogurt-bowl',name:'Йогуртовый боул с ягодами',subtitle:'Пять минут — и утро уже лучше.',category:'breakfast',time:5,kcal:310,protein:20,fat:7,carbs:42,tags:['Без плиты','Быстро'],photo:'berries',description:'Густой йогурт с ягодами, бананом и хлопьями. Собери завтрак прямо в любимой миске.',ingredients:[i.yogurt(180),i.berries(80),i.banana(.5),i.oats(25),i.honey(5)],steps:['Переложи йогурт в миску.','Нарежь банан, добавь ягоды и хлопья.','Полей мёдом. Для мягкости хлопьев оставь на 5–10 минут.']},
+{id:'spinach-pasta',name:'Паста со шпинатом',subtitle:'Зелёный свет лёгкому вечеру.',category:'dinner',time:20,kcal:490,protein:19,fat:18,carbs:60,tags:['Без мяса','Быстро'],photo:'pasta',description:'Паста в нежном соусе со шпинатом и пармезаном. Замороженный шпинат тоже подойдёт.',ingredients:[i.pasta(90),i.spinach(80),i.cream(40),i.cheese(20),i.garlic(3),i.olive(5),i.salt(1)],steps:['Отвари пасту по инструкции.','Прогрей чеснок с маслом, добавь шпинат и готовь до мягкости.','Влей сливки, добавь пасту, соль и пармезан. Перемешай и прогрей.']},
+{id:'warm-quinoa',name:'Тёплый салат с киноа',subtitle:'Просто, ярко, по-домашнему.',category:'dinner',time:30,kcal:440,protein:16,fat:21,carbs:47,tags:['Без мяса','Много овощей'],photo:'salad',description:'Тёплая киноа с перцем, томатами и фетой. Сытный овощной ужин.',ingredients:[i.quinoa(60),i.pepper(100),i.tomato(100),i.feta(50),i.olive(10),i.salt(1)],steps:['Отвари киноа по инструкции.','Нарежь перец и томаты, обжарь с маслом до мягкости.','Смешай овощи с киноа, добавь соль и раскрошенную фету.']}
+];
+export const byId = Object.fromEntries(recipes.map(r=>[r.id,r]));
