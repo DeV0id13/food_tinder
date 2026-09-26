@@ -1,0 +1,10 @@
+format: table
+exit-code: 1
+severity:
+  - HIGH
+  - CRITICAL
+ignore-unfixed: false
+vulnerability:
+  type:
+    - os
+    - library
