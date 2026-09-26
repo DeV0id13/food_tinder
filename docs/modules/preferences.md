@@ -36,4 +36,4 @@ path("api/v1/preferences/", include("apps.preferences.urls")),
 - feed гостя показывает все активные рецепты, feed пользователя исключает его лайки и активные dislike;
 - состояния пользователей полностью изолированы;
 - feed/favorites сортируются по recipe.id asc;
-- pagination: limit 1..100, default 30, offset >= 0.
+- pagination использует стандартный DRF `LimitOffsetPagination`: default limit 30, max limit 100; `next` и `previous` — URL.
