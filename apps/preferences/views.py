@@ -1,10 +1,9 @@
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone as django_timezone
 from django.views.decorators.cache import never_cache
-from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound
 from rest_framework.pagination import LimitOffsetPagination
@@ -42,9 +41,9 @@ def _active_recipe_or_404(recipe_id):
 
 
 def _next_midnight_utc(now):
-    utc_now = now.astimezone(timezone.utc)
+    utc_now = now.astimezone(UTC)
     tomorrow = utc_now.date() + timedelta(days=1)
-    return datetime.combine(tomorrow, time.min, tzinfo=timezone.utc)
+    return datetime.combine(tomorrow, time.min, tzinfo=UTC)
 
 
 def _feed_queryset(user):
