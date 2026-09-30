@@ -4,7 +4,6 @@ from decimal import Decimal
 import pytest
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.catalog.models import Recipe
