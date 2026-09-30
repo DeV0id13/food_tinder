@@ -1,0 +1,54 @@
+# FT-07: Semgrep правила для Python/Django.
+# Источник: адаптировано из Semgrep Registry (проверенная ревизия).
+# При обновлении указать дату/commit.
+rules:
+  - id: foodtinder.python.dangerous-eval
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Использование eval/exec/compile может привести к выполнению
+      произвольного кода. Проверьте необходимость и источник данных.
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: compile(...)
+
+  - id: foodtinder.python.dangerous-subprocess-shell
+    languages: [python]
+    severity: ERROR
+    message: >-
+      subprocess с shell=True и динамической строкой — риск инъекции команд.
+      Используйте список аргументов и shell=False.
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: os.system(...)
+
+  - id: foodtinder.python.django-raw-sql
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Raw SQL (cursor.execute/raw/extra) требует параметризации.
+      Убедитесь, что значения передаются как параметры, а не через f-string/format.
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute(f"...", ...)
+          - pattern: $CURSOR.execute("..." % ..., ...)
+          - pattern: $CURSOR.execute("...".format(...), ...)
+          - pattern: $MODEL.objects.raw(f"...", ...)
+          - pattern: $MODEL.objects.extra(..., where=[f"..."], ...)
