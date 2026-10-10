@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 
 from apps.catalog.models import Recipe
 from apps.planning.models import MealPlan, MealPlanSlot, validate_enabled_meals
-from apps.planning.selectors import get_plan_for_user
+from apps.planning.selectors import get_locked_plan_for_user, get_plan_for_user
 from apps.preferences.models import UserRecipeState
 
 pytestmark = pytest.mark.django_db
@@ -561,3 +561,44 @@ class TestPlanningAPI:
             validate_enabled_meals(["lunch", "lunch"])
         with pytest.raises(ValidationError):
             validate_enabled_meals(["brunch"])
+
+    def test_delete_plan_returns_404_for_missing_plan(self):
+        user = self.create_user()
+        self.login(user)
+
+        assert self.client.delete(f"{BASE}999999/").status_code == 404
+
+    def test_slot_operation_on_deleted_plan_returns_404(self):
+        user = self.create_user()
+        recipe = self.create_recipe()
+        self.make_favorite(user, recipe)
+        plan = self.create_plan(user)
+        plan_id = plan.id
+        plan.delete()
+        self.login(user)
+
+        assert self.put_slot(plan, 0, "lunch", recipe.id, 2).status_code == 404
+        assert self.delete_slot(plan, 0, "lunch").status_code == 404
+        assert self.client.delete(f"{BASE}{plan_id}/").status_code == 404
+
+    def test_plan_delete_and_slot_operations_share_plan_first_lock_order(self):
+        user = self.create_user()
+        recipe = self.create_recipe()
+        self.make_favorite(user, recipe)
+        plan = self.create_plan(user)
+        plan_id = plan.id
+        self.login(user)
+
+        with transaction.atomic():
+            locked = get_locked_plan_for_user(user=user, plan_id=plan_id)
+            locked.delete()
+            # Same lock order as slot PUT/DELETE: the plan row is already
+            # locked in this transaction, so re-fetching it under lock sees
+            # the same (deleted) state instead of racing with a concurrent
+            # slot operation that would lock the plan first as well.
+            with pytest.raises(NotFound):
+                get_locked_plan_for_user(user=user, plan_id=plan_id)
+
+        assert self.put_slot(plan, 0, "lunch", recipe.id, 2).status_code == 404
+        assert self.delete_slot(plan, 0, "lunch").status_code == 404
+        assert self.client.get(f"{BASE}{plan_id}/").status_code == 404

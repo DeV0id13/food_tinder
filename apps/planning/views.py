@@ -9,8 +9,8 @@ from rest_framework.response import Response
 from apps.catalog.models import Recipe
 from apps.preferences.selectors import is_favorite
 
-from .models import MEAL_TYPES, MealPlan, MealPlanSlot
-from .selectors import get_plan_for_user
+from .models import MEAL_TYPES, MealPlanSlot
+from .selectors import get_locked_plan_for_user, get_plan_for_user
 from .serializers import (
     MealPlanCreateSerializer,
     MealPlanDetailSerializer,
@@ -23,10 +23,6 @@ from .serializers import (
 class MealPlanPagination(LimitOffsetPagination):
     default_limit = 30
     max_limit = 100
-
-
-def _lock_plan(plan):
-    return MealPlan.objects.select_for_update().get(pk=plan.pk)
 
 
 def _active_recipe_or_404(recipe_id):
@@ -75,21 +71,21 @@ def meal_plans(request):
 @never_cache
 @api_view(["GET", "DELETE"])
 def meal_plan_detail(request, plan_id):
-    plan = get_plan_for_user(user=request.user, plan_id=plan_id)
     if request.method == "DELETE":
-        plan.delete()
+        with transaction.atomic():
+            plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
+            plan.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    plan = get_plan_for_user(user=request.user, plan_id=plan_id)
     return Response(MealPlanDetailSerializer(plan).data)
 
 
 @never_cache
 @api_view(["PUT", "DELETE"])
 def meal_plan_slot(request, plan_id, day_index, meal_type):
-    plan = get_plan_for_user(user=request.user, plan_id=plan_id)
-
     if request.method == "DELETE":
         with transaction.atomic():
-            plan = _lock_plan(plan)
+            plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
             _validate_slot_target(plan, day_index, meal_type)
             MealPlanSlot.objects.filter(
                 plan=plan, day_index=day_index, meal_type=meal_type
@@ -102,7 +98,7 @@ def meal_plan_slot(request, plan_id, day_index, meal_type):
     servings = serializer.validated_data["servings"]
 
     with transaction.atomic():
-        plan = _lock_plan(plan)
+        plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
         _validate_slot_target(plan, day_index, meal_type)
         existing = MealPlanSlot.objects.filter(
             plan=plan, day_index=day_index, meal_type=meal_type

@@ -8,7 +8,8 @@
 - `apps/planning/models.py` — модели `MealPlan` и `MealPlanSlot`, валидатор `enabled_meals` и ограничения БД.
 - `apps/planning/serializers.py` — входные serializers, `PlanSummary`, `PlanDetail` и `Slot`.
 - `apps/planning/views.py` — list/create планов, detail/delete плана, PUT/DELETE слота.
-- `apps/planning/selectors.py` — `get_plan_for_user(*, user, plan_id)` для FT-05.
+- `apps/planning/selectors.py` — `get_plan_for_user(*, user, plan_id)` для FT-05 и
+  `get_locked_plan_for_user(*, user, plan_id)` для записей под `SELECT FOR UPDATE`.
 - `apps/planning/urls.py` — маршруты FT-04.
 - `apps/planning/migrations/0001_initial.py` — миграция планов и слотов.
 - `tests/planning/` — API-тесты и отдельный тестовый URLConf.
@@ -75,6 +76,9 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
 - Доступ к плану проверяется первым: чужой или отсутствующий план даёт `404`, вложенные endpoints не
   раскрывают данные чужих планов.
 - Повторный PUT обновляет тот же слот; уникальность защищена БД (семантика «последняя запись побеждает»).
+- Все записи (PUT/DELETE слота, DELETE плана) выполняются в `transaction.atomic()` с блокировкой
+  строки плана через `SELECT FOR UPDATE`; порядок блокировок единый — сначала план, затем слоты.
+  План, удалённый конкурентным запросом, даёт `404`, а не `500`.
 - Период, `start_date` и `enabled_meals` после создания не изменяются; несколько планов с одинаковыми
   датами разрешены.
 
