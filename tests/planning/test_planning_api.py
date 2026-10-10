@@ -514,6 +514,43 @@ class TestPlanningAPI:
         assert response.status_code == 400
         assert "day_index" in response.json()
 
+    def test_put_slot_rejects_negative_day_index(self):
+        user = self.create_user()
+        recipe = self.create_recipe()
+        self.make_favorite(user, recipe)
+        plan = self.create_plan(user)
+        self.login(user)
+
+        response = self.put_slot(plan, -1, "lunch", recipe.id, 2)
+
+        assert response.status_code == 400
+        assert list(response.json()) == ["day_index"]
+        assert not MealPlanSlot.objects.filter(plan=plan).exists()
+
+    def test_delete_slot_rejects_negative_day_index(self):
+        user = self.create_user()
+        plan = self.create_plan(user)
+        self.login(user)
+
+        response = self.delete_slot(plan, -1, "lunch")
+
+        assert response.status_code == 400
+        assert list(response.json()) == ["day_index"]
+
+    def test_negative_day_index_on_foreign_plan_returns_404(self):
+        owner = self.create_user(email="owner@example.com")
+        stranger = self.create_user(email="stranger@example.com")
+        recipe = self.create_recipe()
+        self.make_favorite(stranger, recipe)
+        plan = self.create_plan(owner)
+        self.login(stranger)
+
+        put_response = self.put_slot(plan, -1, "lunch", recipe.id, 2)
+        delete_response = self.delete_slot(plan, -1, "lunch")
+
+        assert put_response.status_code == 404
+        assert delete_response.status_code == 404
+
     def test_put_slot_rejects_disabled_meal(self):
         user = self.create_user()
         recipe = self.create_recipe(meal_types=ALL_MEALS)

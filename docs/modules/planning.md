@@ -10,7 +10,7 @@
 - `apps/planning/views.py` — list/create планов, detail/delete плана, PUT/DELETE слота.
 - `apps/planning/selectors.py` — `get_plan_for_user(*, user, plan_id)` для FT-05 и
   `get_locked_plan_for_user(*, user, plan_id)` для записей под `SELECT FOR UPDATE`.
-- `apps/planning/urls.py` — маршруты FT-04.
+- `apps/planning/urls.py` — маршруты FT-04; `day_index` использует локальный знаковый конвертер `sint`.
 - `apps/planning/migrations/0001_initial.py` — миграция планов и слотов.
 - `tests/planning/` — API-тесты и отдельный тестовый URLConf.
 
@@ -74,9 +74,9 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
   Совместимость `meal_type` с актуальным `recipe.meal_types` проверяется всегда, в том числе при
   смене только порций: каталог мог изменить допустимые приёмы пищи после сохранения слота.
 - Рецепт не из избранного — `400` по полю `recipe_id`; неактивный или несуществующий новый рецепт — `404`.
-- Невалидный `day_index`, выключенный приём пищи, несовместимый `meal_type` или `servings` вне 1..20 — `400`.
+- Невалидный `day_index` (включая отрицательный), выключенный приём пищи, несовместимый `meal_type` или `servings` вне 1..20 — `400`.
 - Доступ к плану проверяется первым: чужой или отсутствующий план даёт `404`, вложенные endpoints не
-  раскрывают данные чужих планов.
+  раскрывают данные чужих планов — это относится и к `day_index=-1`.
 - Повторный PUT обновляет тот же слот; уникальность защищена БД (семантика «последняя запись побеждает»).
   Конкурентный тест `TestPlanningConcurrentSlotPut` (только PostgreSQL, `transaction=True`, два потока
   с независимыми соединениями за барьером) проверяет: оба PUT дают `200`, в БД ровно одна строка,
