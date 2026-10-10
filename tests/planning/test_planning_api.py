@@ -19,6 +19,117 @@ PASSWORD = "Valid_pass123"
 ALL_MEALS = ("breakfast", "lunch", "snack", "dinner")
 
 
+@pytest.mark.django_db(transaction=True)
+class TestPlanningConcurrentSlotPut:
+    """Два потока открывают независимые подключения к БД (``connections.close_all()``)
+    и одновременно обращаются к конечной точке слота за барьером. 
+    """
+
+    def _slot_body(self, plan_id, day_index, meal_type, recipe_id, servings):
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from apps.planning.views import meal_plan_slot
+
+        factory = APIRequestFactory()
+        request = factory.put(
+            f"/api/v1/meal-plans/{plan_id}/slots/{day_index}/{meal_type}/",
+            {"recipe_id": recipe_id, "servings": servings},
+            format="json",
+        )
+        force_authenticate(request, user=self.user)
+        return meal_plan_slot(request, plan_id, day_index, meal_type)
+
+    def test_concurrent_valid_puts_keep_single_slot_without_500(self):
+        import threading
+
+        from django.db import connection, connections
+
+        if connection.vendor != "postgresql":
+            pytest.skip("Concurrent slot PUT requires PostgreSQL.")
+
+        self.user = get_user_model().objects.create_user(
+            email="racer@example.com", password=PASSWORD
+        )
+        recipe_one = Recipe.objects.create(
+            slug="race-one",
+            title="Race One",
+            description="Test recipe",
+            image_url="",
+            cooking_time_minutes=20,
+            difficulty=2,
+            base_servings=2,
+            meal_types=["lunch", "dinner"],
+            steps=["Prepare", "Serve"],
+            is_active=True,
+        )
+        recipe_two = Recipe.objects.create(
+            slug="race-two",
+            title="Race Two",
+            description="Test recipe",
+            image_url="",
+            cooking_time_minutes=20,
+            difficulty=2,
+            base_servings=2,
+            meal_types=["lunch", "dinner"],
+            steps=["Prepare", "Serve"],
+            is_active=True,
+        )
+        UserRecipeState.objects.create(user=self.user, recipe=recipe_one, is_favorite=True)
+        UserRecipeState.objects.create(user=self.user, recipe=recipe_two, is_favorite=True)
+        plan = MealPlan.objects.create(
+            user=self.user,
+            start_date=date(2026, 10, 1),
+            duration_days=1,
+            enabled_meals=["lunch", "dinner"],
+        )
+        plan_id = plan.id
+        connections.close_all()
+
+        barrier = threading.Barrier(2)
+        outcomes = {}
+
+        def racer(name, recipe_id, servings):
+            from django.db import connections as thread_connections
+
+            thread_connections.close_all()
+            barrier.wait(timeout=10)
+            try:
+                response = self._slot_body(
+                    plan_id, 0, "lunch", recipe_id, servings
+                )
+                outcomes[name] = ("ok", response.status_code)
+            except Exception as exc:  # noqa: BLE001 - recorded, asserted below
+                outcomes[name] = ("error", f"{type(exc).__name__}: {exc}")
+            finally:
+                thread_connections.close_all()
+
+        first = threading.Thread(
+            target=racer, args=("first", recipe_one.id, 2), daemon=True
+        )
+        second = threading.Thread(
+            target=racer, args=("second", recipe_two.id, 6), daemon=True
+        )
+        first.start()
+        second.start()
+        first.join(timeout=30)
+        second.join(timeout=30)
+
+        assert not first.is_alive() and not second.is_alive()
+        assert outcomes["first"] == ("ok", 200), outcomes
+        assert outcomes["second"] == ("ok", 200), outcomes
+
+        slots = list(
+            MealPlanSlot.objects.filter(
+                plan_id=plan_id, day_index=0, meal_type="lunch"
+            )
+        )
+        assert len(slots) == 1
+        assert (slots[0].recipe_id, slots[0].servings) in {
+            (recipe_one.id, 2),
+            (recipe_two.id, 6),
+        }
+
+
 class TestPlanningAPI:
     def setup_method(self):
         self.client = APIClient()
