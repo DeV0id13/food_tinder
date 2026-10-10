@@ -602,3 +602,21 @@ class TestPlanningAPI:
         assert self.put_slot(plan, 0, "lunch", recipe.id, 2).status_code == 404
         assert self.delete_slot(plan, 0, "lunch").status_code == 404
         assert self.client.get(f"{BASE}{plan_id}/").status_code == 404
+
+    def test_servings_only_update_rejects_recipe_turned_incompatible(self):
+        user = self.create_user()
+        recipe = self.create_recipe(meal_types=("lunch", "dinner"))
+        self.make_favorite(user, recipe)
+        plan = self.create_plan(user)
+        self.login(user)
+        assert self.put_slot(plan, 0, "lunch", recipe.id, 2).status_code == 200
+
+        recipe.meal_types = ["dinner"]
+        recipe.save()
+
+        response = self.put_slot(plan, 0, "lunch", recipe.id, 5)
+        assert response.status_code == 400
+        assert list(response.json()) == ["meal_type"]
+        slot = MealPlanSlot.objects.get(plan=plan, day_index=0, meal_type="lunch")
+        assert slot.recipe_id == recipe.id
+        assert slot.servings == 2

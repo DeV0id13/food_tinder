@@ -109,8 +109,8 @@ def meal_plan_slot(request, plan_id, day_index, meal_type):
             recipe = _active_recipe_or_404(recipe_id)
             if not is_favorite(user_id=request.user.id, recipe_id=recipe_id):
                 _slot_error("recipe_id", "Recipe is not in favorites.")
-            if meal_type not in recipe.meal_types:
-                _slot_error("meal_type", "Recipe is not suitable for this meal.")
+        if meal_type not in recipe.meal_types:
+            _slot_error("meal_type", "Recipe is not suitable for this meal.")
         slot, _ = MealPlanSlot.objects.update_or_create(
             plan=plan,
             day_index=day_index,
