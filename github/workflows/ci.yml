@@ -1,0 +1,217 @@
+# FT-07: CI для PR и push в master.
+# Семь стабильных jobs: lint, typecheck, secrets, sast, backend, frontend, docker.
+# Имена jobs нельзя менять без согласования — они становятся обязательными checks.
+#
+# ЗАКРЕПИТЬ ACTIONS: заменить @vN / @master на полный commit SHA проверенных релизов.
+# Пример:
+#   uses: actions/checkout@<40-char-sha>  # v4.2.2
+name: ci
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: |
+          python -m pip install "pip>=25.1"
+          python -m pip install --group dev
+      - name: Ruff check
+        run: ruff check .
+      - name: Ruff format check
+        run: ruff format --check .
+      - name: File hygiene (as in pre-commit)
+        run: |
+          # Повтор базовых проверок pre-commit на всех отслеживаемых файлах.
+          # Если что-то найдено — это ошибка, а не авто-исправление.
+          pre-commit run check-yaml --all-files --hook-stage manual || exit 1
+          pre-commit run check-json --all-files --hook-stage manual || exit 1
+          pre-commit run check-toml --all-files --hook-stage manual || exit 1
+          pre-commit run check-merge-conflict --all-files --hook-stage manual || exit 1
+          pre-commit run trailing-whitespace --all-files --hook-stage manual || exit 1
+          pre-commit run end-of-file-fixer --all-files --hook-stage manual || exit 1
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: |
+          python -m pip install "pip>=25.1"
+          python -m pip install --group dev
+      - name: mypy
+        # Тестовые env-значения; production-секреты не используются.
+        # Живая БД не требуется: django-stubs использует settings, не подключение.
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings
+          DJANGO_SECRET_KEY: ci-typecheck-not-a-secret
+          DJANGO_DEBUG: "true"
+          DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+          POSTGRES_DB: foodtinder_ci
+          POSTGRES_USER: foodtinder_ci
+          POSTGRES_PASSWORD: ci-not-a-secret
+        run: python -m mypy
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Глубина checkout: полная история, чтобы Gitleaks видел секрет,
+          # добавленный и удалённый разными коммитами.
+          fetch-depth: 0
+      - name: Gitleaks scan (full history)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .github/security/gitleaks.toml
+          # GITLEAKS_LICENSE не требуется для публичного репозитория.
+          # Для приватного — добавить secret, см. docs/modules/devops.md.
+
+  sast:
+    name: sast
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep CE
+        # Версию и образ закрепить; правила — из .github/security/semgrep/.
+        # ВЕРСИЮ ПРОВЕРИТЬ перед merge.
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: .github/security/semgrep/
+          # Ненулевой exit при находках; auto-набор не использовать.
+          generateSarif: "0"
+
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: foodtinder_ci
+          POSTGRES_USER: foodtinder_ci
+          POSTGRES_PASSWORD: ci-not-a-secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U foodtinder_ci -d foodtinder_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings
+      DJANGO_SECRET_KEY: ci-backend-not-a-secret
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,testserver"
+      POSTGRES_DB: foodtinder_ci
+      POSTGRES_USER: foodtinder_ci
+      POSTGRES_PASSWORD: ci-not-a-secret
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: |
+          python -m pip install "pip>=25.1"
+          python -m pip install --group dev
+      - name: Django system check
+        run: python manage.py check
+      - name: Migrations check
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply migrations
+        run: python manage.py migrate --noinput
+      - name: pytest
+        run: pytest
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Detect dependencies
+        id: deps
+        run: |
+          if [ -f package-lock.json ]; then
+            echo "has_lock=true" >> "$GITHUB_OUTPUT"
+          elif node -e "const p=require('./package.json'); process.exit((p.dependencies||p.devDependencies)?0:1)"; then
+            echo "Package.json declares dependencies but package-lock.json is missing." >&2
+            exit 1
+          else
+            echo "has_lock=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install (only when lockfile present)
+        if: steps.deps.outputs.has_lock == 'true'
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Verify build artifact
+        run: test -f dist/index.html
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build development image
+        run: docker build --target development -t foodtinder-backend:ci-dev .
+      - name: Build production image
+        run: docker build --target production -t foodtinder-backend:ci-prod .
+      - name: Trivy scan (production image)
+        # ВЕРСИЮ ОБРАЗА ЗАКРЕПИТЬ на digest.
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: foodtinder-backend:ci-prod
+          format: "table"
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
+          ignore-unfixed: false
+          trivy-config: .github/security/trivy.yaml
+          output: trivy-report.txt
+        continue-on-error: false
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.txt

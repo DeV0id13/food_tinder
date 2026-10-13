@@ -10,6 +10,10 @@ dev = [
     "pytest==9.1.1",
     "pytest-django==4.14.0",
     "ruff==0.16.8",
+    "pre-commit==3.8.0",
+    "django-stubs[compatible-mypy]>=5.1.0",
+    "djangorestframework-stubs[compatible-mypy]>=3.16.9",
+    "mypy>=1.13",
 ]
 prod = [
     { include-group = "base" },
@@ -29,3 +33,24 @@ extend-exclude = ["**/migrations/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+check_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+exclude = [
+    "(?x)^(.*/(migrations|__pycache__|node_modules|staticfiles|media|dist)/.*)$",
+]
+
+[[tool.mypy.overrides]]
+module = ["*.migrations.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+check_untyped_defs = false
+
+[tool.django-stubs]
+django_settings_module = "config.settings"

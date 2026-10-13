@@ -1,0 +1,7 @@
+title = "FoodTinder Gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Точечные исключения для известных ложных срабатываний"

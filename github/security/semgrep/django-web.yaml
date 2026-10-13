@@ -1,0 +1,42 @@
+# FT-07: Semgrep правила для Django/DRF.
+# Источник: адаптировано из Semgrep Registry (проверенная ревизия).
+rules:
+  - id: foodtinder.django.mark-safe
+    languages: [python]
+    severity: WARNING
+    message: >-
+      mark_safe и |safe отключают автоэкранирование. Убедитесь,
+      что данные доверенные или уже экранированы.
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+      owasp: "A03:2021 - Injection"
+    patterns:
+      - pattern-either:
+          - pattern: django.utils.safestring.mark_safe(...)
+          - pattern: mark_safe(...)
+
+  - id: foodtinder.django.csrf-exempt
+    languages: [python]
+    severity: WARNING
+    message: >-
+      csrf_exempt отключает защиту CSRF. Применяйте только для
+      обоснованных публичных endpoint с собственной защитой.
+    metadata:
+      category: security
+      cwe: "CWE-352: Cross-Site Request Forgery"
+    patterns:
+      - pattern: "@csrf_exempt"
+      - pattern: csrf_exempt(...)
+
+  - id: foodtinder.drf.allow-any-write
+    languages: [python]
+    severity: INFO
+    message: >-
+      AllowAny на изменяющем endpoint требует явного обоснования.
+      Проверьте, что endpoint действительно публичный и защищён иначе.
+    metadata:
+      category: security
+      cwe: "CWE-862: Missing Authorization"
+    patterns:
+      - pattern: "@permission_classes([AllowAny])"
