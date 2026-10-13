@@ -312,6 +312,39 @@ class TestExport:
             "[ ] Рис — 400.000 g\n[ ] Курица — 450.000 g\n[ ] Молоко — 200.000 ml\n"
         )
 
+    @pytest.mark.parametrize(
+        ("file_type", "accept", "content_type"),
+        [
+            ("csv", "text/csv", "text/csv; charset=utf-8"),
+            ("txt", "text/plain", "text/plain; charset=utf-8"),
+            ("csv", "application/json", "text/csv; charset=utf-8"),
+            ("txt", "*/*", "text/plain; charset=utf-8"),
+        ],
+    )
+    def test_export_ignores_client_accept_header(
+        self, client, plan, file_type, accept, content_type
+    ):
+        response = client.get(
+            EXPORT, {"plan_id": plan.id, "file_type": file_type}, HTTP_ACCEPT=accept
+        )
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == content_type
+        assert (
+            response["Content-Disposition"]
+            == f'attachment; filename="shopping-list-{plan.id}.{file_type}"'
+        )
+        assert "400.000" in response.content.decode("utf-8-sig")
+
+    def test_export_errors_stay_json_with_file_accept_header(self, client, owner):
+        response = client.get(
+            EXPORT, {"plan_id": "abc", "file_type": "csv"}, HTTP_ACCEPT="text/csv"
+        )
+
+        assert response.status_code == 400
+        assert response["Content-Type"] == "application/json"
+        assert "plan_id" in response.json()
+
     def test_all_formats_have_same_quantities(self, client, plan):
         json_result = json_rows(client.get(SHOPPING, {"plan_id": plan.id}))
         csv_result = csv_rows(client.get(EXPORT, {"plan_id": plan.id, "file_type": "csv"}))
@@ -389,6 +422,17 @@ class TestAccess:
     @pytest.mark.parametrize("file_type", ["csv", "txt"])
     def test_other_user_gets_404_for_export(self, other_client, foreign_plan, file_type):
         response = other_client.get(EXPORT, {"plan_id": foreign_plan.id, "file_type": file_type})
+
+        assert response.status_code == 404
+        assert "Content-Disposition" not in response
+        assert "Рис" not in response.content.decode()
+
+    def test_other_user_gets_404_for_export_with_file_accept_header(
+        self, other_client, foreign_plan
+    ):
+        response = other_client.get(
+            EXPORT, {"plan_id": foreign_plan.id, "file_type": "csv"}, HTTP_ACCEPT="text/csv"
+        )
 
         assert response.status_code == 404
         assert "Content-Disposition" not in response

@@ -41,6 +41,9 @@ path("api/v1/shopping-list/", include("apps.shopping.urls")),
 - Отсутствующий, пустой, нецелый или вне диапазона `1..2^63-1` `plan_id` — 400 по полю `plan_id`.
 - Отсутствующий или неизвестный `file_type` (в том числе `CSV` в другом регистре) — 400
   по полю `file_type`. Параметры проверяются до обращения к плану.
+- Формат файла задаёт только `file_type`: export-view использует локальный
+  `FileTypeContentNegotiation` и не отвечает 406 на `Accept: text/csv`, `text/plain` и т.п.
+  Ошибки 400/403/404 при любом `Accept` возвращаются как JSON. Глобальные настройки DRF не меняются.
 - Ответы помечены `never_cache` (`Cache-Control: no-store, private, ...`).
 - Content-Type: `text/csv; charset=utf-8` и `text/plain; charset=utf-8`.
 
@@ -48,10 +51,11 @@ path("api/v1/shopping-list/", include("apps.shopping.urls")),
 
 Для каждого ингредиента: `sum(line.quantity × slot.servings / recipe.base_servings)`.
 
-- Произведения `quantity × servings` точны в Decimal и копятся по ingredient.id отдельно
-  для каждого `base_servings`. Деление выполняется один раз через общий знаменатель
-  (НОК base_servings), затем — единственное округление до 3 знаков `ROUND_HALF_UP`.
-  float не используется, построчного округления нет.
+- Decimal из каталога переводится в точную дробь целых чисел (`fractions.Fraction`):
+  умножение, деление и суммирование не зависят от точности контекста Decimal
+  (`prec=28`) и величины знаменателей. Затем — единственное целочисленное округление
+  до 3 знаков по правилу `ROUND_HALF_UP`, результат снова Decimal.
+  float не используется, построчного и промежуточного округления нет.
 - Один ингредиент из разных слотов и дней — одна строка; единица берётся из Ingredient.
 - `pcs` не округляется до целых (`1.500`).
 - Порядок строк — ingredient.id по возрастанию, одинаковый во всех форматах.

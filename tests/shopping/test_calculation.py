@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 
@@ -101,6 +101,27 @@ def test_different_base_servings_are_combined_without_intermediate_rounding():
     assert as_rows(aggregate_shopping_items(lines)) == [(11, "g", "0.001")]
 
 
+def test_large_common_denominator_does_not_lose_precision():
+    # Регрессия из review: при НОК base_servings за пределами prec=28 Decimal-числитель
+    # округлялся, и вместо 11.0005 → 11.001 получалось 11.000.
+    bases = [114, 493, 386, 498, 479, 227, 94, 406, 482, 113, 451, 437]
+    lines = [line(RICE, "0.057", servings=1, base_servings=bases[0])] + [
+        line(RICE, str(base), servings=1, base_servings=base) for base in bases[1:]
+    ]
+
+    assert as_rows(aggregate_shopping_items(lines)) == [(11, "g", "11.001")]
+
+
+def test_result_does_not_depend_on_decimal_context_precision():
+    # 123.456 × 7 / 3 = 288.064; при prec=3 Decimal-арифметика дала бы 288.
+    lines = [line(RICE, "123.456", servings=7, base_servings=3)]
+
+    with localcontext(prec=3):
+        [item] = aggregate_shopping_items(lines)
+
+    assert format_quantity(item.quantity) == "288.064"
+
+
 def test_half_up_rounding_of_final_sum():
     lines = [line(RICE, "0.001", servings=1, base_servings=2)]
 
@@ -125,11 +146,14 @@ def test_pieces_are_not_rounded_to_whole_units():
     assert as_rows(aggregate_shopping_items(lines)) == [(14, "pcs", "1.500")]
 
 
-@pytest.mark.parametrize(("servings", "base_servings"), [(0, 2), (1, 0)])
-def test_non_positive_servings_are_rejected(servings, base_servings):
+@pytest.mark.parametrize(
+    ("quantity", "servings", "base_servings"),
+    [("1.000", 0, 2), ("1.000", 1, 0), ("0", 1, 1), ("-1.000", 1, 1), ("NaN", 1, 1)],
+)
+def test_invalid_line_values_are_rejected(quantity, servings, base_servings):
     with pytest.raises(ValueError):
         aggregate_shopping_items(
-            [line(RICE, "1.000", servings=servings, base_servings=base_servings)]
+            [line(RICE, quantity, servings=servings, base_servings=base_servings)]
         )
 
 

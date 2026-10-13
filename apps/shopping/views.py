@@ -1,6 +1,7 @@
 from django.http import HttpResponse
 from django.views.decorators.cache import never_cache
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, content_negotiation_class
+from rest_framework.negotiation import BaseContentNegotiation
 from rest_framework.response import Response
 
 from .exporters import render_csv, render_txt
@@ -17,6 +18,20 @@ EXPORTERS = {
 }
 
 
+class FileTypeContentNegotiation(BaseContentNegotiation):
+    """Формат файла задаёт ``file_type``, поэтому ``Accept`` клиента не приводит к 406.
+
+    Готовый файл возвращается как ``HttpResponse`` в обход renderer; ошибки валидации
+    и доступа рендерятся первым настроенным renderer (JSON).
+    """
+
+    def select_parser(self, request, parsers):
+        return parsers[0] if parsers else None
+
+    def select_renderer(self, request, renderers, format_suffix=None):
+        return renderers[0], renderers[0].media_type
+
+
 @never_cache
 @api_view(["GET"])
 def shopping_list(request):
@@ -30,6 +45,7 @@ def shopping_list(request):
 
 @never_cache
 @api_view(["GET"])
+@content_negotiation_class(FileTypeContentNegotiation)
 def shopping_list_export(request):
     query = ShoppingListExportQuerySerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
