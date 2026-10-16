@@ -15,6 +15,7 @@ export function createInitialState(mode) {
     guestHidden: new Set(),
     plans: null,
     plansStatus: 'idle',
+    plansError: null,
     activePlanId: null,
     activePlan: null,
     activePlanStatus: 'idle',
@@ -35,6 +36,7 @@ export function clearPrivateState(state) {
   state.favoriteIds = new Set();
   state.plans = null;
   state.plansStatus = 'idle';
+  state.plansError = null;
   state.activePlanId = null;
   state.activePlan = null;
   state.activePlanStatus = 'idle';

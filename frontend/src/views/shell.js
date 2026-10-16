@@ -7,6 +7,7 @@ import {renderFeedView} from './feed-view.js';
 import {renderPlansView} from './plans-view.js';
 import {renderRecipesView} from './recipes-view.js';
 import {renderShoppingView} from './shopping-view.js';
+import {plansUnavailable} from '../components/plans-error.js';
 
 const NAV_ITEMS = [
   ['feed', '♥', 'Лента'],
@@ -33,6 +34,9 @@ function viewContent(state) {
 
 function errorBanner(state) {
   if (!state.error) return '';
+  // The section explains a missing collection endpoint; do not add an unrelated "not found" banner.
+  if (['plans', 'shopping'].includes(state.view) && plansUnavailable(state)
+    && state.error === state.plansError) return '';
   const login = state.error.type === 'auth'
     ? '<button class="banner-link" data-action="show-auth">Войти снова</button>'
     : '';
@@ -63,7 +67,7 @@ export function renderShell(state) {
         </header>
         ${errorBanner(state)}
         <main>${viewContent(state)}</main>
-        <footer><span>FoodTinder · FT-06</span><span>Backend — источник истины</span></footer>
+        <footer><span>FoodTinder</span><span>Выбирайте блюда. Планируйте питание.</span></footer>
       </div>
     </div>`;
 }
