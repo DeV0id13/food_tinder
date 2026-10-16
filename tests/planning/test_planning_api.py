@@ -710,6 +710,64 @@ class TestPlanningAPI:
         with pytest.raises(ValidationError):
             validate_enabled_meals(["brunch"])
 
+    def test_put_slot_with_invalid_body_to_foreign_plan_returns_404(self):
+        owner = self.create_user()
+        intruder = self.create_user("intruder@example.com")
+        plan = self.create_plan(owner)
+        self.login(intruder)
+
+        url = f"{BASE}{plan.id}/slots/0/lunch/"
+        cases = [
+            {},
+            {"servings": 2},
+            {"recipe_id": 1, "servings": 0},
+            {"recipe_id": 1, "servings": 21},
+        ]
+        for payload in cases:
+            assert self.client.put(url, payload, format="json").status_code == 404
+
+    def test_put_slot_with_invalid_body_to_missing_plan_returns_404(self):
+        self.login(self.create_user())
+
+        url = f"{BASE}999999/slots/0/lunch/"
+        cases = [
+            {},
+            {"servings": 2},
+            {"recipe_id": 1, "servings": 0},
+            {"recipe_id": 1, "servings": 21},
+        ]
+        for payload in cases:
+            assert self.client.put(url, payload, format="json").status_code == 404
+
+    def test_put_slot_with_invalid_body_to_own_plan_returns_400(self):
+        user = self.create_user()
+        plan = self.create_plan(user)
+        self.login(user)
+
+        url = f"{BASE}{plan.id}/slots/0/lunch/"
+        cases = [
+            {},
+            {"servings": 2},
+            {"recipe_id": 1, "servings": 0},
+            {"recipe_id": 1, "servings": 21},
+        ]
+        for payload in cases:
+            assert self.client.put(url, payload, format="json").status_code == 400
+        self.put_slot(plan, 0, "lunch", plan.recipe.id, 2)
+
+    def test_put_slot_with_missing_favorite_returns_400(self):
+        user = self.create_user()
+        plan = self.create_plan(user)
+        self.login(user)
+
+        url = f"{BASE}{plan.id}/slots/0/lunch/"
+        response = self.client.put(
+            url, {"recipe_id": 1, "servings": 2}, format="json"
+        )
+        assert response.status_code == 400
+        self.put_slot(plan, 0, "lunch", plan.recipe.id, 2)
+
+
     def test_delete_plan_returns_404_for_missing_plan(self):
         user = self.create_user()
         self.login(user)
@@ -725,8 +783,8 @@ class TestPlanningAPI:
         plan.delete()
         self.login(user)
 
-        assert self.put_slot(plan, 0, "lunch", recipe.id, 2).status_code == 404
-        assert self.delete_slot(plan, 0, "lunch").status_code == 404
+        assert self.put_slot(plan_id, 0, "lunch", recipe.id, 2).status_code == 404
+        assert self.delete_slot(plan_id, 0, "lunch").status_code == 404
         assert self.client.delete(f"{BASE}{plan_id}/").status_code == 404
 
     def test_plan_delete_and_slot_operations_share_plan_first_lock_order(self):

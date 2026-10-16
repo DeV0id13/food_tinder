@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from apps.catalog.models import Recipe
 from apps.preferences.selectors import is_favorite
 
-from .models import MEAL_TYPES, MealPlanSlot
+from .models import MEAL_TYPES, MealPlan, MealPlanSlot
 from .selectors import get_locked_plan_for_user, get_plan_for_user
 from .serializers import (
     MealPlanCreateSerializer,
@@ -92,14 +92,13 @@ def meal_plan_slot(request, plan_id, day_index, meal_type):
             ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    serializer = SlotWriteSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    recipe_id = serializer.validated_data["recipe_id"]
-    servings = serializer.validated_data["servings"]
-
     with transaction.atomic():
         plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
         _validate_slot_target(plan, day_index, meal_type)
+        serializer = SlotWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        recipe_id = serializer.validated_data["recipe_id"]
+        servings = serializer.validated_data["servings"]
         existing = MealPlanSlot.objects.filter(
             plan=plan, day_index=day_index, meal_type=meal_type
         ).first()

@@ -4,9 +4,8 @@ from .views import meal_plan_detail, meal_plan_slot, meal_plans
 
 app_name = "planning"
 
-
 class SignedIntConverter:
-
+    
     regex = r"-?\d+"
 
     def to_python(self, value):
