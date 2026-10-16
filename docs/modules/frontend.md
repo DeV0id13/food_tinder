@@ -39,6 +39,10 @@ session, feed, favorites, meal plans и выбранные данные чере
 - fetch failure как отдельный `network` error;
 - Blob response и filename/filename* из `Content-Disposition`.
 
+Native browser `fetch` вызывается через глобальный объект, а не как метод экземпляра
+`ApiClient`: это сохраняет обязательный receiver браузерного API. Отдельный тест
+защищает от возврата `Illegal invocation`, ошибочно выглядевшего как network failure.
+
 UI обновляет favorite/feed/plan только после успешного ответа. Ошибка не приводит к
 optimistic success. 403 показывает повторный вход; client дополнительно перечитывает session,
 чтобы отличить гостя от ещё существующей сессии с CSRF-проблемой.
@@ -57,6 +61,17 @@ optimistic success. 403 показывает повторный вход; client
 6. После login `RealApi` обязательно повторно читает session endpoint, поэтому следующий
    unsafe request использует ротированный CSRF token.
 7. Logout очищает runtime private state и возвращает публичную ленту.
+
+После подтверждённого `POST logout/` (204) `RealApi.logout()` возвращает guest session.
+Controller сразу очищает приватные данные и отрисовывает гостя; дополнительный GET session
+для CSRF выполняется отдельно, его ошибка показывается, но не отменяет успешный выход.
+Если сам POST не прошёл, состояние аккаунта сохраняется и сообщение об успешном выходе не появляется.
+
+Все загрузки привязаны к поколению сессии, ID аккаунта и номеру запроса конкретного ресурса.
+Поколение меняется при login/logout (включая повторный вход тем же аккаунтом) и смене/сбросе
+авторизации. Устаревшие результаты и ошибки игнорируются до изменения state; проверка
+повторяется и после асинхронного session refresh при 403. Это относится также к персональной
+ленте. При boot/login рационы не загружаются до открытия соответствующего раздела.
 
 Пароль используется только для текущего register/login request. Session token, cookies и
 пароль не записываются в browser storage.
@@ -98,6 +113,13 @@ meal type слота. PUT одновременно создаёт, меняет 
 После любой slot/plan mutation cached shopping response инвалидируется. При открытии покупок
 или по кнопке «Обновить» выполняется новый backend request.
 
+При переключении рациона запрос запоминает выбранный ID и свой номер. Ответ применяется,
+только если ID, номер запроса и сессия всё ещё актуальны. Старые данные убираются на время
+загрузки. Перед изменением слота/удалением плана проверяется совпадение отображённого и
+выбранного ID; операция использует зафиксированный ID, а picker блокируется на время мутации.
+Те же проверки действуют для списка покупок и CSV/TXT. Инвалидация покупок отменяет право
+ожидающего старого ответа обновить UI.
+
 ## Shopping и export
 
 Frontend показывает `name`, точную decimal-string `quantity` и `unit` из response. Никаких
@@ -135,22 +157,48 @@ credentials, JSON и 204, HTTP/network classification, Blob filename, explicit r
 регистрацию без автовхода, demo favorite/swipe/plan/shopping/export, совместимость meal type,
 day/slot helpers и guest memory-only dislike.
 
+`tests/app-state.test.mjs` проверяет управляемыми Promise обратный порядок ответов рационов
+и покупок, поздние network/403 ошибки, повторный запрос того же ID, смену аккаунта A → logout → B,
+сброс авторизации и logout 204 с ошибкой GET session. `tests/test_frontend_integration.py`
+проверяет подключение готовых URLConf и общий cookie/CSRF сценарий auth/catalog/preferences
+с реальной PostgreSQL через основной `config.urls`.
+
 Ручной сценарий описан в `frontend/README.md`. Проверяются также 1280 px без горизонтального
 overflow, loading/empty/error states, независимость Favorite/Like, 1/3/7 plans, servings,
 replace, актуальные покупки и оба download действия.
 
+### Проверено при исправлении PR #18 (16 октября 2026)
+
+- `pnpm test`: 47 passed; `pnpm lint` и `pnpm build`: успешно.
+- Django с PostgreSQL 16.14: все миграции применены, `seed_demo_recipes` создал 12 рецептов.
+- `pytest`: 202 passed, 1 skipped (shopping API требует отсутствующий FT-04),
+  22 предупреждения Django о будущей смене схемы URLField.
+- Ruff check и format check для `config/urls.py` и `tests/test_frontend_integration.py`:
+  успешно; `manage.py check` и `makemigrations --check --dry-run`: успешно, новых миграций нет.
+- В браузере через `localhost:5173` и настоящий proxy проверены гостевой feed, предложение
+  входа по Like, регистрация без автовхода, login, отдельный Favorite без исчезновения
+  карточки, Like/Dislike со следующей карточкой, detail, восстановление сессии/избранного
+  после reload и logout. Отсутствующий FT-04 показывает 404, не переключая режим.
+- В явном demo проверены 52 блюда, планы 1/3/7, выбор сохранённого плана, совместимый
+  favorite в слоте, изменение servings и рецепта, удаление слота, актуализация/пустое
+  состояние shopping и CSV/TXT actions.
+- При ширине viewport 1280 px горизонтального overflow нет.
+
+Полный real E2E рационов/покупок/экспорта не заявляется пройденным: нужен FT-04.
+
 ## Интеграционные зависимости и ограничения
 
-Для настоящего end-to-end интегратор должен:
+По явному разрешению пользователя в этом PR подключены готовые `apps.catalog.urls`
+к `/api/v1/recipes/` и `apps.preferences.urls` к `/api/v1/preferences/`. Auth уже подключён.
+Контракты, permissions, session authentication, CSRF и settings не менялись.
 
-- подключить `apps.catalog.urls` к `/api/v1/recipes/`;
-- подключить `apps.preferences.urls` к `/api/v1/preferences/`;
-- слить FT-04 и подключить `/api/v1/meal-plans/`;
-- после FT-04 подключить `apps.shopping.urls` к `/api/v1/shopping-list/`;
-- применить миграции и создать рецепты.
-
-На текущем master подключён только accounts URLConf; planning implementation отсутствует.
-Frontend не обходит этот блокер и показывает real API error.
+Оставшиеся зависимости: FT-04 пока содержит только AppConfig, без models/selectors/urls.
+Поэтому `/api/v1/meal-plans/` ещё недоступен. FT-05 готов, но его services импортирует
+`apps.planning.selectors`; подключение shopping URLConf до FT-04 сломает загрузку проекта.
+После FT-04 нужно подключить оба оставшихся URLConf, применить его миграции и выполнить
+полный real smoke (планы, servings, покупки и экспорт). Frontend отображает настоящую API
+ошибку для отсутствующих маршрутов, без автоматического demo fallback.
 
 Не входят profile UI, drag-and-drop, автоплан, ML, undo, история, суммарные КБЖУ, бюджет,
-purchased state, production deploy и изменение backend.
+purchased state и production deploy. Backend-изменения этого PR ограничены подключением
+готовых маршрутов и связанными интеграционными проверками.

@@ -32,8 +32,10 @@ Guest dislike живёт только в памяти открытой стра�
 - запуск frontend через `http://localhost:5173`, не через `file://` и не через `127.0.0.1`.
 
 Backend нужно подготовить из корня репозитория по корневому `README.md`: PostgreSQL,
-миграции и демонстрационные рецепты. Для полного сценария должны быть интегрированы FT-01…FT-05
-и подключены их URLConf.
+миграции и демонстрационные рецепты. В этой ветке подключены готовые FT-01 (auth),
+FT-02 (catalog) и FT-03 (preferences). FT-04 ещё не реализован; FT-05 зависит от него,
+поэтому рационы, покупки и экспорт пока проверяются в явном demo mode. Ошибки real API
+не подменяются демо-данными.
 
 ## Установка
 
@@ -58,6 +60,36 @@ pnpm install
 
 Real mode включён по умолчанию. Ошибки настоящего API показываются пользователю и никогда
 не переключают приложение в demo mode.
+
+### Подготовка настоящего backend
+
+С Docker из корня репозитория (предварительно создать `.env` по корневому README):
+
+```sh
+docker compose build web
+docker compose up -d --wait postgres
+docker compose run --rm web python manage.py migrate
+docker compose run --rm web python manage.py seed_demo_recipes
+docker compose up -d web
+```
+
+Если Django запускается на хосте, нужны Python 3.12+, PostgreSQL 16+, виртуальное окружение
+с `pip >= 25.1` и зависимости `python -m pip install --group dev`. Передайте переменные
+из `.env` в окружение процесса; Django сам этот файл не читает. Укажите `POSTGRES_HOST=127.0.0.1`
+и реальный порт локальной БД (вместо Compose hostname `postgres`), затем выполните:
+
+```sh
+python manage.py migrate
+python manage.py seed_demo_recipes
+python manage.py runserver 127.0.0.1:8000
+```
+
+В seed backend сейчас 12 рецептов; 52 блюда demo mode — отдельный набор, который
+не импортируется в настоящую БД. Для готовых сценариев откройте frontend без `?demo=1`:
+гостевой каталог → регистрация → отдельный вход → избранное и реакции → logout.
+Перезагрузка страницы восстанавливает настоящую сессию и избранное из PostgreSQL.
+Начальная загрузка и login не запрашивают отсутствующие meal plans; запрос выполняется
+при переходе в соответствующий раздел. Полный real smoke ниже требует завершения FT-04.
 
 ### Dev proxy и CSRF
 
@@ -123,6 +155,11 @@ pnpm preview      # просмотр готового build на localhost:4173
 ```
 
 `dist/` и `node_modules/` игнорируются Git.
+
+Регрессионные проверки контроллера находятся в `tests/app-state.test.mjs`: ответы двух
+рационов/покупок в обратном порядке, поздние ошибки, смена аккаунта и logout с сетевой
+ошибкой последующего session request. Интеграция готовых серверных маршрутов проверяется
+`pytest tests/test_frontend_integration.py` на PostgreSQL (с загруженным окружением backend).
 
 ## Структура
 

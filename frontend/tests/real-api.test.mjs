@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {RealApi} from '../src/api/real-api.js';
 
+test('logout resolves as guest after the confirmed POST without depending on GET session', async () => {
+  const calls = [];
+  const api = new RealApi({request: async (path) => {
+    calls.push(path);
+    if (path === 'auth/session/') throw new Error('offline');
+    return null;
+  }});
+  assert.deepEqual(await api.logout(), {authenticated: false, id: null, email: null});
+  assert.deepEqual(calls, ['auth/logout/']);
+});
+
 test('login explicitly refreshes session after the unsafe request', async () => {
   const calls = [];
   const client = {
