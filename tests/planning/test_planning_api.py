@@ -22,7 +22,7 @@ ALL_MEALS = ("breakfast", "lunch", "snack", "dinner")
 @pytest.mark.django_db(transaction=True)
 class TestPlanningConcurrentSlotPut:
     """Два потока открывают независимые подключения к БД (``connections.close_all()``)
-    и одновременно обращаются к конечной точке слота за барьером. 
+    и одновременно обращаются к конечной точке слота за барьером.
     """
 
     def _slot_body(self, plan_id, day_index, meal_type, recipe_id, servings):
@@ -94,21 +94,15 @@ class TestPlanningConcurrentSlotPut:
             thread_connections.close_all()
             barrier.wait(timeout=10)
             try:
-                response = self._slot_body(
-                    plan_id, 0, "lunch", recipe_id, servings
-                )
+                response = self._slot_body(plan_id, 0, "lunch", recipe_id, servings)
                 outcomes[name] = ("ok", response.status_code)
             except Exception as exc:  # noqa: BLE001 - recorded, asserted below
                 outcomes[name] = ("error", f"{type(exc).__name__}: {exc}")
             finally:
                 thread_connections.close_all()
 
-        first = threading.Thread(
-            target=racer, args=("first", recipe_one.id, 2), daemon=True
-        )
-        second = threading.Thread(
-            target=racer, args=("second", recipe_two.id, 6), daemon=True
-        )
+        first = threading.Thread(target=racer, args=("first", recipe_one.id, 2), daemon=True)
+        second = threading.Thread(target=racer, args=("second", recipe_two.id, 6), daemon=True)
         first.start()
         second.start()
         first.join(timeout=30)
@@ -118,11 +112,7 @@ class TestPlanningConcurrentSlotPut:
         assert outcomes["first"] == ("ok", 200), outcomes
         assert outcomes["second"] == ("ok", 200), outcomes
 
-        slots = list(
-            MealPlanSlot.objects.filter(
-                plan_id=plan_id, day_index=0, meal_type="lunch"
-            )
-        )
+        slots = list(MealPlanSlot.objects.filter(plan_id=plan_id, day_index=0, meal_type="lunch"))
         assert len(slots) == 1
         assert (slots[0].recipe_id, slots[0].servings) in {
             (recipe_one.id, 2),
@@ -180,14 +170,16 @@ class TestPlanningAPI:
         )
 
     def put_slot(self, plan, day_index, meal_type, recipe_id, servings):
+        plan_id = plan.id if hasattr(plan, "id") else plan
         return self.client.put(
-            f"{BASE}{plan.id}/slots/{day_index}/{meal_type}/",
+            f"{BASE}{plan_id}/slots/{day_index}/{meal_type}/",
             {"recipe_id": recipe_id, "servings": servings},
             format="json",
         )
 
     def delete_slot(self, plan, day_index, meal_type):
-        return self.client.delete(f"{BASE}{plan.id}/slots/{day_index}/{meal_type}/")
+        plan_id = plan.id if hasattr(plan, "id") else plan
+        return self.client.delete(f"{BASE}{plan_id}/slots/{day_index}/{meal_type}/")
 
     def test_create_plan_returns_detail_with_empty_slots(self):
         user = self.create_user()
@@ -753,20 +745,17 @@ class TestPlanningAPI:
         ]
         for payload in cases:
             assert self.client.put(url, payload, format="json").status_code == 400
-        self.put_slot(plan, 0, "lunch", plan.recipe.id, 2)
 
     def test_put_slot_with_missing_favorite_returns_400(self):
         user = self.create_user()
         plan = self.create_plan(user)
+        recipe = self.create_recipe()
         self.login(user)
 
         url = f"{BASE}{plan.id}/slots/0/lunch/"
-        response = self.client.put(
-            url, {"recipe_id": 1, "servings": 2}, format="json"
-        )
+        response = self.client.put(url, {"recipe_id": recipe.id, "servings": 2}, format="json")
         assert response.status_code == 400
-        self.put_slot(plan, 0, "lunch", plan.recipe.id, 2)
-
+        self.put_slot(plan, 0, "lunch", recipe.id, 2)
 
     def test_delete_plan_returns_404_for_missing_plan(self):
         user = self.create_user()
