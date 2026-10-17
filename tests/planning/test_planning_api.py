@@ -1,9 +1,10 @@
+﻿import threading
 from datetime import date
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connections, transaction
 from rest_framework.exceptions import NotFound
 from rest_framework.test import APIClient
 
@@ -40,9 +41,7 @@ class TestPlanningConcurrentSlotPut:
         return meal_plan_slot(request, plan_id, day_index, meal_type)
 
     def test_concurrent_valid_puts_keep_single_slot_without_500(self):
-        import threading
-
-        from django.db import connection, connections
+        from django.db import connection
 
         if connection.vendor != "postgresql":
             pytest.skip("Concurrent slot PUT requires PostgreSQL.")
@@ -787,10 +786,6 @@ class TestPlanningAPI:
         with transaction.atomic():
             locked = get_locked_plan_for_user(user=user, plan_id=plan_id)
             locked.delete()
-            # Same lock order as slot PUT/DELETE: the plan row is already
-            # locked in this transaction, so re-fetching it under lock sees
-            # the same (deleted) state instead of racing with a concurrent
-            # slot operation that would lock the plan first as well.
             with pytest.raises(NotFound):
                 get_locked_plan_for_user(user=user, plan_id=plan_id)
 
@@ -815,3 +810,142 @@ class TestPlanningAPI:
         slot = MealPlanSlot.objects.get(plan=plan, day_index=0, meal_type="lunch")
         assert slot.recipe_id == recipe.id
         assert slot.servings == 2
+
+
+@pytest.mark.django_db(transaction=True)
+class TestPlanningConcurrentPlanDeleteVsSlot(TestPlanningAPI):
+    """Регрессионный тест порядка блокировок в meal_plan_detail().
+
+    DELETE endpoint плана и PUT/DELETE слота запрашивают план через
+    get_locked_plan_for_user() внутри transaction.atomic(). Если блокировка
+    плана всегда устанавливается первым, то одновременный DELETE плана и
+    операция со слотом не должны взаимно блокировать другой поток: DELETE
+    вернёт 204, а слот — 200 либо 404 в зависимости от того, кто победил
+    в гонке, но никто не упадёт в deadlock/500. Без единой схемы блокировок
+    возможен случай, когда поток блокирует слот, пока второй блокирует план,
+    и оба ждут друг друга.
+
+    Этот тест ловит регресс порядка блокировок в meal_plan_detail(): если бы
+    реализация сначала блокировала слот, а потом план, два потока могли бы
+    попать в взаимную блокировку или в состояние, в котором один поток
+    видит удалённый план, а слот «воскресает» после DELETE плана. Реализация
+    блокировок автора задачи уже даёт единый порядок (сначала план), и это
+    тест убеждается в обратном только при регрессии.
+
+    Ограничение: на PostgreSQL блокировки в транзакции обычно отлавливают
+    deadlock через OperationalError, и тест тогда упал бы. Если же
+    реализация будет ретраить транзакцию или запрос, а PostgreSQL не
+    обнаружит живой цикл, тест может не сработать. Это честное ограничение:
+    тест проверяет отсутствие мёртвых блокировок только в том случае, если
+    СУБД их обнаружит, и не гарантирует, что ретраи не позволят
+    небезопасному порядку выполниться в некоторых редких сценариях.
+    """
+
+    @pytest.mark.parametrize("slot_op", ["put", "delete"])
+    def test_concurrent_plan_delete_and_slot_operations(self, slot_op):
+        from django.db import connection
+
+        if connection.vendor != "postgresql":
+            pytest.skip("Concurrent plan delete vs slot requires PostgreSQL.")
+
+        user, recipe, plan = self._make_user_recipe_plan()
+        plan_id = plan.id
+        self.user = user
+
+        def _plan_delete():
+            from rest_framework.test import APIRequestFactory, force_authenticate
+
+            from apps.planning.views import meal_plan_detail
+
+            request = APIRequestFactory().delete(f"/api/v1/meal-plans/{plan_id}/")
+            force_authenticate(request, user=self.user)
+            return meal_plan_detail(request, plan_id)
+
+        def _slot_put():
+            from rest_framework.test import APIRequestFactory, force_authenticate
+
+            from apps.planning.views import meal_plan_slot
+
+            request = APIRequestFactory().put(
+                f"/api/v1/meal-plans/{plan_id}/slots/0/lunch/",
+                {"recipe_id": recipe.id, "servings": 3},
+                format="json",
+            )
+            force_authenticate(request, user=self.user)
+            return meal_plan_slot(request, plan_id, 0, "lunch")
+
+        def _slot_delete():
+            from rest_framework.test import APIRequestFactory, force_authenticate
+
+            from apps.planning.views import meal_plan_slot
+
+            request = APIRequestFactory().delete(f"/api/v1/meal-plans/{plan_id}/slots/0/lunch/")
+            force_authenticate(request, user=self.user)
+            return meal_plan_slot(request, plan_id, 0, "lunch")
+
+        barrier = threading.Barrier(2)
+        outcomes = {}
+
+        def _run(name, fn):
+            connections.close_all()
+            try:
+                barrier.wait(timeout=10)
+                outcomes[name] = [True, fn()]
+            except Exception as exc:  # pragma: no cover - assert output
+                outcomes[name] = [False, exc]
+            finally:
+                connections.close_all()
+
+        threads = [
+            threading.Thread(
+                target=_run,
+                args=("plan_delete", _plan_delete),
+            ),
+            threading.Thread(
+                target=_run,
+                args=(
+                    f"slot_{slot_op}",
+                    _slot_put if slot_op == "put" else _slot_delete,
+                ),
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join(timeout=30)
+            assert not thread.is_alive(), "possible lock deadlock"
+
+        assert outcomes["plan_delete"][0], "plan delete failed: " + str(outcomes)
+        assert outcomes["plan_delete"][1].status_code == 204, (
+            "plan delete status "
+            + str(outcomes["plan_delete"][1].status_code)
+            + ": "
+            + str(outcomes)
+        )
+
+        slot_key = "slot_put" if slot_op == "put" else "slot_delete"
+        expected = {200, 404} if slot_op == "put" else {204, 404}
+        assert outcomes[slot_key][0], "slot " + slot_op + " failed: " + str(outcomes)
+        assert outcomes[slot_key][1].status_code in expected, (
+            "slot "
+            + slot_op
+            + " status "
+            + str(outcomes[slot_key][1].status_code)
+            + ": "
+            + str(outcomes)
+        )
+
+        assert not MealPlan.objects.filter(pk=plan_id).exists(), (
+            "plan was resurrected after deletion: " + str(outcomes)
+        )
+        assert not MealPlanSlot.objects.filter(plan_id=plan_id).exists(), (
+            "slot still exists after plan deletion: " + str(outcomes)
+        )
+
+    def _make_user_recipe_plan(self):
+        user = self.create_user()
+        recipe = self.create_recipe()
+        self.make_favorite(user, recipe)
+        plan = self.create_plan(user)
+        return user, recipe, plan
