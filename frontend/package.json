@@ -1,11 +1,17 @@
 {
-  "name": "foodtinder-prototype",
+  "name": "foodtinder-frontend",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/domain.test.mjs",
-    "start": "python3 -m http.server 4173 --directory public",
-    "build": "node build.mjs"
+    "dev": "vite --host localhost --port 5173",
+    "start": "vite --host localhost --port 5173",
+    "test": "node --test tests/api-client.test.mjs tests/app-state.test.mjs tests/demo-api.test.mjs tests/real-api.test.mjs tests/ui-helpers.test.mjs",
+    "lint": "node --check src/app.js && node --check src/api/api-client.js && node --check src/api/demo-api.js",
+    "build": "vite build",
+    "preview": "vite preview --host localhost --port 4173"
+  },
+  "devDependencies": {
+    "vite": "8.3.4"
   }
 }
