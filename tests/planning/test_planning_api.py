@@ -813,136 +813,127 @@ class TestPlanningAPI:
 
 
 @pytest.mark.django_db(transaction=True)
-class TestPlanningConcurrentPlanDeleteVsSlot(TestPlanningAPI):
-    """Регрессионный тест порядка блокировок в meal_plan_detail().
+class TestPlanningConcurrentPlanDeleteVsSlot:
+    """Проверяет параллельное удаление плана с уже заполненным слотом."""
 
-    DELETE endpoint плана и PUT/DELETE слота запрашивают план через
-    get_locked_plan_for_user() внутри transaction.atomic(). Если блокировка
-    плана всегда устанавливается первым, то одновременный DELETE плана и
-    операция со слотом не должны взаимно блокировать другой поток: DELETE
-    вернёт 204, а слот — 200 либо 404 в зависимости от того, кто победил
-    в гонке, но никто не упадёт в deadlock/500. Без единой схемы блокировок
-    возможен случай, когда поток блокирует слот, пока второй блокирует план,
-    и оба ждут друг друга.
-
-    Этот тест ловит регресс порядка блокировок в meal_plan_detail(): если бы
-    реализация сначала блокировала слот, а потом план, два потока могли бы
-    попасть в взаимную блокировку или в состояние, в котором один поток
-    видит удалённый план, а слот «воскресает» после DELETE плана. Реализация
-    блокировок автора задачи уже даёт единый порядок (сначала план), и это
-    тест убеждается в обратном только при регрессии.
-
-    Ограничение: на PostgreSQL блокировки в транзакции обычно отлавливают
-    deadlock через OperationalError, и тест тогда упал бы. Если же
-    реализация будет ретраить транзакцию или запрос, а PostgreSQL не
-    обнаружит живой цикл, тест может не сработать.
-    """
-
-    @pytest.mark.parametrize("slot_op", ["put", "delete"])
-    def test_concurrent_plan_delete_and_slot_operations(self, slot_op):
+    @pytest.mark.parametrize("slot_op", ("put", "delete"))
+    @pytest.mark.parametrize("first", ("plan_delete", "slot"))
+    def test_concurrent_plan_delete_and_slot_operations(self, slot_op, first, monkeypatch):
         from django.db import connection
+        from rest_framework.test import APIRequestFactory, force_authenticate
+
+        from apps.planning import views as planning_views
 
         if connection.vendor != "postgresql":
-            pytest.skip("Concurrent plan delete vs slot requires PostgreSQL.")
+            pytest.skip("Concurrent plan deletion requires PostgreSQL.")
 
-        user, recipe, plan = self._make_user_recipe_plan()
+        user = get_user_model().objects.create_user(
+            email="concurrent-delete@example.com", password=PASSWORD
+        )
+        recipe = Recipe.objects.create(
+            slug="concurrent-delete",
+            title="Concurrent Delete",
+            description="Test recipe",
+            image_url="",
+            cooking_time_minutes=20,
+            difficulty=2,
+            base_servings=2,
+            meal_types=["lunch"],
+            steps=["Prepare", "Serve"],
+            is_active=True,
+        )
+        UserRecipeState.objects.create(user=user, recipe=recipe, is_favorite=True)
+        plan = MealPlan.objects.create(
+            user=user,
+            start_date=date(2026, 10, 1),
+            duration_days=1,
+            enabled_meals=["lunch"],
+        )
+        MealPlanSlot.objects.create(
+            plan=plan, day_index=0, meal_type="lunch", recipe=recipe, servings=2
+        )
         plan_id = plan.id
-        self.user = user
 
-        def _plan_delete():
-            from rest_framework.test import APIRequestFactory, force_authenticate
+        lock_acquired = threading.Event()
+        contender_started = threading.Event()
+        release_first = threading.Event()
+        original_selector = planning_views.get_locked_plan_for_user
 
-            from apps.planning.views import meal_plan_detail
+        def controlled_selector(*, user, plan_id):
+            if threading.current_thread().name == first:
+                locked_plan = original_selector(user=user, plan_id=plan_id)
+                lock_acquired.set()
+                if not release_first.wait(timeout=10):
+                    raise AssertionError("Timed out waiting to release the plan lock")
+                return locked_plan
+            contender_started.set()
+            return original_selector(user=user, plan_id=plan_id)
 
-            request = APIRequestFactory().delete(f"/api/v1/meal-plans/{plan_id}/")
-            force_authenticate(request, user=self.user)
-            return meal_plan_detail(request, plan_id)
+        monkeypatch.setattr(planning_views, "get_locked_plan_for_user", controlled_selector)
 
-        def _slot_put():
-            from rest_framework.test import APIRequestFactory, force_authenticate
+        def delete_plan():
+            request = APIRequestFactory().delete(f"{BASE}{plan_id}/")
+            force_authenticate(request, user=user)
+            return planning_views.meal_plan_detail(request, plan_id)
 
-            from apps.planning.views import meal_plan_slot
+        def modify_slot():
+            url = f"{BASE}{plan_id}/slots/0/lunch/"
+            factory = APIRequestFactory()
+            if slot_op == "put":
+                request = factory.put(
+                    url, {"recipe_id": recipe.id, "servings": 3}, format="json"
+                )
+            else:
+                request = factory.delete(url)
+            force_authenticate(request, user=user)
+            return planning_views.meal_plan_slot(request, plan_id, 0, "lunch")
 
-            request = APIRequestFactory().put(
-                f"/api/v1/meal-plans/{plan_id}/slots/0/lunch/",
-                {"recipe_id": recipe.id, "servings": 3},
-                format="json",
-            )
-            force_authenticate(request, user=self.user)
-            return meal_plan_slot(request, plan_id, 0, "lunch")
-
-        def _slot_delete():
-            from rest_framework.test import APIRequestFactory, force_authenticate
-
-            from apps.planning.views import meal_plan_slot
-
-            request = APIRequestFactory().delete(f"/api/v1/meal-plans/{plan_id}/slots/0/lunch/")
-            force_authenticate(request, user=self.user)
-            return meal_plan_slot(request, plan_id, 0, "lunch")
-
-        barrier = threading.Barrier(2)
         outcomes = {}
+        completed = {"plan_delete": threading.Event(), "slot": threading.Event()}
 
-        def _run(name, fn):
-            connections.close_all()
+        def run(name, action):
+            connections.close_all()  # Независимое подключение в каждом потоке
             try:
-                barrier.wait(timeout=10)
-                outcomes[name] = [True, fn()]
-            except Exception as exc:  # pragma: no cover - assert output
-                outcomes[name] = [False, exc]
+                outcomes[name] = ("ok", action().status_code)
+            except Exception as exc:  # noqa: BLE001 — ошибка попадёт в assert
+                outcomes[name] = ("error", repr(exc))
             finally:
+                completed[name].set()
                 connections.close_all()
 
-        threads = [
-            threading.Thread(
-                target=_run,
-                args=("plan_delete", _plan_delete),
+        threads = {
+            "plan_delete": threading.Thread(
+                target=run, name="plan_delete",
+                args=("plan_delete", delete_plan), daemon=True
             ),
-            threading.Thread(
-                target=_run,
-                args=(
-                    f"slot_{slot_op}",
-                    _slot_put if slot_op == "put" else _slot_delete,
-                ),
+            "slot": threading.Thread(
+                target=run, name="slot", args=("slot", modify_slot), daemon=True
             ),
-        ]
-        for thread in threads:
-            thread.start()
+        }
 
-        for thread in threads:
-            thread.join(timeout=30)
-            assert not thread.is_alive(), "possible lock deadlock"
+        started = []
+        try:
+            first_thread = threads[first]
+            first_thread.start()
+            started.append(first_thread)
+            assert lock_acquired.wait(timeout=10), f"Plan lock not acquired: {outcomes}"
 
-        assert outcomes["plan_delete"][0], "plan delete failed: " + str(outcomes)
-        assert outcomes["plan_delete"][1].status_code == 204, (
-            "plan delete status "
-            + str(outcomes["plan_delete"][1].status_code)
-            + ": "
-            + str(outcomes)
+            other = "slot" if first == "plan_delete" else "plan_delete"
+            contender = threads[other]
+            contender.start()
+            started.append(contender)
+            assert contender_started.wait(timeout=10), f"Contender did not start: {outcomes}"
+            assert not completed[other].is_set(), "Contender finished while plan was locked"
+        finally:
+            release_first.set()
+            for thread in started:
+                thread.join(timeout=20)
+
+        assert all(not thread.is_alive() for thread in started), "Possible deadlock"
+        assert outcomes["plan_delete"] == ("ok", 204), outcomes
+        expected_slot_status = 404 if first == "plan_delete" else (
+            200 if slot_op == "put" else 204
         )
-
-        slot_key = "slot_put" if slot_op == "put" else "slot_delete"
-        expected = {200, 404} if slot_op == "put" else {204, 404}
-        assert outcomes[slot_key][0], "slot " + slot_op + " failed: " + str(outcomes)
-        assert outcomes[slot_key][1].status_code in expected, (
-            "slot "
-            + slot_op
-            + " status "
-            + str(outcomes[slot_key][1].status_code)
-            + ": "
-            + str(outcomes)
-        )
-
-        assert not MealPlan.objects.filter(pk=plan_id).exists(), (
-            "plan was resurrected after deletion: " + str(outcomes)
-        )
-        assert not MealPlanSlot.objects.filter(plan_id=plan_id).exists(), (
-            "slot still exists after plan deletion: " + str(outcomes)
-        )
-
-    def _make_user_recipe_plan(self):
-        user = self.create_user()
-        recipe = self.create_recipe()
-        self.make_favorite(user, recipe)
-        plan = self.create_plan(user)
-        return user, recipe, plan
+        assert outcomes["slot"] == ("ok", expected_slot_status), outcomes
+        assert not MealPlan.objects.filter(pk=plan_id).exists()
+        assert not MealPlanSlot.objects.filter(plan_id=plan_id).exists()
