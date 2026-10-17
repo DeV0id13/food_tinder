@@ -880,9 +880,7 @@ class TestPlanningConcurrentPlanDeleteVsSlot:
             url = f"{BASE}{plan_id}/slots/0/lunch/"
             factory = APIRequestFactory()
             if slot_op == "put":
-                request = factory.put(
-                    url, {"recipe_id": recipe.id, "servings": 3}, format="json"
-                )
+                request = factory.put(url, {"recipe_id": recipe.id, "servings": 3}, format="json")
             else:
                 request = factory.delete(url)
             force_authenticate(request, user=user)
@@ -903,11 +901,16 @@ class TestPlanningConcurrentPlanDeleteVsSlot:
 
         threads = {
             "plan_delete": threading.Thread(
-                target=run, name="plan_delete",
-                args=("plan_delete", delete_plan), daemon=True
+                target=run,
+                name="plan_delete",
+                args=("plan_delete", delete_plan),
+                daemon=True,
             ),
             "slot": threading.Thread(
-                target=run, name="slot", args=("slot", modify_slot), daemon=True
+                target=run,
+                name="slot",
+                args=("slot", modify_slot),
+                daemon=True,
             ),
         }
 
@@ -931,9 +934,12 @@ class TestPlanningConcurrentPlanDeleteVsSlot:
 
         assert all(not thread.is_alive() for thread in started), "Possible deadlock"
         assert outcomes["plan_delete"] == ("ok", 204), outcomes
-        expected_slot_status = 404 if first == "plan_delete" else (
-            200 if slot_op == "put" else 204
-        )
+        if first == "plan_delete":
+            expected_slot_status = 404
+        elif slot_op == "put":
+            expected_slot_status = 200
+        else:
+            expected_slot_status = 204
         assert outcomes["slot"] == ("ok", expected_slot_status), outcomes
         assert not MealPlan.objects.filter(pk=plan_id).exists()
         assert not MealPlanSlot.objects.filter(plan_id=plan_id).exists()
