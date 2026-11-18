@@ -1,7 +1,7 @@
 import {ApiError} from './api/errors.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {clearPrivateState, createInitialState, setFavorites} from './state/state.js';
-import {escapeHtml, renderStatus} from './utils/dom.js';
+import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
 import {invalidateShopping} from './utils/plans.js';
 import {renderShell} from './views/shell.js';
@@ -13,6 +13,8 @@ export class FoodTinderApp {
     this.toastElement = toast;
     this.api = api;
     this.state = createInitialState(mode);
+    this.sessionGeneration = 0;
+    this.requestVersions = new Map();
     this.toastTimer = null;
     this.root.addEventListener('click', (event) => this.onClick(event));
     this.root.addEventListener('submit', (event) => this.onSubmit(event));
@@ -27,6 +29,55 @@ export class FoodTinderApp {
     this.root.innerHTML = renderShell(this.state);
   }
 
+  sessionContext() {
+    return {
+      generation: this.sessionGeneration,
+      userId: this.state.session.id,
+      authenticated: this.state.session.authenticated,
+    };
+  }
+
+  isCurrentSession(context) {
+    return context.generation === this.sessionGeneration
+      && context.userId === this.state.session.id
+      && context.authenticated === this.state.session.authenticated;
+  }
+
+  setSession(session, reset = false) {
+    if (reset || session.id !== this.state.session.id
+      || session.authenticated !== this.state.session.authenticated) {
+      this.sessionGeneration += 1;
+      clearPrivateState(this.state);
+      this.state.feed = null;
+      this.state.feedStatus = 'idle';
+      this.state.guestHidden = new Set();
+    }
+    this.state.session = session;
+    this.state.sessionKnown = true;
+  }
+
+  beginRequest(key) {
+    const version = (this.requestVersions.get(key) || 0) + 1;
+    this.requestVersions.set(key, version);
+    return {version, session: this.sessionContext()};
+  }
+
+  isCurrentRequest(key, request) {
+    return this.requestVersions.get(key) === request.version
+      && this.isCurrentSession(request.session);
+  }
+
+  invalidateShopping() {
+    this.beginRequest('shopping');
+    invalidateShopping(this.state);
+  }
+
+  editablePlanId() {
+    return this.state.session.authenticated && this.state.activePlanStatus === 'ready'
+      && this.state.activePlan?.id === Number(this.state.activePlanId)
+      ? this.state.activePlan.id : null;
+  }
+
   toast(message) {
     clearTimeout(this.toastTimer);
     this.toastElement.textContent = message;
@@ -36,18 +87,19 @@ export class FoodTinderApp {
 
   async start() {
     this.render();
+    const context = this.sessionContext();
     try {
       try {
-        this.state.session = await this.api.getSession();
-        this.state.sessionKnown = true;
+        const session = await this.api.getSession();
+        if (this.isCurrentSession(context)) this.setSession(session);
       } catch (error) {
-        await this.handleError(error);
+        await this.handleError(error, () => this.isCurrentSession(context));
       }
 
       // Feed is public and must get its own state even when session initialization fails.
       await this.loadFeed(false);
       if (this.state.sessionKnown && this.state.session.authenticated) {
-        await Promise.all([this.loadFavorites(false), this.loadPlans(false)]);
+        await this.loadFavorites(false);
       }
     } catch (error) {
       await this.handleError(error);
@@ -57,17 +109,20 @@ export class FoodTinderApp {
     }
   }
 
-  async handleError(error) {
+  async handleError(error, isCurrent) {
+    const context = this.sessionContext();
+    const current = isCurrent || (() => this.isCurrentSession(context));
     const normalized = error instanceof ApiError
       ? error
       : new ApiError({type: 'http', details: String(error?.message || error)});
+    if (!current()) return normalized;
     this.state.error = normalized;
     if (normalized.type === 'auth') {
       try {
         const session = await this.api.getSession();
-        this.state.session = session;
-        this.state.sessionKnown = true;
-        if (!session.authenticated) clearPrivateState(this.state);
+        if (!current()) return normalized;
+        this.setSession(session);
+        this.render();
       } catch {
         // Keep the original actionable error; never switch to demo automatically.
       }
@@ -77,13 +132,14 @@ export class FoodTinderApp {
 
   async runMutation(key, operation) {
     if (this.state.busy) return;
+    const context = this.sessionContext();
     this.state.busy = key;
     this.state.error = null;
     this.render();
     try {
       await operation();
     } catch (error) {
-      await this.handleError(error);
+      await this.handleError(error, () => this.isCurrentSession(context));
     } finally {
       this.state.busy = null;
       this.render();
@@ -91,57 +147,77 @@ export class FoodTinderApp {
   }
 
   async loadFeed(shouldRender = true) {
+    const request = this.beginRequest('feed');
+    const current = () => this.isCurrentRequest('feed', request);
     this.state.feedStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      this.state.feed = await this.api.getFeed();
+      const feed = await this.api.getFeed();
+      if (!current()) return;
+      this.state.feed = feed;
       this.state.feedStatus = 'ready';
     } catch (error) {
+      if (!current()) return;
       this.state.feedStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   async loadCatalog(shouldRender = true) {
+    const request = this.beginRequest('catalog');
+    const current = () => this.isCurrentRequest('catalog', request);
     this.state.catalogStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      this.state.catalog = await this.api.getRecipes();
+      const catalog = await this.api.getRecipes();
+      if (!current()) return;
+      this.state.catalog = catalog;
       this.state.catalogStatus = 'ready';
     } catch (error) {
+      if (!current()) return;
       this.state.catalogStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   async loadFavorites(shouldRender = true) {
     if (!this.state.session.authenticated) return;
+    const request = this.beginRequest('favorites');
+    const current = () => this.isCurrentRequest('favorites', request);
     this.state.favoritesStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      setFavorites(this.state, await this.api.getFavorites());
+      const favorites = await this.api.getFavorites();
+      if (!current()) return;
+      setFavorites(this.state, favorites);
       this.state.favoritesStatus = 'ready';
     } catch (error) {
+      if (!current()) return;
       this.state.favoritesStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   async loadPlans(shouldRender = true) {
     if (!this.state.session.authenticated) return;
+    const request = this.beginRequest('plans');
+    const current = () => this.isCurrentRequest('plans', request);
     this.state.plansStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      this.state.plans = await this.api.getPlans();
+      const plans = await this.api.getPlans();
+      if (!current()) return;
+      this.state.plans = plans;
       this.state.plansStatus = 'ready';
       if (!this.state.plans.length) {
         this.state.activePlanId = null;
         this.state.activePlan = null;
         this.state.activePlanStatus = 'idle';
         this.state.shoppingPlanId = null;
+        this.invalidateShopping();
       } else {
         const ids = new Set(this.state.plans.map(({id}) => id));
         if (!ids.has(Number(this.state.activePlanId))) this.state.activePlanId = this.state.plans[0].id;
@@ -149,38 +225,55 @@ export class FoodTinderApp {
         await this.loadActivePlan(false);
       }
     } catch (error) {
+      if (!current()) return;
       this.state.plansStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   async loadActivePlan(shouldRender = true) {
-    if (!this.state.activePlanId) return;
+    if (!this.state.session.authenticated || !this.state.activePlanId) return;
+    const planId = Number(this.state.activePlanId);
+    const request = this.beginRequest('active-plan');
+    const current = () => this.isCurrentRequest('active-plan', request)
+      && Number(this.state.activePlanId) === planId;
+    this.state.activePlan = null;
     this.state.activePlanStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      this.state.activePlan = await this.api.getPlan(this.state.activePlanId);
+      const plan = await this.api.getPlan(planId);
+      if (!current()) return;
+      this.state.activePlan = plan;
       this.state.activePlanStatus = 'ready';
     } catch (error) {
+      if (!current()) return;
       this.state.activePlanStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   async loadShopping(shouldRender = true) {
-    if (!this.state.shoppingPlanId) return;
+    if (!this.state.session.authenticated || !this.state.shoppingPlanId) return;
+    const planId = Number(this.state.shoppingPlanId);
+    const request = this.beginRequest('shopping');
+    const current = () => this.isCurrentRequest('shopping', request)
+      && Number(this.state.shoppingPlanId) === planId;
+    this.state.shopping = null;
     this.state.shoppingStatus = 'loading';
     if (shouldRender) this.render();
     try {
-      this.state.shopping = await this.api.getShoppingList(this.state.shoppingPlanId);
+      const shopping = await this.api.getShoppingList(planId);
+      if (!current()) return;
+      this.state.shopping = shopping;
       this.state.shoppingStatus = 'ready';
     } catch (error) {
+      if (!current()) return;
       this.state.shoppingStatus = 'error';
-      await this.handleError(error);
+      await this.handleError(error, current);
     }
-    if (shouldRender) this.render();
+    if (shouldRender && current()) this.render();
   }
 
   showAuth(message) {
@@ -273,11 +366,14 @@ export class FoodTinderApp {
   }
 
   async onChange(event) {
+    if (this.state.busy) return;
     if (event.target.dataset.change === 'active-plan') {
+      this.state.error = null;
       this.state.activePlanId = Number(event.target.value);
       return this.loadActivePlan();
     }
     if (event.target.dataset.change === 'shopping-plan') {
+      this.state.error = null;
       this.state.shoppingPlanId = Number(event.target.value);
       return this.loadShopping();
     }
@@ -285,11 +381,9 @@ export class FoodTinderApp {
 
   async login(payload) {
     await this.runMutation('auth', async () => {
-      this.state.session = await this.api.login(payload);
-      this.state.sessionKnown = true;
-      this.state.guestHidden = new Set();
+      this.setSession(await this.api.login(payload), true);
       this.state.authNotice = null;
-      await Promise.all([this.loadFavorites(false), this.loadPlans(false), this.loadFeed(false)]);
+      await Promise.all([this.loadFavorites(false), this.loadFeed(false)]);
       this.state.view = 'feed';
       this.toast('Вход выполнен');
     });
@@ -307,11 +401,18 @@ export class FoodTinderApp {
 
   async logout() {
     await this.runMutation('auth', async () => {
-      this.state.session = await this.api.logout();
-      clearPrivateState(this.state);
+      await this.api.logout();
+      this.setSession({authenticated: false, id: null, email: null}, true);
       this.state.view = 'feed';
-      await this.loadFeed(false);
+      this.render();
+      // The POST confirmed logout. A failed CSRF/session refresh cannot undo it.
       this.toast('Вы вышли из аккаунта');
+      try {
+        await this.api.getSession();
+      } catch (error) {
+        await this.handleError(error);
+      }
+      await this.loadFeed(false);
     });
   }
 
@@ -355,50 +456,68 @@ export class FoodTinderApp {
   }
 
   async createPlan(payload) {
+    const context = this.sessionContext();
     await this.runMutation('create-plan', async () => {
       const plan = await this.api.createPlan(payload);
+      if (!this.isCurrentSession(context)) return;
       this.state.activePlanId = plan.id;
       this.state.shoppingPlanId = plan.id;
       await this.loadPlans(false);
-      this.state.activePlan = plan;
-      this.state.activePlanStatus = 'ready';
-      invalidateShopping(this.state);
+      if (!this.isCurrentSession(context)) return;
+      this.invalidateShopping();
       this.toast('Рацион создан');
     });
   }
 
   async saveSlot(dayIndex, mealType, payload) {
+    const planId = this.editablePlanId();
+    if (!planId) return;
+    const context = this.sessionContext();
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
-      await this.api.putSlot(this.state.activePlanId, dayIndex, mealType, payload);
-      await this.loadActivePlan(false);
-      invalidateShopping(this.state);
+      await this.api.putSlot(planId, dayIndex, mealType, payload);
+      if (!this.isCurrentSession(context)) return;
+      this.invalidateShopping();
+      if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
       this.toast('Слот сохранён');
     });
   }
 
   async deleteSlot(dayIndex, mealType) {
+    const planId = this.editablePlanId();
+    if (!planId) return;
+    const context = this.sessionContext();
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
-      await this.api.deleteSlot(this.state.activePlanId, dayIndex, mealType);
-      await this.loadActivePlan(false);
-      invalidateShopping(this.state);
+      await this.api.deleteSlot(planId, dayIndex, mealType);
+      if (!this.isCurrentSession(context)) return;
+      this.invalidateShopping();
+      if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
       this.toast('Слот удалён');
     });
   }
 
   async deletePlan() {
+    const planId = this.editablePlanId();
+    if (!planId || this.state.busy) return;
+    const context = this.sessionContext();
     if (!globalThis.confirm('Удалить выбранный рацион и все его слоты?')) return;
     await this.runMutation('delete-plan', async () => {
-      await this.api.deletePlan(this.state.activePlanId);
+      await this.api.deletePlan(planId);
+      if (!this.isCurrentSession(context)) return;
       this.state.activePlanId = null;
-      invalidateShopping(this.state);
+      this.invalidateShopping();
       await this.loadPlans(false);
       this.toast('Рацион удалён');
     });
   }
 
   async exportShopping(fileType) {
+    const planId = Number(this.state.shoppingPlanId);
+    if (!this.state.session.authenticated || this.state.shoppingStatus !== 'ready'
+      || this.state.shopping?.plan_id !== planId) return;
+    const context = this.sessionContext();
     await this.runMutation(`export-${fileType}`, async () => {
-      const file = await this.api.downloadShoppingList(this.state.shoppingPlanId, fileType);
+      const file = await this.api.downloadShoppingList(planId, fileType);
+      if (!this.isCurrentSession(context) || Number(this.state.shoppingPlanId) !== planId) return;
       saveBlob(file);
       this.toast(`Файл ${fileType.toUpperCase()} получен с backend`);
     });

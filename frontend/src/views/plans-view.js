@@ -6,7 +6,7 @@ import {formatDate, isoToday} from '../utils/format.js';
 function planPicker(state) {
   if (!state.plans?.length) return '';
   return `<label class="select-label">Активный рацион
-    <select data-change="active-plan">
+    <select data-change="active-plan" ${state.busy ? 'disabled' : ''}>
       ${state.plans.map((plan) => `<option value="${plan.id}" ${Number(state.activePlanId) === plan.id ? 'selected' : ''}>#${plan.id} · ${escapeHtml(formatDate(plan.start_date))} · ${plan.duration_days} дн.</option>`).join('')}
     </select>
   </label>`;
@@ -49,7 +49,7 @@ function slotEditor(state, plan, dayIndex, meal) {
 function activePlan(state) {
   if (state.activePlanStatus === 'loading') return renderStatus({kind: 'loading', title: 'Загружаем рацион'});
   if (state.activePlanStatus === 'error') return renderStatus({kind: 'error', title: 'Рацион не загрузился', action: 'retry-active-plan'});
-  if (!state.activePlan) return renderStatus({title: 'Выберите или создайте рацион'});
+  if (!state.activePlan || state.activePlan.id !== Number(state.activePlanId)) return renderStatus({title: 'Выберите или создайте рацион'});
   const plan = state.activePlan;
   const days = buildPlanDays(plan);
   return `<section class="active-plan">

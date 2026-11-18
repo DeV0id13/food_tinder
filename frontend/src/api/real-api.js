@@ -21,7 +21,7 @@ export class RealApi {
 
   async logout() {
     await this.client.request('auth/logout/', {method: 'POST', body: {}});
-    return this.getSession();
+    return {authenticated: false, id: null, email: null};
   }
 
   async collectAll(path) {

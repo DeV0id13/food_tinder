@@ -3,7 +3,7 @@ import {formatDate} from '../utils/format.js';
 
 function planSelect(state) {
   return `<label class="select-label">Рацион
-    <select data-change="shopping-plan">
+    <select data-change="shopping-plan" ${state.busy ? 'disabled' : ''}>
       ${state.plans.map((plan) => `<option value="${plan.id}" ${Number(state.shoppingPlanId) === plan.id ? 'selected' : ''}>#${plan.id} · ${escapeHtml(formatDate(plan.start_date))} · ${plan.duration_days} дн.</option>`).join('')}
     </select>
   </label>`;
@@ -15,6 +15,9 @@ export function renderShoppingView(state) {
   }
   if (state.plansStatus === 'loading' || state.plansStatus === 'idle') {
     return renderStatus({kind: 'loading', title: 'Загружаем рационы'});
+  }
+  if (state.plansStatus === 'error') {
+    return renderStatus({kind: 'error', title: 'Рационы не загрузились', action: 'retry-plans'});
   }
   if (!state.plans?.length) {
     return renderStatus({title: 'Сначала создайте рацион', text: 'Без рациона backend не сможет рассчитать покупки.', action: 'open-plans', actionLabel: 'Создать рацион'});

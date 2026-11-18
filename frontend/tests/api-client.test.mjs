@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {ApiClient, buildApiUrl, filenameFromDisposition, readCookie} from '../src/api/api-client.js';
 import {ApiError} from '../src/api/errors.js';
 
+test('default browser fetch keeps its global receiver instead of the ApiClient instance', async (t) => {
+  t.mock.method(globalThis, 'fetch', async function (url) {
+    assert.equal(this, globalThis);
+    assert.equal(url, '/api/v1/auth/session/');
+    return new Response(JSON.stringify({authenticated: false}), {
+      headers: {'content-type': 'application/json'},
+    });
+  });
+  assert.deepEqual(await new ApiClient().request('auth/session/'), {authenticated: false});
+});
+
 test('buildApiUrl keeps every request under /api/v1 and supports pagination URLs', () => {
   assert.equal(buildApiUrl('recipes/', {limit: 30, offset: 0}), '/api/v1/recipes/?limit=30&offset=0');
   assert.equal(

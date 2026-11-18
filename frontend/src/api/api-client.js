@@ -58,7 +58,7 @@ async function responseBody(response) {
 }
 
 export class ApiClient {
-  constructor({fetchImpl = globalThis.fetch, cookieReader = () => globalThis.document?.cookie || ''} = {}) {
+  constructor({fetchImpl = (...args) => globalThis.fetch(...args), cookieReader = () => globalThis.document?.cookie || ''} = {}) {
     if (typeof fetchImpl !== 'function') throw new TypeError('fetch implementation is required');
     this.fetchImpl = fetchImpl;
     this.cookieReader = cookieReader;
