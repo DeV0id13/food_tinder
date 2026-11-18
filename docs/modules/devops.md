@@ -208,3 +208,17 @@ separately before closing issue #9.
 
 CI is quality assurance only: no image publishing, CD, server provisioning,
 hosting, DNS, TLS or deployment is introduced here.
+
+## CI remediation after rebase
+
+The branch was rebased onto `master` on 2026-11-18, preserving the five
+original FT-07 commits; subsequent commits address existing Ruff/mypy/runtime
+vulnerabilities on the integrated code. The production target now uses the
+official Python 3.12 Alpine 3.24 image to reduce the vulnerable OS package
+surface, runs `apk upgrade --no-cache` for published OS patches, and removes
+build-only `setuptools`/`wheel` from the final runtime image. These changes
+preserve the non-root `app` user, Django/DRF runtime, production Gunicorn,
+and both Docker build targets. The change of base distribution is a deliberate
+additional scope adjustment to remediate reported CVEs; validate the complete
+backend/PostgreSQL and container builds before merging. All HIGH/CRITICAL
+security failures still block the CI; no CVEs were broadly allowlisted.
