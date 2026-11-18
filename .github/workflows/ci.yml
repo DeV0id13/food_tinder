@@ -73,7 +73,7 @@ jobs:
         with:
           go-version: "1.23.5"
       - name: Build pinned Gitleaks CLI (verified Go module)
-        run: go install github.com/gitleaks/gitleaks/v8@v8.21.2
+        run: go install github.com/zricethezav/gitleaks/v8@v8.21.2
       - name: Scan complete available history (including intermediate commits)
         run: |
           "$(go env GOPATH)/bin/gitleaks" git . \
@@ -91,7 +91,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install pinned Semgrep Community Edition CLI
-        run: python -m pip install "semgrep==1.122.0"
+        run: python -m pip install "setuptools==80.9.0" "semgrep==1.122.0"
       - name: Python/Django and JavaScript SAST (fail on findings or scan errors)
         env:
           SEMGREP_SEND_METRICS: "off"
@@ -187,12 +187,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Initialize Trivy report artifact
+        run: printf 'Trivy has not completed yet. Inspect workflow logs.\\n' > trivy-full.txt
       - name: Build development target
         run: docker build --target development -t foodtinder-backend:ci-dev .
       - name: Build production target
         run: docker build --target production -t foodtinder-backend:ci-prod .
-      - name: Initialize Trivy report artifact
-        run: printf 'Trivy has not completed yet. Inspect workflow logs.\\n' > trivy-full.txt
       - name: Trivy full vulnerability report (all severities)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:

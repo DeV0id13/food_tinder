@@ -20,10 +20,10 @@ without review of the actual pipeline results.
 | pre-commit | 3.8.0 in `pyproject.toml` |
 | Ruff | 0.16.8 in both `pyproject.toml` and hook v0.16.8 |
 | mypy | 1.18.2 |
-| django-stubs | 5.2.9 (Django 5.2) |
+| django-stubs | 6.1.2 (supports Django 5.2 partially; matched to DRF stubs 3.18.2) |
 | djangorestframework-stubs | 3.18.2 (DRF 3.18) |
-| Gitleaks | v8.21.2 (Go module + local hook tag) |
-| Semgrep CE | 1.122.0 installed only in the sast job |
+| Gitleaks | v8.21.2 (Go module github.com/zricethezav/gitleaks/v8 + local hook) |
+| Semgrep CE | 1.122.0 and setuptools 80.9.0 installed only in the sast job |
 | Trivy CLI | v0.76.2, through trivy-action pinned at 0.35.0 |
 | Actions | Full 40-char commit SHAs in both workflow files, release annotated inline |
 | Node.js | 22 for frontend job |
