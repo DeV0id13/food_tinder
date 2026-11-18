@@ -57,6 +57,12 @@ jobs:
           trivy-config: .github/security/trivy.yaml
           cache: "false"
           output: trivy-blocking.txt
+      - name: Show blocking CVEs in job log for triage
+        if: failure()
+        run: |
+          if [ -f trivy-blocking.txt ]; then
+            sed -n '1,120p' trivy-blocking.txt
+          fi
       - name: Upload Trivy reports even if a gate failed
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

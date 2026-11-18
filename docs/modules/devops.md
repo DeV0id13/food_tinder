@@ -87,7 +87,7 @@ must be fixed by the module owner, not hidden in FT-07.
 - `typecheck`: cross-platform mypy helper, Django/DRF plugins, whole configured scope.
 - `secrets`: Gitleaks v8.21.2 on the full available checkout history, including
   intermediate commits where a secret was subsequently removed. The CLI uses
-  `.github/security/gitleaks.toml` and redacts values; local staged hook uses
+  `.github/security/gitleaks.toml` and redacts values in verbose diagnostics; local staged hook uses
   the **same** config and Gitleaks version. The complete history must be fetched.
 - `sast`: pinned Semgrep CE and in-repository Python/Django/JavaScript rules.
   Scopes: `apps/`, `common/`, `config/`, `manage.py`, `frontend/`.
@@ -156,6 +156,21 @@ do not commit actual credentials. Show:
 None of the negative checks, audit results, local host tests or CI runs
 are claimed complete by this document merely because configuration exists.
 Use the actual **Actions** run history for evidence.
+
+## CI evidence (run on PR #15, before merge)
+
+- [Run #1](https://github.com/DeV0id13/food_tinder/actions/runs/44355229700):
+  exposed conflicting type-stub dependencies, the historical Go module path
+  for Gitleaks and a setuptools compatibility issue in pinned Semgrep.
+- [Run #2](https://github.com/DeV0id13/food_tinder/actions/runs/44355583025):
+  `backend`, `frontend` and `sast` passed. `typecheck` found nine
+  real product-code type errors in accounts/planning/catalog/preferences;
+  `lint` found Ruff formatting discrepancies in application/tests/docs;
+  `secrets` found two historical candidates and `docker` correctly blocked
+  on HIGH/CRITICAL vulnerabilities. No findings were suppressed.
+- Further runs must be inspected individually. Full Trivy reports appear
+  in Actions artifacts. These results demonstrate the guards triggering,
+  **not completion of the acceptance checklist**.
 
 ## Repository-owner handoff (admin actions)
 

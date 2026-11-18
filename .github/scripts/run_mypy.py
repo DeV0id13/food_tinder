@@ -2,6 +2,7 @@
 
 This module is intentionally usable from pre-commit on Windows, macOS and Linux.
 """
+
 from __future__ import annotations
 
 import os
