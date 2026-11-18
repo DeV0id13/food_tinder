@@ -1,0 +1,26 @@
+# FoodTinder-maintained Django/DRF security patterns.
+rules:
+  - id: foodtinder.django.unsafe-mark-safe
+    languages: [python]
+    severity: WARNING
+    message: "mark_safe disables HTML escaping; check that input is trusted."
+    metadata:
+      category: security
+      cwe: "CWE-79"
+    pattern-either:
+      - pattern: django.utils.safestring.mark_safe(...)
+      - pattern: mark_safe(...)
+
+  - id: foodtinder.django.csrf-exempt
+    languages: [python]
+    severity: WARNING
+    message: "csrf_exempt disables Django CSRF protection."
+    metadata:
+      category: security
+      cwe: "CWE-352"
+    pattern-either:
+      - pattern: |
+          @csrf_exempt
+          def $FUNCTION(...):
+              ...
+      - pattern: csrf_exempt(...)

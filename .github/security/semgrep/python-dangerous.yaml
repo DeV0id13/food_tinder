@@ -1,0 +1,41 @@
+# FoodTinder-maintained security patterns; the repository commit pins these rules.
+# Not auto/remote registry rules.
+rules:
+  - id: foodtinder.python.dangerous-eval
+    languages: [python]
+    severity: ERROR
+    message: "Dynamic code execution through eval/exec/compile requires review."
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+
+  - id: foodtinder.python.shell-execution
+    languages: [python]
+    severity: ERROR
+    message: "Shell execution can lead to command injection; use an argv list."
+    metadata:
+      category: security
+      cwe: "CWE-78"
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: os.system(...)
+
+  - id: foodtinder.python.interpolated-sql
+    languages: [python]
+    severity: ERROR
+    message: "SQL text assembled with interpolation can be injectable."
+    metadata:
+      category: security
+      cwe: "CWE-89"
+    pattern-either:
+      - pattern: $CURSOR.execute(f"...", ...)
+      - pattern: $CURSOR.execute("..." % ..., ...)
+      - pattern: $CURSOR.execute("...".format(...), ...)
+      - pattern: $MODEL.objects.raw(f"...", ...)
+      - pattern: $MODEL.objects.extra(..., where=[f"..."], ...)

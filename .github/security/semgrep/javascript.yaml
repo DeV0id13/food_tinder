@@ -1,0 +1,36 @@
+# FoodTinder-maintained JavaScript rules for code execution and unsafe DOM writes.
+# Designed for the current dependency-free frontend/ codebase.
+rules:
+  - id: foodtinder.javascript.dynamic-eval
+    languages: [javascript]
+    severity: ERROR
+    message: "Dynamic JavaScript execution can run attacker-supplied code."
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+
+  - id: foodtinder.javascript.node-shell
+    languages: [javascript]
+    severity: ERROR
+    message: "Direct child_process shell execution requires careful argument handling."
+    metadata:
+      category: security
+      cwe: "CWE-78"
+    pattern-either:
+      - pattern: require("child_process").exec(...)
+      - pattern: require("node:child_process").exec(...)
+      - pattern: require("child_process").execSync(...)
+      - pattern: require("node:child_process").execSync(...)
+
+  - id: foodtinder.javascript.document-write
+    languages: [javascript]
+    severity: WARNING
+    message: "document.write may introduce unescaped HTML."
+    metadata:
+      category: security
+      cwe: "CWE-79"
+    pattern: document.write(...)

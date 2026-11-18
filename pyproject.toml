@@ -11,9 +11,9 @@ dev = [
     "pytest-django==4.14.0",
     "ruff==0.16.8",
     "pre-commit==3.8.0",
-    "django-stubs[compatible-mypy]>=5.1.0",
-    "djangorestframework-stubs[compatible-mypy]>=3.16.9",
-    "mypy>=1.13",
+    "django-stubs[compatible-mypy]==5.2.9",
+    "djangorestframework-stubs[compatible-mypy]==3.18.2",
+    "mypy==1.18.2",
 ]
 prod = [
     { include-group = "base" },
@@ -35,6 +35,7 @@ extend-exclude = ["**/migrations/*.py"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.mypy]
+files = ["apps", "common", "config", "manage.py"]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 check_untyped_defs = true
