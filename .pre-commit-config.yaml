@@ -1,0 +1,38 @@
+
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
+    hooks:
+      - id: ruff
+        name: ruff (lint, safe fixes only)
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  - repo: local
+    hooks:
+      - id: mypy
+        entry: python -m mypy
+        language: system
+        pass_filenames: false
+        args: [ "apps", "common", "config", "manage.py" ]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (staged changes)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
