@@ -1,13 +1,13 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-alpine3.24 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
-RUN groupadd --system app && useradd --system --gid app --create-home app
+RUN addgroup -S app && adduser -S -D -G app app
 COPY pyproject.toml /app/pyproject.toml
-RUN python -m pip install --no-cache-dir "pip>=25.1" \
+RUN python -m pip install --no-cache-dir "pip>=25.1" "setuptools==80.9.0" \
     && python -m pip install --no-cache-dir --group base
 
 FROM base AS development

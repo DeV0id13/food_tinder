@@ -69,7 +69,7 @@ def _state_response(state):
 @permission_classes([AllowAny])
 def feed(request):
     paginator = RecipePagination()
-    page = paginator.paginate_queryset(_feed_queryset(request.user), request, view=None)
+    page: list[Recipe] | None = paginator.paginate_queryset(_feed_queryset(request.user), request, view=None)
     return paginator.get_paginated_response(RecipeSummarySerializer(page, many=True).data)
 
 
@@ -131,5 +131,5 @@ def favorites(request):
         .order_by("id")
     )
     paginator = RecipePagination()
-    page = paginator.paginate_queryset(queryset, request, view=None)
+    page: list[Recipe] | None = paginator.paginate_queryset(queryset, request, view=None)
     return paginator.get_paginated_response(RecipeSummarySerializer(page, many=True).data)

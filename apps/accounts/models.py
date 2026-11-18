@@ -10,12 +10,13 @@ from .managers import UserManager
 
 
 class User(AbstractUser):
-    username = None
+    username = None  # type: ignore[assignment]  # Email-only login intentionally omits username.
     email = models.EmailField("email address", unique=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
-    objects = UserManager()
+    # The custom email-only manager deliberately replaces AbstractUser's default manager.
+    objects = UserManager()  # type: ignore[assignment,misc]
 
     class Meta:
         constraints = [
