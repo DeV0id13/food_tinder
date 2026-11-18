@@ -205,6 +205,8 @@ export class FoodTinderApp {
     if (!this.state.session.authenticated) return;
     const request = this.beginRequest('plans');
     const current = () => this.isCurrentRequest('plans', request);
+    if (this.state.error === this.state.plansError) this.state.error = null;
+    this.state.plansError = null;
     this.state.plansStatus = 'loading';
     if (shouldRender) this.render();
     try {
@@ -227,6 +229,7 @@ export class FoodTinderApp {
     } catch (error) {
       if (!current()) return;
       this.state.plansStatus = 'error';
+      this.state.plansError = error;
       await this.handleError(error, current);
     }
     if (shouldRender && current()) this.render();
@@ -394,7 +397,7 @@ export class FoodTinderApp {
       const account = await this.api.register(payload);
       this.state.registeredEmail = account.email;
       this.state.authTab = 'login';
-      this.state.authNotice = 'Аккаунт создан. Теперь войдите — регистрация не открывает сессию автоматически.';
+      this.state.authNotice = 'Аккаунт создан! Войдите с вашей почтой и паролем.';
       this.toast('Регистрация завершена');
     });
   }

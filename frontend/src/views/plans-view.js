@@ -2,6 +2,7 @@ import {DURATIONS, MEALS} from '../constants.js';
 import {compatibleFavorites, buildPlanDays} from '../utils/plans.js';
 import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
 import {formatDate, isoToday} from '../utils/format.js';
+import {renderPlansError} from '../components/plans-error.js';
 
 function planPicker(state) {
   if (!state.plans?.length) return '';
@@ -60,13 +61,13 @@ function activePlan(state) {
 
 export function renderPlansView(state) {
   if (!state.session.authenticated) {
-    return renderStatus({title: 'Рационы доступны после входа', text: 'Планы и порции сохраняются на backend для вашего аккаунта.', action: 'show-auth', actionLabel: 'Войти'});
+    return renderStatus({title: 'Рационы доступны после входа', text: 'Войдите, чтобы составлять и сохранять свой план питания.', action: 'show-auth', actionLabel: 'Войти'});
   }
   if (state.plansStatus === 'loading' || state.plansStatus === 'idle') {
     return renderStatus({kind: 'loading', title: 'Загружаем рационы'});
   }
   if (state.plansStatus === 'error') {
-    return renderStatus({kind: 'error', title: 'Рационы не загрузились', action: 'retry-plans'});
+    return renderPlansError(state);
   }
   return `<div class="page-heading"><div><p class="eyebrow">КОНСТРУКТОР</p><h1>Рационы</h1><p class="page-subtitle">Создайте период, затем назначайте совместимые рецепты из избранного.</p></div>${planPicker(state)}</div>
     ${createPlanForm(state)}

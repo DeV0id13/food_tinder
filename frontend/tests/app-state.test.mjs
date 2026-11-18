@@ -239,3 +239,22 @@ test('shopping invalidation also discards an already pending response for the sa
   assert.equal(app.state.shopping, null);
   assert.equal(app.state.shoppingStatus, 'idle');
 });
+
+test('plans 404 is kept with its resource and a successful retry clears only that error', async () => {
+  let calls = 0;
+  const missing = new ApiError({type: 'not_found', status: 404});
+  const app = createApp({getPlans: async () => {
+    if (++calls === 1) throw missing;
+    return [];
+  }});
+  await app.loadPlans();
+  assert.equal(app.state.plansError, missing);
+  assert.equal(app.state.error, missing);
+  assert.equal(app.state.plansStatus, 'error');
+  assert.equal(app.state.mode, 'real');
+  await app.loadPlans();
+  assert.equal(app.state.plansError, null);
+  assert.equal(app.state.error, null);
+  assert.equal(app.state.plansStatus, 'ready');
+  assert.deepEqual(app.state.plans, []);
+});

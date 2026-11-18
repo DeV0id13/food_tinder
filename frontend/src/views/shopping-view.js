@@ -1,5 +1,6 @@
 import {escapeHtml, renderStatus} from '../utils/dom.js';
 import {formatDate} from '../utils/format.js';
+import {renderPlansError} from '../components/plans-error.js';
 
 function planSelect(state) {
   return `<label class="select-label">Рацион
@@ -17,7 +18,7 @@ export function renderShoppingView(state) {
     return renderStatus({kind: 'loading', title: 'Загружаем рационы'});
   }
   if (state.plansStatus === 'error') {
-    return renderStatus({kind: 'error', title: 'Рационы не загрузились', action: 'retry-plans'});
+    return renderPlansError(state, true);
   }
   if (!state.plans?.length) {
     return renderStatus({title: 'Сначала создайте рацион', text: 'Без рациона backend не сможет рассчитать покупки.', action: 'open-plans', actionLabel: 'Создать рацион'});
