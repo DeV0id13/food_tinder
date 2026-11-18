@@ -1,4 +1,5 @@
 import {ApiError} from './errors.js';
+import {additionalDemoRecipes} from './demo-recipes.js';
 
 const DEMO_USER = {id: 1, email: 'demo@foodtinder.local', password: 'DemoPass_1'};
 
@@ -128,6 +129,7 @@ const DEMO_RECIPES = [
       {ingredient_id: 16, name: 'Сливки', unit: 'ml', quantity: '100.000'},
     ],
   },
+  ...additionalDemoRecipes,
 ];
 
 function clone(value) {

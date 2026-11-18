@@ -19,6 +19,8 @@ session, feed, favorites, meal plans и выбранные данные чере
 Ключевые каталоги:
 
 - `src/api/` — единый HTTP client, real API facade и изолированный demo adapter;
+- `src/api/demo-recipes.js` — дополнительные блюда; вместе с исходными шестью дают 52
+  варианта только для demo mode, с составом, шагами и совместимостью с приёмами пищи;
 - `src/views/` — чистые render-функции экранов;
 - `src/components/` — карточка и detail рецепта;
 - `src/state/` — структура runtime state и сброс приватных данных;
