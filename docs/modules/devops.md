@@ -216,7 +216,11 @@ original FT-07 commits; subsequent commits address existing Ruff/mypy/runtime
 vulnerabilities on the integrated code. The production target now uses the
 official Python 3.12 Alpine 3.24 image to reduce the vulnerable OS package
 surface, runs `apk upgrade --no-cache` for published OS patches, and removes
-build-only `setuptools`/`wheel` from the final runtime image. These changes
+build-only `setuptools`/`wheel`/`pip` from the final runtime image.
+Removal of pip also removes its bundled `pip/_vendor/bom.cdx.json`, an
+SBOM of pip's build-time vendors, which incorrectly advertises old
+`setuptools==70.3.0` as installed and triggered a Trivy false positive.
+The actual production Python packages and OS packages remain scanned. These changes
 preserve the non-root `app` user, Django/DRF runtime, production Gunicorn,
 and both Docker build targets. The change of base distribution is a deliberate
 additional scope adjustment to remediate reported CVEs; validate the complete

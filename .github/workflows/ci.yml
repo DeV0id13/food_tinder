@@ -239,4 +239,3 @@ jobs:
             trivy-full.txt
             trivy-blocking.txt
           if-no-files-found: error
-

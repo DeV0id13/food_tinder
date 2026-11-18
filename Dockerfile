@@ -25,7 +25,7 @@ FROM base AS production
 # Build-only packaging tools are not needed to serve Django requests.
 # Remove their vendored vulnerable fixtures from the final runtime image.
 RUN python -m pip install --no-cache-dir --group prod \
-    && python -m pip uninstall -y setuptools wheel
+    && python -m pip uninstall -y setuptools wheel pip
 RUN mkdir -p /app/staticfiles /app/media && chown app:app /app/staticfiles /app/media
 COPY --chown=app:app . /app/
 USER app
