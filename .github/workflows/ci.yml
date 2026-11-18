@@ -79,6 +79,7 @@ jobs:
           "$(go env GOPATH)/bin/gitleaks" git . \
             --log-opts="--all" \
             --config=.github/security/gitleaks.toml \
+            --gitleaks-ignore-path=.github/security/.gitleaksignore \
             --redact --verbose --no-banner
 
   sast:

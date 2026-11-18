@@ -119,7 +119,9 @@ For Trivy use `.github/security/.trivyignore.yaml` with a documented
 `expired_at` per entry; do not use `--ignore-unfixed` or an unbounded
 `.trivyignore`. Expired entries cease to be ignored. Suppress a specific
 Semgrep rule at an exact location with explanation; never ignore a whole
-application. For Gitleaks, an actual exposed credential must first be
+application. Gitleaks CI initially found two generic-api-key matches in historical unit-test password fixtures (tests/catalog/test_api.py and tests/test_foundation.py). Both are intentionally synthetic test values, not usable service credentials. The reviewed two commit-specific fingerprints are the only active Gitleaks exceptions in `.github/security/.gitleaksignore`; the same ignore file is used locally and in CI. Future findings at other commits/lines must still block the check.
+
+For Gitleaks, an actual exposed credential must first be
 revoked/rotated; a reviewed false-positive fingerprint may be allowlisted
 without storing its secret value. Do not include raw secrets in logs or PR.
 

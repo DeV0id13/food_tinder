@@ -25,7 +25,7 @@ repos:
     hooks:
       - id: gitleaks
         name: gitleaks (staged changes, redacted)
-        args: [--config=.github/security/gitleaks.toml]
+        args: [--config=.github/security/gitleaks.toml, --gitleaks-ignore-path=.github/security/.gitleaksignore]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
