@@ -1,0 +1,7 @@
+# Shared Trivy policy for both PR builds and the weekly master re-scan.
+# Severity thresholds and report formats are set explicitly in the workflow,
+# so the complete report retains LOW/MEDIUM/UNKNOWN while HIGH/CRITICAL block.
+vulnerability:
+  type:
+    - os
+    - library

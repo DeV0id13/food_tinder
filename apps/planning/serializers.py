@@ -43,8 +43,8 @@ class SlotWriteSerializer(StrictSerializer):
 class MealPlanSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = MealPlan
-        fields = ("id", "start_date", "duration_days", "enabled_meals")
-        read_only_fields = fields
+        fields: tuple[str, ...] = ("id", "start_date", "duration_days", "enabled_meals")
+        read_only_fields: tuple[str, ...] = fields
 
 
 class MealPlanSlotSerializer(serializers.ModelSerializer):

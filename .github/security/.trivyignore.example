@@ -1,0 +1,7 @@
+# No active Trivy exceptions ship in FT-07.
+# If an exception is approved, use .github/security/.trivyignore.yaml with
+# exact vulnerability ID, package, reason, owner and expired_at.
+# Do not use an unbounded .trivyignore list, --ignore-unfixed or global filters.
+# Example policy description (not an active ignore entry):
+# ID: CVE-YYYY-NNNN; package: foo; owner: @maintainer;
+# reason: reviewed false positive; expires: YYYY-MM-DD.

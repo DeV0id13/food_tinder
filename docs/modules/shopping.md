@@ -20,7 +20,7 @@
 
 После слияния FT-04 интегратор добавляет в `config/urls.py`:
 
-```python
+```text
 path("api/v1/shopping-list/", include("apps.shopping.urls")),
 ```
 

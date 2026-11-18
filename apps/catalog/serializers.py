@@ -6,7 +6,7 @@ from .models import Recipe, RecipeIngredient
 class RecipeSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Recipe
-        fields = (
+        fields: tuple[str, ...] = (
             "id",
             "title",
             "image_url",
@@ -20,7 +20,7 @@ class RecipeSummarySerializer(serializers.ModelSerializer):
             "carbs_g_per_serving",
             "estimated_price_rub_per_serving",
         )
-        read_only_fields = fields
+        read_only_fields: tuple[str, ...] = fields
 
 
 class RecipeIngredientSerializer(serializers.ModelSerializer):

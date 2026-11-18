@@ -1,0 +1,6 @@
+# FT-07: reviewed historical generic-api-key false positives.
+# Both refer to synthetic passwords in isolated unit-test fixtures, not live keys.
+# Exact commit:path:rule:line fingerprints only; never ignore an entire rule or tests/.
+# Reassess when fixtures change or by 2027-02-01.
+2a53b234b2fc4051d0270e9e40b8e11ef484eaeb:tests/catalog/test_api.py:generic-api-key:62
+3962480c32e2d905788beb38a408b4b9ec600415:tests/test_foundation.py:generic-api-key:11

@@ -28,7 +28,7 @@
 
 Для подключения API интегратор должен добавить в `config/urls.py`:
 
-```python
+```text
 path("api/v1/meal-plans/", include("apps.planning.urls")),
 ```
 

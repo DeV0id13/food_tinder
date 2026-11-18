@@ -330,10 +330,13 @@ class TestPreferencesAPI:
         )
 
         assert response.status_code == 200
-        assert UserRecipeState.objects.get(
-            user=user,
-            recipe=recipe,
-        ).is_favorite is True
+        assert (
+            UserRecipeState.objects.get(
+                user=user,
+                recipe=recipe,
+            ).is_favorite
+            is True
+        )
 
     def test_remove_favorite(self):
         user = self.create_user()
@@ -352,10 +355,13 @@ class TestPreferencesAPI:
         )
 
         assert response.status_code == 200
-        assert UserRecipeState.objects.get(
-            user=user,
-            recipe=recipe,
-        ).is_favorite is False
+        assert (
+            UserRecipeState.objects.get(
+                user=user,
+                recipe=recipe,
+            ).is_favorite
+            is False
+        )
 
     def test_remove_favorite_from_inactive_recipe_is_allowed(self):
         user = self.create_user()
@@ -374,10 +380,13 @@ class TestPreferencesAPI:
         )
 
         assert response.status_code == 200
-        assert UserRecipeState.objects.get(
-            user=user,
-            recipe=recipe,
-        ).is_favorite is False
+        assert (
+            UserRecipeState.objects.get(
+                user=user,
+                recipe=recipe,
+            ).is_favorite
+            is False
+        )
 
     def test_inactive_recipe_cannot_be_added_to_favorites(self):
         user = self.create_user()
@@ -518,10 +527,7 @@ class TestPreferencesAPI:
         user = self.create_user()
         recipes = [self.create_recipe(number=i) for i in range(1, 5)]
         UserRecipeState.objects.bulk_create(
-            [
-                UserRecipeState(user=user, recipe=recipe, is_favorite=True)
-                for recipe in recipes
-            ]
+            [UserRecipeState(user=user, recipe=recipe, is_favorite=True) for recipe in recipes]
         )
         self.login(user)
 
