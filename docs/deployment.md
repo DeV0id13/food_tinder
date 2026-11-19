@@ -1,6 +1,11 @@
 # FoodTinder: Yandex Cloud deployment
 
-Deployment is a manual job in the **same** GitHub Actions CI workflow. Open Actions → ci → Run workflow, select `master`, and enable `deploy_production`. The deploy job runs **only after all seven CI jobs succeed**. A normal pull request or push never deploys.
+The production deploy job is part of the same GitHub Actions CI graph.
+On a push to `master` (including a PR merge), all seven CI jobs run.
+After they pass, the deploy job **waits for the required reviewer approval**
+from the `production` GitHub Environment. Pull request runs never deploy.
+Configure and **save** Required reviewers before merging this change,
+otherwise the deploy job may start without approval.
 
 ## One-time prerequisites
 
