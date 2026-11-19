@@ -19,6 +19,12 @@ function deferred() {
 
 function createApp(overrides = {}) {
   const element = () => ({addEventListener() {}, innerHTML: ''});
+  const dialog = Object.assign(new EventTarget(), {
+    innerHTML: '',
+    open: false,
+    showModal() { this.open = true; },
+    close() { this.open = false; },
+  });
   const api = {
     getFeed: async () => ({count: 0, results: []}),
     getFavorites: async () => [{id: 22}],
@@ -28,7 +34,7 @@ function createApp(overrides = {}) {
     login: async () => userB,
     ...overrides,
   };
-  const app = new FoodTinderApp({root: element(), dialog: element(), toast: element(), api});
+  const app = new FoodTinderApp({root: element(), dialog, toast: element(), api});
   app.setSession(userA);
   app.messages = [];
   app.toast = (message) => app.messages.push(message);
@@ -239,6 +245,96 @@ test('shopping invalidation also discards an already pending response for the sa
   assert.equal(app.state.shopping, null);
   assert.equal(app.state.shoppingStatus, 'idle');
 });
+
+for (const {label, method, invoke, plansAfter, selected} of [
+  {label: 'save slot', method: 'putSlot', invoke: (app) => app.saveSlot(0, 'lunch', {}), plansAfter: [1, 2], selected: 1},
+  {label: 'delete slot', method: 'deleteSlot', invoke: (app) => app.deleteSlot(0, 'lunch'), plansAfter: [1, 2], selected: 1},
+  {label: 'create plan', method: 'createPlan', invoke: (app) => app.createPlan({}), plansAfter: [3, 1, 2], selected: 3},
+  {label: 'delete plan', method: 'deletePlan', invoke: (app) => app.deletePlan(), plansAfter: [2], selected: 2},
+  {label: 'delete last plan', method: 'deletePlan', invoke: (app) => app.deletePlan(), plansAfter: [], selected: null},
+]) {
+  test(`shopping refreshes after ${label} when navigation started a stale read`, async (t) => {
+    if (method === 'deletePlan') {
+      const originalConfirm = globalThis.confirm;
+      globalThis.confirm = () => true;
+      t.after(() => {
+        if (originalConfirm === undefined) delete globalThis.confirm;
+        else globalThis.confirm = originalConfirm;
+      });
+    }
+    const mutation = deferred();
+    const stale = deferred();
+    const reads = [];
+    const plan = (id) => ({id, start_date: '2026-10-16', duration_days: 1, enabled_meals: ['lunch'], slots: []});
+    const fresh = {plan_id: selected, items: [{name: 'Свежий список', quantity: '2', unit: 'pcs'}]};
+    const app = createApp({
+      [method]: () => mutation.promise,
+      getPlans: async () => plansAfter.map(plan),
+      getPlan: async (id) => plan(id),
+      getShoppingList: (id) => {
+        reads.push(id);
+        return reads.length === 1 ? stale.promise : Promise.resolve(fresh);
+      },
+    });
+    Object.assign(app.state, {
+      initialLoading: false,
+      view: 'plans',
+      plans: plansAfter.length ? [plan(1), plan(2)] : [plan(1)],
+      plansStatus: 'ready',
+      activePlan: plan(1),
+      activePlanId: 1,
+      activePlanStatus: 'ready',
+      shoppingPlanId: 1,
+    });
+    const updating = invoke(app);
+    const navigating = app.navigate('shopping');
+    assert.deepEqual(reads, [1]);
+    mutation.resolve({id: 3});
+    await updating;
+    stale.resolve({plan_id: 1, items: [{name: 'Старый список', quantity: '1', unit: 'pcs'}]});
+    await navigating;
+    assert.equal(app.state.shoppingPlanId, selected);
+    assert.equal(app.state.error, null);
+    if (selected === null) {
+      assert.deepEqual(reads, [1]);
+      assert.equal(app.state.shopping, null);
+      assert.match(app.root.innerHTML, /Сначала создайте рацион/);
+    } else {
+      assert.deepEqual(reads, [1, selected]);
+      assert.equal(app.state.shoppingStatus, 'ready');
+      assert.deepEqual(app.state.shopping, fresh);
+      assert.match(app.root.innerHTML, /Свежий список/);
+      assert.doesNotMatch(app.root.innerHTML, /Рассчитываем покупки|Старый список/);
+    }
+  });
+}
+
+for (const outcome of ['success', '403']) {
+  test(`recipe detail ignores late ${outcome} after dismissal and reopening`, async () => {
+    const a = deferred();
+    const b = deferred();
+    let sessionReads = 0;
+    const app = createApp({
+      getRecipe: (id) => id === 1 ? a.promise : b.promise,
+      getSession: async () => { sessionReads += 1; return guest; },
+    });
+    const old = app.openRecipeDetail(1);
+    app.dialog.close();
+    const next = app.openRecipeDetail(2);
+    app.dialog.dispatchEvent(new Event('close'));
+    b.resolve({title: 'Новый рецепт'});
+    await next;
+    assert.match(app.dialog.innerHTML, /Новый рецепт/);
+    if (outcome === 'success') a.resolve({title: 'Старый рецепт'});
+    else a.reject(new ApiError({type: 'auth', status: 403}));
+    await old;
+    assert.match(app.dialog.innerHTML, /Новый рецепт/);
+    assert.doesNotMatch(app.dialog.innerHTML, /Старый рецепт|Рецепт не загрузился/);
+    assert.equal(app.state.error, null);
+    assert.equal(app.state.session.id, userA.id);
+    assert.equal(sessionReads, 0);
+  });
+}
 
 test('plans 404 is kept with its resource and a successful retry clears only that error', async () => {
   let calls = 0;

@@ -23,6 +23,10 @@ export class FoodTinderApp {
     this.dialog.addEventListener('click', (event) => {
       if (event.target === this.dialog) this.dialog.close();
     });
+    this.dialog.addEventListener('close', () => {
+      // A queued close event can arrive after another recipe has been opened.
+      if (!this.dialog.open) this.beginRequest('recipe-detail');
+    });
   }
 
   render() {
@@ -70,6 +74,18 @@ export class FoodTinderApp {
   invalidateShopping() {
     this.beginRequest('shopping');
     invalidateShopping(this.state);
+  }
+
+  async reloadVisibleShopping() {
+    if (this.state.view === 'shopping') await this.loadShopping();
+  }
+
+  async refreshAfterSlotChange(planId) {
+    this.invalidateShopping();
+    await Promise.all([
+      Number(this.state.activePlanId) === planId ? this.loadActivePlan(false) : undefined,
+      this.reloadVisibleShopping(),
+    ]);
   }
 
   editablePlanId() {
@@ -446,13 +462,18 @@ export class FoodTinderApp {
   }
 
   async openRecipeDetail(recipeId) {
+    const request = this.beginRequest('recipe-detail');
+    const current = () => this.dialog.open
+      && this.requestVersions.get('recipe-detail') === request.version;
     this.dialog.innerHTML = renderStatus({kind: 'loading', title: 'Загружаем рецепт'});
     if (!this.dialog.open) this.dialog.showModal();
     try {
       const recipe = await this.api.getRecipe(recipeId);
-      this.dialog.innerHTML = renderRecipeDetail(recipe);
+      if (current()) this.dialog.innerHTML = renderRecipeDetail(recipe);
     } catch (error) {
-      await this.handleError(error);
+      if (!current()) return;
+      await this.handleError(error, () => current() && this.isCurrentSession(request.session));
+      if (!current()) return;
       this.dialog.innerHTML = `${renderStatus({kind: 'error', title: 'Рецепт не загрузился', text: 'Закройте окно и попробуйте снова.'})}<button class="button button-secondary" data-action="close-dialog">Закрыть</button>`;
       this.render();
     }
@@ -465,9 +486,10 @@ export class FoodTinderApp {
       if (!this.isCurrentSession(context)) return;
       this.state.activePlanId = plan.id;
       this.state.shoppingPlanId = plan.id;
+      this.invalidateShopping();
       await this.loadPlans(false);
       if (!this.isCurrentSession(context)) return;
-      this.invalidateShopping();
+      if (this.state.plansStatus === 'ready') await this.reloadVisibleShopping();
       this.toast('Рацион создан');
     });
   }
@@ -479,8 +501,7 @@ export class FoodTinderApp {
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
       await this.api.putSlot(planId, dayIndex, mealType, payload);
       if (!this.isCurrentSession(context)) return;
-      this.invalidateShopping();
-      if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
+      await this.refreshAfterSlotChange(planId);
       this.toast('Блюдо сохранено');
     });
   }
@@ -492,8 +513,7 @@ export class FoodTinderApp {
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
       await this.api.deleteSlot(planId, dayIndex, mealType);
       if (!this.isCurrentSession(context)) return;
-      this.invalidateShopping();
-      if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
+      await this.refreshAfterSlotChange(planId);
       this.toast('Блюдо удалено из рациона');
     });
   }
@@ -509,6 +529,8 @@ export class FoodTinderApp {
       this.state.activePlanId = null;
       this.invalidateShopping();
       await this.loadPlans(false);
+      if (!this.isCurrentSession(context)) return;
+      if (this.state.plansStatus === 'ready') await this.reloadVisibleShopping();
       this.toast('Рацион удалён');
     });
   }
