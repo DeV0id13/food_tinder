@@ -1,0 +1,52 @@
+# Production only. Run with: docker compose -f compose.prod.yaml --env-file .env.prod
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Required}
+      POSTGRES_USER: ${POSTGRES_USER:?Required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+  web:
+    image: ghcr.io/devoid13/food_tinder-backend:${IMAGE_TAG:?Required}
+    restart: unless-stopped
+    env_file: .env.prod
+    volumes:
+      - staticfiles:/app/staticfiles
+      - recipe_photos:/app/media/recipes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+  proxy:
+    image: ghcr.io/devoid13/food_tinder-frontend:${IMAGE_TAG:?Required}
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Required}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - staticfiles:/srv/static:ro
+      - recipe_photos:/srv/media/recipes:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+    networks: [internal]
+networks:
+  internal:
+volumes:
+  postgres_data:
+  staticfiles:
+  recipe_photos:
+  caddy_data:
+  caddy_config:

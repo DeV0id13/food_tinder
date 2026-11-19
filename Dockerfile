@@ -15,7 +15,8 @@ RUN python -m pip install --no-cache-dir "pip>=25.1" "setuptools==80.9.0" \
 
 FROM base AS development
 RUN python -m pip install --no-cache-dir --group dev
-RUN mkdir -p /app/staticfiles /app/media && chown app:app /app/staticfiles /app/media
+RUN mkdir -p /app/staticfiles /app/media/recipes \
+    && chown app:app /app/staticfiles /app/media /app/media/recipes
 COPY --chown=app:app . /app/
 USER app
 EXPOSE 8000
@@ -26,7 +27,8 @@ FROM base AS production
 # Remove their vendored vulnerable fixtures from the final runtime image.
 RUN python -m pip install --no-cache-dir --group prod \
     && python -m pip uninstall -y setuptools wheel pip
-RUN mkdir -p /app/staticfiles /app/media && chown app:app /app/staticfiles /app/media
+RUN mkdir -p /app/staticfiles /app/media/recipes \
+    && chown app:app /app/staticfiles /app/media /app/media/recipes
 COPY --chown=app:app . /app/
 USER app
 EXPOSE 8000

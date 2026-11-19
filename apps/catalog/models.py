@@ -1,11 +1,20 @@
 from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
 
 from django.core.exceptions import ValidationError
+from django.core.files.storage import Storage
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 
-from .validators import validate_meal_types, validate_steps
+from .validators import validate_meal_types, validate_recipe_photo, validate_steps
+
+
+def recipe_photo_path(instance, filename):
+    return f"recipes/{uuid4().hex}{Path(filename).suffix.lower()}"
 
 
 class Ingredient(models.Model):
@@ -44,6 +53,12 @@ class Recipe(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     image_url = models.URLField(blank=True)
+    photo = models.ImageField(
+        blank=True,
+        upload_to=recipe_photo_path,
+        validators=[validate_recipe_photo],
+        help_text="JPEG, PNG, or WebP. Up to 10 MB and 24 megapixels.",
+    )
     cooking_time_minutes = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     difficulty = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]
@@ -99,6 +114,30 @@ class Recipe(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+def delete_unused_recipe_photo_on_commit(storage: Storage, name: str | None, *, using: str) -> None:
+    if not name:
+        return
+
+    def delete_if_unused() -> None:
+        if not Recipe.objects.using(using).filter(photo=name).exists():
+            storage.delete(name)
+
+    transaction.on_commit(delete_if_unused, using=using, robust=True)
+
+
+@receiver(pre_delete, sender=Recipe)
+def schedule_deleted_recipe_photo_cleanup(instance: Recipe, using: str, **kwargs) -> None:
+    # Read under the same row lock used by Admin when replacing a photo.
+    name = (
+        Recipe.objects.using(using)
+        .select_for_update()
+        .filter(pk=instance.pk)
+        .values_list("photo", flat=True)
+        .first()
+    )
+    delete_unused_recipe_photo_on_commit(instance.photo.storage, name, using=using)
 
 
 class RecipeIngredient(models.Model):

@@ -4,6 +4,8 @@ from .models import Recipe, RecipeIngredient
 
 
 class RecipeSummarySerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Recipe
         fields: tuple[str, ...] = (
@@ -21,6 +23,9 @@ class RecipeSummarySerializer(serializers.ModelSerializer):
             "estimated_price_rub_per_serving",
         )
         read_only_fields: tuple[str, ...] = fields
+
+    def get_image_url(self, recipe: Recipe) -> str:
+        return recipe.photo.url if recipe.photo else recipe.image_url
 
 
 class RecipeIngredientSerializer(serializers.ModelSerializer):

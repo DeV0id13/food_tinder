@@ -1,0 +1,11 @@
+FROM node:22-alpine AS build
+WORKDIR /src
+RUN corepack enable
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN corepack prepare pnpm@11.28.13 --activate && pnpm install --frozen-lockfile
+COPY frontend/ ./
+RUN pnpm build
+
+FROM caddy:2-alpine
+COPY --from=build /src/dist/ /srv/frontend/
+COPY deploy/Caddyfile /etc/caddy/Caddyfile

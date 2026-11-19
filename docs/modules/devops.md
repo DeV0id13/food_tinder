@@ -97,9 +97,8 @@ must be fixed by the module owner, not hidden in FT-07.
   configuration errors fail the job.
 - `backend`: healthy isolated PostgreSQL 16, Django check, missing migration
   detection, apply migrations on clean DB, complete pytest suite.
-- `frontend`: Node.js 22, `npm ci` only if lockfile exists (error if new
-  dependencies lack lockfile), `npm test`, `npm run build` and existence
-  check for `frontend/dist/index.html`.
+- `frontend`: Node.js 22, pnpm 11.28.13, `pnpm install --frozen-lockfile`, `pnpm test`,
+  `pnpm run build` and a check for `frontend/dist/index.html`.
 - `docker`: builds both Docker targets and scans **the just-built production
   image**, packages from OS and Python including transitives. Trivy gets a full
   table report (all severities); its separate HIGH/CRITICAL gate fails the job,

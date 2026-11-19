@@ -1,5 +1,6 @@
 """Shared settings. The runtime supplies environment variables (Compose reads .env)."""
 
+import json
 import os
 from pathlib import Path
 
@@ -105,6 +106,17 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+if media_backend := os.environ.get("DJANGO_MEDIA_STORAGE_BACKEND"):
+    try:
+        media_options = json.loads(os.environ.get("DJANGO_MEDIA_STORAGE_OPTIONS", "{}"))
+    except ValueError as exc:
+        raise ImproperlyConfigured("DJANGO_MEDIA_STORAGE_OPTIONS must contain JSON.") from exc
+    if not isinstance(media_options, dict):
+        raise ImproperlyConfigured("DJANGO_MEDIA_STORAGE_OPTIONS must be a JSON object.")
+    STORAGES = {
+        "default": {"BACKEND": media_backend, "OPTIONS": media_options},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", not DEBUG)
