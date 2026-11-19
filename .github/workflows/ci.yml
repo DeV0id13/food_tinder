@@ -291,7 +291,7 @@ jobs:
           git reset --hard "$IMAGE_TAG"
           test -f .env.prod || { echo "Missing .env.prod" >&2; exit 1; }
           export IMAGE_TAG
-          compose() { sudo -n docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
+          compose() { sudo -n env IMAGE_TAG="$IMAGE_TAG" docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
           compose pull
           compose up -d --wait postgres
           # Named volumes start owned by root; allow the unprivileged Django app to write media/static.
