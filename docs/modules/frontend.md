@@ -173,10 +173,8 @@ replace, актуальные покупки и оба download действия
 В `ft-06` уже присутствуют модели, миграции и API всех FT-01…FT-05. По текущему поручению
 пользователя в `config/urls.py` добавлены недостающие подключения:
 
-```python
-path("api/v1/meal-plans/", include("apps.planning.urls")),
-path("api/v1/shopping-list/", include("apps.shopping.urls")),
-```
+- `/api/v1/meal-plans/` → `apps.planning.urls`.
+- `/api/v1/shopping-list/` → `apps.shopping.urls`.
 
 Auth, catalog и preferences были подключены ранее. Контракты моделей/API, permissions,
 Django sessions, CSRF, settings и зависимости не менялись. Новые миграции не нужны.
