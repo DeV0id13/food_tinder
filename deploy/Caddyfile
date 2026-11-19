@@ -1,0 +1,27 @@
+{
+    admin off
+}
+
+{$SITE_ADDRESS} {
+    encode zstd gzip
+
+    handle /api/* {
+        reverse_proxy web:8000
+    }
+    handle /admin* {
+        reverse_proxy web:8000
+    }
+    handle_path /static/* {
+        root * /srv/static
+        file_server
+    }
+    handle_path /media/* {
+        root * /srv/media
+        file_server
+    }
+    handle {
+        root * /srv/frontend
+        try_files {path} /index.html
+        file_server
+    }
+}
