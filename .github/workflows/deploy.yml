@@ -65,6 +65,8 @@ jobs:
           compose() { sudo -n docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
           compose pull
           compose up -d --wait postgres
+          # Named volumes start owned by root; allow the unprivileged Django app to write media/static.
+          compose run --rm --user root web sh -c 'chown -R app:app /app/staticfiles /app/media/recipes'
           compose run --rm web python manage.py migrate --noinput
           compose run --rm web python manage.py collectstatic --noinput
           compose up -d --remove-orphans web proxy
