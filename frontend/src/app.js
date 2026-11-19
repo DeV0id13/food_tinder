@@ -397,7 +397,7 @@ export class FoodTinderApp {
       const account = await this.api.register(payload);
       this.state.registeredEmail = account.email;
       this.state.authTab = 'login';
-      this.state.authNotice = 'Аккаунт создан! Войдите с вашей почтой и паролем.';
+      this.state.authNotice = 'Аккаунт создан. Теперь можно войти.';
       this.toast('Регистрация завершена');
     });
   }
@@ -426,7 +426,7 @@ export class FoodTinderApp {
         this.toast('Скрыто только до перезагрузки');
         return this.render();
       }
-      return this.showAuth('Чтобы поставить «Нравится», войдите в аккаунт.');
+      return this.showAuth('Войдите, чтобы оценивать рецепты.');
     }
     await this.runMutation(`recipe-${recipeId}`, async () => {
       await this.api.swipe(recipeId, action);
@@ -436,7 +436,7 @@ export class FoodTinderApp {
   }
 
   async toggleFavorite(recipeId) {
-    if (!this.state.session.authenticated) return this.showAuth('Чтобы менять избранное, войдите в аккаунт.');
+    if (!this.state.session.authenticated) return this.showAuth('Войдите, чтобы сохранять рецепты.');
     const shouldFavorite = !this.state.favoriteIds.has(recipeId);
     await this.runMutation(`recipe-${recipeId}`, async () => {
       await this.api.setFavorite(recipeId, shouldFavorite);
@@ -481,7 +481,7 @@ export class FoodTinderApp {
       if (!this.isCurrentSession(context)) return;
       this.invalidateShopping();
       if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
-      this.toast('Слот сохранён');
+      this.toast('Блюдо сохранено');
     });
   }
 
@@ -494,7 +494,7 @@ export class FoodTinderApp {
       if (!this.isCurrentSession(context)) return;
       this.invalidateShopping();
       if (Number(this.state.activePlanId) === planId) await this.loadActivePlan(false);
-      this.toast('Слот удалён');
+      this.toast('Блюдо удалено из рациона');
     });
   }
 
@@ -502,7 +502,7 @@ export class FoodTinderApp {
     const planId = this.editablePlanId();
     if (!planId || this.state.busy) return;
     const context = this.sessionContext();
-    if (!globalThis.confirm('Удалить выбранный рацион и все его слоты?')) return;
+    if (!globalThis.confirm('Удалить рацион и все блюда в нём?')) return;
     await this.runMutation('delete-plan', async () => {
       await this.api.deletePlan(planId);
       if (!this.isCurrentSession(context)) return;
@@ -522,7 +522,7 @@ export class FoodTinderApp {
       const file = await this.api.downloadShoppingList(planId, fileType);
       if (!this.isCurrentSession(context) || Number(this.state.shoppingPlanId) !== planId) return;
       saveBlob(file);
-      this.toast(`Файл ${fileType.toUpperCase()} получен с backend`);
+      this.toast(`Файл ${fileType.toUpperCase()} готов`);
     });
   }
 }

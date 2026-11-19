@@ -223,7 +223,7 @@ test('logout clears private data immediately while optional session refresh is s
   await Promise.resolve();
   assert.equal(app.state.session.authenticated, false);
   assert.equal(app.state.favorites, null);
-  assert.ok(app.root.innerHTML.includes('Войти / регистрация'));
+  assert.match(app.root.innerHTML, /data-action="navigate" data-view="auth"[^>]*>\s*Войти\s*<\/button>/);
   refresh.resolve(guest);
   await logout;
 });

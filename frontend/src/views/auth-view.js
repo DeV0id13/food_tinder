@@ -4,7 +4,7 @@ import {escapeAttr, escapeHtml} from '../utils/dom.js';
 function loginForm(state) {
   const email = state.registeredEmail || (state.mode === 'demo' ? demoCredentials.email : '');
   return `<form class="auth-form" data-form="login">
-    <label>Email<input name="email" type="email" autocomplete="email" required value="${escapeAttr(email)}" /></label>
+    <label>Электронная почта<input name="email" type="email" autocomplete="email" required value="${escapeAttr(email)}" /></label>
     <label>Пароль<input name="password" type="password" autocomplete="current-password" required value="${state.mode === 'demo' ? escapeAttr(demoCredentials.password) : ''}" /></label>
     <button class="button button-primary" type="submit" ${state.busy === 'auth' ? 'disabled' : ''}>Войти</button>
   </form>`;
@@ -12,9 +12,9 @@ function loginForm(state) {
 
 function registerForm(state) {
   return `<form class="auth-form" data-form="register">
-    <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+    <label>Электронная почта<input name="email" type="email" autocomplete="email" required /></label>
     <label>Пароль<input name="password" type="password" autocomplete="new-password" minlength="10" required aria-describedby="password-help" /></label>
-    <p id="password-help" class="form-help">От 10 символов: латинские буквы, цифры и _. Обязательны заглавная и строчная буквы, цифра и _.</p>
+    <p id="password-help" class="form-help">Минимум 10 символов. Используйте латинские буквы, цифры и _. Нужны заглавная и строчная буквы, цифра и _.</p>
     <p class="form-help">После регистрации войдите с вашей почтой и паролем.</p>
     <button class="button button-primary" type="submit" ${state.busy === 'auth' ? 'disabled' : ''}>Создать аккаунт</button>
   </form>`;
@@ -23,23 +23,25 @@ function registerForm(state) {
 export function renderAuthView(state) {
   if (state.session.authenticated) {
     return `<section class="account-card">
-      <div class="account-avatar">${escapeHtml(state.session.email?.slice(0, 1).toUpperCase())}</div>
-      <div><p class="eyebrow">АККАУНТ</p><h1>${escapeHtml(state.session.email)}</h1><p class="page-subtitle">Ваши любимые рецепты и рационы сохраняются в аккаунте.</p></div>
-      <button class="button button-secondary" data-action="logout" ${state.busy === 'auth' ? 'disabled' : ''}>Выйти</button>
+      <header class="page-heading"><h1>Аккаунт</h1></header>
+      <div class="account-details">
+        <p>${escapeHtml(state.session.email)}</p>
+        <button class="button button-secondary" data-action="logout" ${state.busy === 'auth' ? 'disabled' : ''}>Выйти</button>
+      </div>
     </section>`;
   }
+  const registering = state.authTab === 'register';
   return `<div class="auth-layout">
-    <section class="auth-intro"><p class="eyebrow">АККАУНТ</p><h1>Готовьте то, что нравится</h1><p>Сохраняйте любимые блюда и возвращайтесь к ним, когда решаете, что приготовить.</p>
-      <ul><li>Собирайте свою коллекцию рецептов</li><li>Выбирайте блюда на каждый день</li><li>Ваше избранное всегда под рукой после входа</li></ul>
-    </section>
     <section class="auth-card">
-      <div class="tabs" role="tablist">
-        <button class="${state.authTab === 'login' ? 'active' : ''}" data-action="auth-tab" data-tab="login" role="tab">Вход</button>
-        <button class="${state.authTab === 'register' ? 'active' : ''}" data-action="auth-tab" data-tab="register" role="tab">Регистрация</button>
+      <h1>${registering ? 'Регистрация' : 'Вход'}</h1>
+      <div class="tabs" role="group" aria-label="Вход или регистрация">
+        <button data-action="auth-tab" data-tab="login" aria-pressed="${!registering}">Вход</button>
+        <button data-action="auth-tab" data-tab="register" aria-pressed="${registering}">Регистрация</button>
       </div>
       ${state.authNotice ? `<div class="inline-notice" role="status">${escapeHtml(state.authNotice)}</div>` : ''}
-      ${state.authTab === 'register' ? registerForm(state) : loginForm(state)}
+      ${registering ? registerForm(state) : loginForm(state)}
       ${state.mode === 'demo' ? `<p class="demo-credentials">Демо-вход: <b>${demoCredentials.email}</b> / <b>${demoCredentials.password}</b></p>` : ''}
     </section>
+    <img class="auth-photo" src="/assets/editorial/kitchen.webp" alt="" />
   </div>`;
 }

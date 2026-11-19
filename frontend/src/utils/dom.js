@@ -16,7 +16,7 @@ export function renderStatus({kind = 'empty', title, text, action, actionLabel} 
     ? `<button class="button ${kind === 'error' ? 'button-primary' : 'button-secondary'}" data-action="${escapeAttr(action)}">${escapeHtml(actionLabel || 'Повторить')}</button>`
     : '';
   return `<section class="status-card status-${escapeAttr(kind)}" role="${kind === 'error' ? 'alert' : 'status'}">
-    <div class="status-icon" aria-hidden="true">${kind === 'loading' ? '<span class="spinner"></span>' : kind === 'error' ? '!' : '○'}</div>
+    ${kind === 'loading' ? '<span class="spinner" aria-hidden="true"></span>' : ''}
     <h2>${escapeHtml(title)}</h2>
     ${text ? `<p>${escapeHtml(text)}</p>` : ''}
     ${button}

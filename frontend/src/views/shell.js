@@ -1,4 +1,3 @@
-import {VIEW_TITLES} from '../constants.js';
 import {apiErrorMessage} from '../api/errors.js';
 import {escapeHtml, renderStatus} from '../utils/dom.js';
 import {renderAuthView} from './auth-view.js';
@@ -10,16 +9,16 @@ import {renderShoppingView} from './shopping-view.js';
 import {plansUnavailable} from '../components/plans-error.js';
 
 const NAV_ITEMS = [
-  ['feed', '♥', 'Лента'],
-  ['recipes', '▦', 'Рецепты'],
-  ['favorites', '★', 'Избранное'],
-  ['plans', '□', 'Рационы'],
-  ['shopping', '✓', 'Покупки'],
+  ['feed', 'Лента'],
+  ['recipes', 'Рецепты'],
+  ['favorites', 'Избранное'],
+  ['plans', 'Рационы'],
+  ['shopping', 'Покупки'],
 ];
 
 function viewContent(state) {
   if (state.initialLoading) {
-    return renderStatus({kind: 'loading', title: 'Подключаемся к FoodTinder', text: 'Проверяем сессию и загружаем первую страницу ленты.'});
+    return renderStatus({kind: 'loading', title: 'Загружаем FoodTinder'});
   }
   const renderers = {
     feed: renderFeedView,
@@ -44,30 +43,20 @@ function errorBanner(state) {
 }
 
 export function renderShell(state) {
-  const favoriteCount = state.favorites?.length || 0;
-  const planCount = state.plans?.length || 0;
-  return `${state.mode === 'demo' ? `<div class="demo-banner"><b>Демо-режим</b><span>Данные живут только в памяти вкладки и сбросятся после перезагрузки.</span><a href="/">Вернуться к real API</a></div>` : ''}
-    <div class="app-shell ${state.mode === 'demo' ? 'has-demo-banner' : ''}">
-      <aside class="sidebar">
-        <button class="brand" data-action="open-feed" aria-label="На главную"><span>Food</span>Tinder<i>●</i></button>
-        <p class="sidebar-caption">ПЕРВАЯ ИТЕРАЦИЯ</p>
-        <nav aria-label="Основная навигация">
-          ${NAV_ITEMS.map(([view, icon, label]) => `<button class="nav-item ${state.view === view ? 'active' : ''}" data-action="navigate" data-view="${view}"><span aria-hidden="true">${icon}</span>${label}${view === 'favorites' && favoriteCount ? `<b>${favoriteCount}</b>` : view === 'plans' && planCount ? `<b>${planCount}</b>` : ''}</button>`).join('')}
+  return `${state.mode === 'demo' ? `<div class="demo-banner"><b>Демо-режим</b><span>Данные сбросятся при перезагрузке страницы.</span><a href="/">Выйти из демо</a></div>` : ''}
+    <a class="skip-link" href="#main-content">К содержимому</a>
+    <div class="app-shell">
+      <header class="site-header">
+        <button class="brand" data-action="open-feed" aria-label="FoodTinder, на главную">FoodTinder</button>
+        <nav class="site-nav" aria-label="Основная навигация">
+          ${NAV_ITEMS.map(([view, label]) => `<button class="nav-item" data-action="navigate" data-view="${view}"${state.view === view ? ' aria-current="page"' : ''}>${label}</button>`).join('')}
         </nav>
-        <div class="sidebar-spacer"></div>
-        <div class="mode-card"><span class="mode-dot"></span><div><b>${state.mode === 'demo' ? 'Demo API' : 'Real API'}</b><small>${state.mode === 'demo' ? 'Явно включён' : '/api/v1/'}</small></div></div>
-      </aside>
-      <div class="workspace">
-        <header class="topbar">
-          <div><span>FoodTinder</span><i>/</i><b>${escapeHtml(VIEW_TITLES[state.view] || 'Лента')}</b></div>
-          <button class="account-button" data-action="navigate" data-view="auth">
-            <span class="account-dot">${state.session.authenticated ? escapeHtml(state.session.email?.slice(0, 1).toUpperCase()) : '?'}</span>
-            <span>${state.session.authenticated ? escapeHtml(state.session.email) : 'Войти / регистрация'}</span>
-          </button>
-        </header>
-        ${errorBanner(state)}
-        <main>${viewContent(state)}</main>
-        <footer><span>FoodTinder</span><span>Выбирайте блюда. Планируйте питание.</span></footer>
-      </div>
+        <button class="account-button" data-action="navigate" data-view="auth"${state.view === 'auth' ? ' aria-current="page"' : ''}>
+          ${state.session.authenticated ? 'Аккаунт' : 'Войти'}
+        </button>
+      </header>
+      ${errorBanner(state)}
+      <main id="main-content" tabindex="-1">${viewContent(state)}</main>
+      <footer class="site-footer"><span>FoodTinder</span><a href="/assets/editorial/photo-credits.html">Авторы фотографий</a></footer>
     </div>`;
 }

@@ -10,14 +10,18 @@ import {ApiError} from '../src/api/errors.js';
 
 test('account screens use product language and registration explains the password and separate login', () => {
   const state = createInitialState('real');
-  for (const tab of ['login', 'register']) {
+  for (const [tab, title] of [['login', 'Вход'], ['register', 'Регистрация']]) {
     state.authTab = tab;
     const html = renderAuthView(state);
-    assert.match(html, /Готовьте то, что нравится/);
+    assert.match(html, new RegExp(`<h1(?:\\s[^>]*)?>\\s*${title}\\s*</h1>`));
+    assert.match(html, /<label(?:\s[^>]*)?>\s*Электронная почта/);
+    assert.match(html, new RegExp(`data-form="${tab}"`));
     assert.doesNotMatch(html, /backend|CSRF|cookie|localStorage|reload|Session/i);
   }
-  assert.match(renderAuthView(state), /От 10 символов: латинские буквы, цифры и _/);
-  assert.match(renderAuthView(state), /После регистрации войдите/);
+  const register = renderAuthView(state);
+  assert.match(register, /aria-describedby="password-help"/);
+  assert.match(register, /id="password-help"[^>]*>[^<]*10\s+символов[^<]*латинск[^<]*цифр[^<]*_/);
+  assert.match(register, /После регистрации войдите/);
   state.session = {authenticated: true, id: 1, email: 'person@example.com'};
   assert.doesNotMatch(renderAuthView(state), /Django|cookie|localStorage/i);
 });
@@ -35,7 +39,7 @@ test('missing plans endpoint has one clear unavailable state in plans and shoppi
     state.view = view;
     const html = renderShell(state);
     assert.match(html, /пока недоступ/);
-    assert.match(html, /Перейти к рецептам/);
+    assert.match(html, /data-action="open-recipes"[^>]*>\s*Перейти к рецептам/);
     assert.doesNotMatch(html, /Запрошенные данные не найдены|error-banner|retry-plans|Рационов пока нет|Демо-режим/);
     assert.equal(state.mode, 'real');
   }

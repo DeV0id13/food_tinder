@@ -8,9 +8,7 @@ export function renderPlansError(state, shopping = false) {
   if (plansUnavailable(state)) {
     return renderStatus({
       title: shopping ? 'Список покупок пока недоступен' : 'Рационы пока недоступны',
-      text: shopping
-        ? 'Для списка покупок нужен сохранённый рацион. Пока вы можете выбирать блюда и сохранять их в избранное.'
-        : 'Вы можете продолжить выбирать блюда и сохранять их в избранное.',
+      text: shopping ? 'Для списка покупок нужен рацион.' : 'Пока можно сохранять блюда в избранное.',
       action: 'open-recipes',
       actionLabel: 'Перейти к рецептам',
     });

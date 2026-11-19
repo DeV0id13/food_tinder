@@ -8,7 +8,18 @@ export function formatDate(dateString) {
 }
 
 export function formatMealTypes(types = []) {
-  return types.map((type) => MEAL_LABELS[type] || type).join(' · ');
+  return types.map((type, index) => {
+    const label = MEAL_LABELS[type] || type;
+    return index === 0 ? label : label.toLowerCase();
+  }).join(', ');
+}
+
+export function formatQuantity(value) {
+  return String(value ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1').replace('.', ',');
+}
+
+export function formatUnit(unit) {
+  return {g: 'г', ml: 'мл', pcs: 'шт.'}[unit] ?? unit;
 }
 
 export function difficultyLabel(value) {
