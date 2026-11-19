@@ -69,7 +69,8 @@ jobs:
           compose run --rm web python manage.py collectstatic --noinput
           compose up -d --remove-orphans web proxy
           compose ps
-          curl --fail --silent --show-error --retry 8 --retry-delay 3 \
-              -H 'Host: localhost' http://127.0.0.1/api/v1/health/
+          # Internal Django health check uses the configured allowed hostname.
+          compose exec -T web python manage.py shell -c \
+              "from django.conf import settings; from django.test import Client; response = Client(HTTP_HOST=settings.ALLOWED_HOSTS[0]).get('/api/v1/health/', secure=True); print(response.status_code, response.content); assert response.status_code == 200"
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts
