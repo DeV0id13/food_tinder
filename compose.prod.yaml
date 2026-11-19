@@ -16,7 +16,7 @@ services:
       retries: 10
     networks: [internal]
   web:
-    image: ghcr.io/devoid13/food_tinder-backend:${IMAGE_TAG:?Required}
+    image: ghcr.io/dev0id13/food_tinder-backend:${IMAGE_TAG:?Required}
     restart: unless-stopped
     env_file: .env.prod
     volumes:
@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     networks: [internal]
   proxy:
-    image: ghcr.io/devoid13/food_tinder-frontend:${IMAGE_TAG:?Required}
+    image: ghcr.io/dev0id13/food_tinder-frontend:${IMAGE_TAG:?Required}
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?Required}
