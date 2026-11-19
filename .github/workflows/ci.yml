@@ -312,9 +312,9 @@ jobs:
           compose pull
           compose up -d --wait postgres
           # Named volumes start owned by root; allow the unprivileged Django app to write media/static.
-          compose run --rm -T --user root web sh -c 'chown -R app:app /app/staticfiles /app/media/recipes'
-          compose run --rm -T web python manage.py migrate --noinput
-          compose run --rm -T web python manage.py collectstatic --noinput
+          compose run --rm --interactive=false -T --user root web sh -c 'chown -R app:app /app/staticfiles /app/media/recipes'
+          compose run --rm --interactive=false -T web python manage.py migrate --noinput
+          compose run --rm --interactive=false -T web python manage.py collectstatic --noinput
           compose up -d --remove-orphans web proxy
           compose ps
           # Fail if either application service did not remain running.
