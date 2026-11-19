@@ -1,8 +1,6 @@
 import './styles.css';
 import {FoodTinderApp} from './app.js';
-import {createApi, resolveApiMode} from './api/index.js';
-
-const mode = resolveApiMode();
+import {RealApi} from './api/real-api.js';
 
 document.addEventListener('error', ({target}) => {
   if (target instanceof HTMLImageElement && target.classList.contains('recipe-image')) {
@@ -14,8 +12,7 @@ const app = new FoodTinderApp({
   root: document.querySelector('#app'),
   dialog: document.querySelector('#app-dialog'),
   toast: document.querySelector('#toast'),
-  api: createApi(mode),
-  mode,
+  api: new RealApi(),
 });
 
 app.start();

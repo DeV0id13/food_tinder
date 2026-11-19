@@ -1,48 +1,17 @@
-# FoodTinder frontend: быстрый старт
+# FoodTinder frontend
 
-Это реализация FT-06, подключённая к Django API. Старый автономный localStorage-прототип
-заменён; backend является источником всех пользовательских данных.
-
-## Запуск с настоящим backend
-
-1. Подготовьте PostgreSQL, примените миграции и выполните `python manage.py seed_demo_recipes`
-   из окружения backend. Запустите Django на `http://127.0.0.1:8000`.
-2. В этом каталоге выполните:
-
-   ```sh
-   npx --yes pnpm@11 install --frozen-lockfile
-   npm run dev
-   ```
-
-3. Откройте `http://localhost:5173/`.
-
-Vite передаёт `/api/` в Django с `changeOrigin: false`. Используйте именно `localhost`,
-чтобы session cookies и CSRF работали в согласованной same-origin схеме.
-
-Все модули подключены: регистрация, вход, 12 рецептов, реакции, избранное, рационы,
-покупки и CSV/TXT работают с Django и PostgreSQL. Зарегистрируйтесь, войдите, добавьте
-рецепт в избранное, создайте рацион и назначьте блюдо в совместимый слот.
-После перезагрузки или повторного входа данные загружаются из базы. Покупки рассчитываются
-сервером по сохранённому рациону. Используйте обычный адрес без `?demo=1`.
-
-## Явный demo mode
-
-Если нужно проверить интерфейс без готовых FT-01…FT-05, откройте:
-
-```text
-http://localhost:5173/?demo=1
-```
-
-Demo обозначен banner, не включается после ошибок real API и хранит данные только в памяти.
-Вход: `demo@foodtinder.local` / `DemoPass_1`.
-В demo доступны 52 блюда; этот набор не импортируется в настоящую БД.
-
-## Проверки
+Установите зависимости командой `pnpm install --frozen-lockfile` из `frontend/`.
+Подготовьте локальный `.env` по [корневой инструкции](../README.md) и запустите Docker Desktop.
+Из корня репозитория выполните:
 
 ```sh
-pnpm test
-pnpm lint
-pnpm build
+docker compose build web
+./frontend/dev-lan.sh start
 ```
 
-Полное описание архитектуры, CSRF-flow и manual smoke test находится в `README.md`.
+Откройте адрес из терминала. Для остановки используйте `./frontend/dev-lan.sh stop`.
+Админка доступна на `http://localhost:8000/admin/`. Каталог можно заполнить из админки
+или [массовым импортом](../docs/modules/catalog.md#импорт-каталога).
+
+Из `frontend/` используйте `pnpm test`, `pnpm lint` и `pnpm build`.
+Полный сценарий проверяет `pnpm run test:integration` при запущенных сервисах и заполненном каталоге.

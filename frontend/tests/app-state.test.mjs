@@ -28,7 +28,7 @@ function createApp(overrides = {}) {
     login: async () => userB,
     ...overrides,
   };
-  const app = new FoodTinderApp({root: element(), dialog: element(), toast: element(), api, mode: 'real'});
+  const app = new FoodTinderApp({root: element(), dialog: element(), toast: element(), api});
   app.setSession(userA);
   app.messages = [];
   app.toast = (message) => app.messages.push(message);
@@ -251,7 +251,6 @@ test('plans 404 is kept with its resource and a successful retry clears only tha
   assert.equal(app.state.plansError, missing);
   assert.equal(app.state.error, missing);
   assert.equal(app.state.plansStatus, 'error');
-  assert.equal(app.state.mode, 'real');
   await app.loadPlans();
   assert.equal(app.state.plansError, null);
   assert.equal(app.state.error, null);

@@ -7,12 +7,12 @@ import {invalidateShopping} from './utils/plans.js';
 import {renderShell} from './views/shell.js';
 
 export class FoodTinderApp {
-  constructor({root, dialog, toast, api, mode}) {
+  constructor({root, dialog, toast, api}) {
     this.root = root;
     this.dialog = dialog;
     this.toastElement = toast;
     this.api = api;
-    this.state = createInitialState(mode);
+    this.state = createInitialState();
     this.sessionGeneration = 0;
     this.requestVersions = new Map();
     this.toastTimer = null;
@@ -124,7 +124,7 @@ export class FoodTinderApp {
         this.setSession(session);
         this.render();
       } catch {
-        // Keep the original actionable error; never switch to demo automatically.
+        // Keep the original actionable error; show API errors without replacing server data.
       }
     }
     return normalized;

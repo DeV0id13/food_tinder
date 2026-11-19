@@ -43,8 +43,7 @@ function errorBanner(state) {
 }
 
 export function renderShell(state) {
-  return `${state.mode === 'demo' ? `<div class="demo-banner"><b>Демо-режим</b><span>Данные сбросятся при перезагрузке страницы.</span><a href="/">Выйти из демо</a></div>` : ''}
-    <a class="skip-link" href="#main-content">К содержимому</a>
+  return `<a class="skip-link" href="#main-content">К содержимому</a>
     <div class="app-shell">
       <header class="site-header">
         <button class="brand" data-action="open-feed" aria-label="FoodTinder, на главную">FoodTinder</button>

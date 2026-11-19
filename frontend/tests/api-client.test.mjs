@@ -87,7 +87,7 @@ test('HTTP statuses are classified and validation body is preserved', async (t) 
   }
 });
 
-test('network failure is not converted to demo data', async () => {
+test('network failure remains an actionable network error', async () => {
   const client = new ApiClient({fetchImpl: async () => { throw new TypeError('offline'); }});
   await assert.rejects(client.request('recipes/'), (error) => error instanceof ApiError && error.type === 'network');
 });

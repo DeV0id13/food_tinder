@@ -35,6 +35,7 @@ function browserApi() {
 test('real proxy persists favorites and plans across independent sessions and exports shopping', async () => {
   const api = browserApi();
   const otherBrowser = browserApi();
+  const unrelated = browserApi();
   const account = {
     email: `ft06-smoke-${randomUUID()}@example.test`,
     password: `LocalCheck_9${randomUUID().replaceAll('-', '')}`,
@@ -45,7 +46,7 @@ test('real proxy persists favorites and plans across independent sessions and ex
   try {
     assert.equal((await api.getSession()).authenticated, false);
     const recipes = await api.getRecipes();
-    assert.ok(recipes.length, 'Run python manage.py seed_demo_recipes before this check.');
+    assert.ok(recipes.length, 'Import reviewed recipes or create them in Django Admin before this check.');
     recipe = recipes[0];
     const detail = await api.getRecipe(recipe.id);
     assert.ok(detail.ingredients.length);
@@ -58,6 +59,12 @@ test('real proxy persists favorites and plans across independent sessions and ex
     assert.ok((await api.getFeed()).results.some(({id}) => id === recipe.id));
     await api.swipe(recipe.id, 'like');
     assert.ok(!(await api.getFeed()).results.some(({id}) => id === recipe.id));
+    const meal = recipe.meal_types[0];
+    const replacement = recipes.find(({id, meal_types}) =>
+      id !== recipe.id && meal_types.includes(meal));
+    assert.ok(replacement, 'The integration check needs another recipe for the same meal.');
+    await api.swipe(replacement.id, 'dislike');
+    assert.ok(!(await api.getFeed()).results.some(({id}) => id === replacement.id));
 
     for (const duration_days of [1, 3, 7]) {
       const plan = await api.createPlan({
@@ -87,6 +94,22 @@ test('real proxy persists favorites and plans across independent sessions and ex
     assert.equal((await otherBrowser.getPlan(planId)).slots[0].servings, 4);
     assert.deepEqual(await otherBrowser.getShoppingList(planId), updated);
 
+    const unrelatedAccount = {...account, email: `ft06-other-${randomUUID()}@example.test`};
+    await unrelated.register(unrelatedAccount);
+    await unrelated.login(unrelatedAccount);
+    assert.deepEqual(await unrelated.getFavorites(), []);
+    assert.deepEqual(await unrelated.getPlans(), []);
+    await assert.rejects(unrelated.getPlan(planId), {status: 404});
+    await unrelated.logout();
+
+    await api.setFavorite(replacement.id, true);
+    try {
+      await api.putSlot(planId, 0, meal, {recipe_id: replacement.id, servings: 4});
+      assert.equal((await otherBrowser.getPlan(planId)).slots[0].recipe_id, replacement.id);
+      await api.putSlot(planId, 0, meal, {recipe_id: recipe.id, servings: 4});
+    } finally {
+      await api.setFavorite(replacement.id, false);
+    }
     await api.setFavorite(recipe.id, false);
     await api.putSlot(planId, 0, recipe.meal_types[0], {recipe_id: recipe.id, servings: 3});
     assert.equal((await otherBrowser.getPlan(planId)).slots[0].servings, 3);

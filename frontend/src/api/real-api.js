@@ -3,7 +3,6 @@ import {ApiClient} from './api-client.js';
 export class RealApi {
   constructor(client = new ApiClient()) {
     this.client = client;
-    this.mode = 'real';
   }
 
   getSession() {

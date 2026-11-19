@@ -18,15 +18,11 @@ session, feed, favorites, meal plans и выбранные данные чере
 
 Ключевые каталоги:
 
-- `src/api/` — единый HTTP client, real API facade и изолированный demo adapter;
-- `src/api/demo-recipes.js` — дополнительные блюда; вместе с исходными шестью дают 52
-  варианта только для demo mode, с составом, шагами и совместимостью с приёмами пищи;
 - `src/views/` — чистые render-функции экранов;
 - `src/components/` — карточка и detail рецепта;
 - `src/state/` — структура runtime state и сброс приватных данных;
 - `src/utils/` — DOM escaping, форматирование, plan helpers, Blob download;
 - `src/app.js` — controller событий, загрузок и мутаций;
-- `tests/` — API/CSRF/errors/demo/plan/feed tests.
 
 ## API client
 
@@ -128,15 +124,6 @@ Frontend показывает `name`, точную decimal-string `quantity` и 
 CSV/TXT запрашиваются с `file_type`; ответ читается как Blob. Имя берётся из
 `Content-Disposition` с fallback. Содержимое файлов не генерируется frontend.
 
-## Demo mode
-
-`?demo=1` выбирает `DemoApi` до старта приложения. Banner остаётся видимым на каждом экране.
-Adapter реализует тот же интерфейс отдельно от `RealApi`, хранит данные только в памяти и
-сбрасывается при reload. Ошибки real API никогда не создают и не включают `DemoApi`.
-
-Demo нужен для независимой разработки, пока интегратор не подключил FT-01…FT-05. Его smoke
-test не заменяет проверку реального Django/PostgreSQL.
-
 ## Dev proxy
 
 `vite.config.js` проксирует `/api` на `http://127.0.0.1:8000` с `changeOrigin: false`.
@@ -153,8 +140,6 @@ pnpm build
 ```
 
 Тесты покрывают URL building, absolute pagination links, cookie parsing, CSRF bootstrap/header,
-credentials, JSON и 204, HTTP/network classification, Blob filename, explicit real/demo choice,
-регистрацию без автовхода, demo favorite/swipe/plan/shopping/export, совместимость meal type,
 day/slot helpers и guest memory-only dislike.
 
 `tests/app-state.test.mjs` проверяет управляемыми Promise обратный порядок ответов рационов
@@ -178,7 +163,7 @@ replace, актуальные покупки и оба download действия
 
 Auth, catalog и preferences были подключены ранее. Контракты моделей/API, permissions,
 Django sessions, CSRF, settings и зависимости не менялись. Новые миграции не нужны.
-На локальной PostgreSQL применены существующие миграции и выполнен `seed_demo_recipes`
+На локальной PostgreSQL применены миграции и импортирован каталог
 (12 рецептов без перезаписи имеющихся данных). Frontend запущен через Vite на
 `http://localhost:5173/`, Django — в Compose на порту 8000.
 
@@ -213,9 +198,7 @@ Live-проверка находится в `frontend/tests/backend-integration.
 
 ## Ограничения
 
-Пользовательские данные real mode сохраняются в PostgreSQL. Покупки вычисляются из плана
-и состава рецептов, без отдельной таблицы или копии в browser storage. Demo mode остаётся
-явным и независимым. Набор из 52 demo-блюд не переносится в настоящую БД автоматически.
+Пользовательские данные сохраняются в PostgreSQL. Покупки вычисляются из сохранённого рациона.
 
 Не входят profile UI, drag-and-drop, автоплан, ML, undo, история, суммарные КБЖУ, бюджет,
 purchased state и production deploy. Backend-изменения ограничены подключением готовых

@@ -1,6 +1,5 @@
-export function createInitialState(mode) {
+export function createInitialState() {
   return {
-    mode,
     initialLoading: true,
     view: 'feed',
     session: {authenticated: false, id: null, email: null},

@@ -1,11 +1,10 @@
-import {demoCredentials} from '../api/demo-api.js';
 import {escapeAttr, escapeHtml} from '../utils/dom.js';
 
 function loginForm(state) {
-  const email = state.registeredEmail || (state.mode === 'demo' ? demoCredentials.email : '');
+  const email = state.registeredEmail;
   return `<form class="auth-form" data-form="login">
     <label>Электронная почта<input name="email" type="email" autocomplete="email" required value="${escapeAttr(email)}" /></label>
-    <label>Пароль<input name="password" type="password" autocomplete="current-password" required value="${state.mode === 'demo' ? escapeAttr(demoCredentials.password) : ''}" /></label>
+    <label>Пароль<input name="password" type="password" autocomplete="current-password" required /></label>
     <button class="button button-primary" type="submit" ${state.busy === 'auth' ? 'disabled' : ''}>Войти</button>
   </form>`;
 }
@@ -40,7 +39,6 @@ export function renderAuthView(state) {
       </div>
       ${state.authNotice ? `<div class="inline-notice" role="status">${escapeHtml(state.authNotice)}</div>` : ''}
       ${registering ? registerForm(state) : loginForm(state)}
-      ${state.mode === 'demo' ? `<p class="demo-credentials">Демо-вход: <b>${demoCredentials.email}</b> / <b>${demoCredentials.password}</b></p>` : ''}
     </section>
     <img class="auth-photo" src="/assets/editorial/kitchen.webp" alt="" />
   </div>`;

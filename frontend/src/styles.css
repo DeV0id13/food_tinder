@@ -66,22 +66,6 @@ h3 { font-size: clamp(1.6rem, 2.35vw, 2.25rem); }
 .initial-loader { padding: 4rem var(--gutter); }
 .muted { color: var(--muted); }
 
-.demo-banner {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: baseline;
-  gap: 0.25rem 0.75rem;
-  padding: 0.5rem var(--gutter);
-  border-bottom: 1px solid var(--line);
-  background: var(--paper-deep);
-  color: var(--ink);
-  font-size: 0.8125rem;
-  line-height: 1.45;
-}
-
-.demo-banner a { margin-inline-start: 0.25rem; }
-
 .skip-link {
   position: fixed;
   z-index: 2;
@@ -343,7 +327,7 @@ main:focus { outline: none; }
 .detail-photo { aspect-ratio: 1.45; }
 
 /* Keep the photographer's watermark inside the frame. */
-.recipe-image[src='/assets/editorial/demo/25.webp'] { object-fit: contain; }
+.recipe-image[alt='Гречка с курицей'] { object-fit: contain; }
 
 .recipe-photo-placeholder {
   display: grid;
@@ -517,14 +501,7 @@ input[type='date'] { display: block; }
 fieldset { margin: 0; border: 0; padding: 0; }
 legend { margin-bottom: 0.5rem; padding: 0; }
 
-.form-help, .demo-credentials, .slot-help { color: var(--muted); font-size: 0.875rem; }
-
-.demo-credentials {
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  overflow-wrap: anywhere;
-}
+.form-help, .slot-help { color: var(--muted); font-size: 0.875rem; }
 
 .inline-notice { margin-bottom: 1rem; padding-inline-start: 0.75rem; border-inline-start: 2px solid var(--accent); }
 
@@ -728,9 +705,6 @@ dialog > .button { margin: 0 1.5rem 1.5rem; }
 }
 
 @media (max-width: 30rem) {
-  .demo-banner { justify-content: flex-start; gap: 0.25rem 0.5rem; }
-  .demo-banner span { order: 1; flex-basis: 100%; }
-  .demo-banner a { margin-inline-start: auto; }
   .recipe-grid { grid-template-columns: minmax(0, 1fr); }
   .slot-card { grid-template-columns: minmax(0, 1fr); }
   .slot-actions { justify-content: flex-start; }
