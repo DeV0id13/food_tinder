@@ -1,11 +1,17 @@
 from decimal import Decimal
+from pathlib import Path
+from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
-from .validators import validate_meal_types, validate_steps
+from .validators import validate_meal_types, validate_recipe_photo, validate_steps
+
+
+def recipe_photo_path(instance, filename):
+    return f"recipes/{uuid4().hex}{Path(filename).suffix.lower()}"
 
 
 class Ingredient(models.Model):
@@ -44,6 +50,12 @@ class Recipe(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     image_url = models.URLField(blank=True)
+    photo = models.ImageField(
+        blank=True,
+        upload_to=recipe_photo_path,
+        validators=[validate_recipe_photo],
+        help_text="JPEG, PNG, or WebP. Up to 10 MB and 24 megapixels.",
+    )
     cooking_time_minutes = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     difficulty = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)]

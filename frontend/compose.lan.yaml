@@ -1,0 +1,4 @@
+services:
+  web:
+    environment:
+      DJANGO_ALLOWED_HOSTS: ${FOODTINDER_LAN_ALLOWED_HOSTS:?Run frontend/dev-lan.sh to set Django hosts}

@@ -1,27 +1,8 @@
 from rest_framework import serializers
 
-from apps.catalog.models import Recipe
+from apps.catalog.serializers import RecipeSummarySerializer as RecipeSummarySerializer
 
 from .models import UserRecipeState
-
-
-class RecipeSummarySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Recipe
-        fields = (
-            "id",
-            "title",
-            "image_url",
-            "cooking_time_minutes",
-            "difficulty",
-            "base_servings",
-            "meal_types",
-            "kcal_per_serving",
-            "protein_g_per_serving",
-            "fat_g_per_serving",
-            "carbs_g_per_serving",
-            "estimated_price_rub_per_serving",
-        )
 
 
 class StrictSerializer(serializers.Serializer):

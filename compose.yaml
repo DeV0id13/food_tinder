@@ -23,9 +23,11 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - .:/app
+      - recipe_photos:/app/media/recipes
     depends_on:
       postgres:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  recipe_photos:

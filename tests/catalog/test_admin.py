@@ -122,3 +122,45 @@ def test_admin_rejects_invalid_json_fields(admin_client, field, value):
     response = admin_client.post(reverse("admin:catalog_recipe_add"), data)
     assert response.status_code == 200
     assert not Recipe.objects.filter(slug="admin-recipe").exists()
+
+
+def test_admin_uploads_replaces_and_clears_recipe_photo(
+    admin_client, recipe_media, photo_upload, django_capture_on_commit_callbacks
+):
+    data = recipe_form_data()
+    response = admin_client.post(
+        reverse("admin:catalog_recipe_add"), {**data, "photo": photo_upload()}
+    )
+    assert response.status_code == 302
+    recipe = Recipe.objects.get(slug=data["slug"])
+    first_photo = recipe_media / recipe.photo.name
+    assert first_photo.is_file()
+
+    change_url = reverse("admin:catalog_recipe_change", args=[recipe.pk])
+    with django_capture_on_commit_callbacks(execute=True):
+        response = admin_client.post(change_url, {**data, "photo": photo_upload("new.jpg", "JPEG")})
+    assert response.status_code == 302
+    recipe.refresh_from_db()
+    replacement = recipe_media / recipe.photo.name
+    assert replacement.suffix == ".jpg"
+    assert replacement.is_file()
+    assert not first_photo.exists()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = admin_client.post(change_url, {**data, "photo-clear": "on"})
+    assert response.status_code == 302
+    recipe.refresh_from_db()
+    assert not recipe.photo
+    assert not replacement.exists()
+
+
+@pytest.mark.parametrize(("filename", "format"), [("fake.jpg", "PNG"), ("animation.gif", "GIF")])
+def test_admin_rejects_unsupported_or_mismatched_photo(
+    admin_client, recipe_media, photo_upload, filename, format
+):
+    data = {**recipe_form_data(), "photo": photo_upload(filename, format)}
+    response = admin_client.post(reverse("admin:catalog_recipe_add"), data)
+    assert response.status_code == 200
+    assert "photo" in response.context["adminform"].form.errors
+    assert not Recipe.objects.filter(slug="admin-recipe").exists()
+    assert not list(recipe_media.glob("recipes/*"))

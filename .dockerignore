@@ -17,3 +17,5 @@ media
 staticfiles
 *.log
 *.tmp
+
+catalog-import

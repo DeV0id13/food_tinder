@@ -1,0 +1,3304 @@
+[
+  {
+    "slug": "demo-rice-chicken",
+    "title": "Рис с курицей",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Рис и сочная курица, которые готовятся в одной кастрюле.",
+    "steps": [
+      "Нарежьте курицу небольшими кусочками, промойте рис.",
+      "Прогрейте курицу в кастрюле с небольшим количеством воды. Добавьте рис и около 400 мл воды.",
+      "Тушите под крышкой 20 минут до мягкости риса и полной готовности курицы."
+    ],
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: рис с курицей.",
+      "steps": [
+        "Отварите рис до готовности.",
+        "Приготовьте курицу и подайте с рисом."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "chicken",
+        "name": "Курица",
+        "unit": "g",
+        "quantity": "300.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-rice-chicken.webp",
+      "source": "https://www.pexels.com/photo/ready-to-eat-chicken-meat-with-rice-16107645/",
+      "author": "Anthony Rahayel",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-rice-milk",
+    "title": "Молочная рисовая каша",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Рисовая каша на молоке. Подавайте тёплой.",
+    "steps": [
+      "Промойте рис и варите под крышкой в 180 мл воды 10 минут.",
+      "Влейте молоко и варите на слабом огне ещё 15 минут, помешивая."
+    ],
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: молочная рисовая каша.",
+      "steps": [
+        "Промойте рис.",
+        "Варите рис в молоке до мягкости."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-rice-milk.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Risgrynsgr%C3%B6t.jpg",
+      "author": "Caesar",
+      "license": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  },
+  {
+    "slug": "demo-oatmeal-banana",
+    "title": "Овсянка с бананом",
+    "meal_types": [
+      "breakfast"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Густая молочная овсянка с кусочками спелого банана.",
+    "steps": [
+      "Всыпьте овсяные хлопья в молоко и доведите до слабого кипения.",
+      "Варите до мягкости по инструкции на упаковке, помешивая. Добавьте кружочки банана перед подачей."
+    ],
+    "cooking_time_minutes": 20,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: овсянка с бананом.",
+      "steps": [
+        "Сварите овсяные хлопья в молоке.",
+        "Добавьте нарезанный банан."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "oats",
+        "name": "Овсяные хлопья",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "banana",
+        "name": "Банан",
+        "unit": "pcs",
+        "quantity": "1.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-oatmeal-banana.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Banana_oatmeal.jpg",
+      "author": "Shisma",
+      "license": "https://creativecommons.org/licenses/by/4.0/"
+    }
+  },
+  {
+    "slug": "demo-cheese-omelet",
+    "title": "Омлет с сыром",
+    "meal_types": [
+      "breakfast"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Мягкий омлет с расплавленным сыром.",
+    "steps": [
+      "Взбейте яйца с молоком, натрите сыр.",
+      "Вылейте яйца на антипригарную сковороду и готовьте под крышкой на слабом огне до полной готовности.",
+      "Добавьте сыр перед концом приготовления и дайте ему расплавиться."
+    ],
+    "cooking_time_minutes": 15,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: омлет с сыром.",
+      "steps": [
+        "Взбейте яйца с молоком.",
+        "Приготовьте омлет и добавьте сыр."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйцо",
+        "unit": "pcs",
+        "quantity": "4.000"
+      },
+      {
+        "slug": "cheese",
+        "name": "Сыр",
+        "unit": "g",
+        "quantity": "60.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-cheese-omelet.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Cheese_Omelette.jpg",
+      "author": "1Bongfoodie",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "slug": "demo-tomato-pasta",
+    "title": "Паста с помидорами",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Макароны со свежими томатами и тёртым сыром.",
+    "steps": [
+      "Отварите макароны по инструкции на упаковке.",
+      "Нарежьте помидоры и тушите 8–10 минут. Добавьте макароны и немного воды от варки.",
+      "Перемешайте и посыпьте тёртым сыром."
+    ],
+    "cooking_time_minutes": 20,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: паста с помидорами.",
+      "steps": [
+        "Отварите макароны.",
+        "Потушите помидоры и смешайте с пастой и сыром."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "cheese",
+        "name": "Сыр",
+        "unit": "g",
+        "quantity": "40.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидор",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "pasta",
+        "name": "Макароны",
+        "unit": "g",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-tomato-pasta.webp",
+      "source": "https://www.pexels.com/photo/a-plate-of-pasta-with-sauce-and-parmesan-cheese-14930722/",
+      "author": "Shameel mukkath",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-chicken-soup",
+    "title": "Куриный суп",
+    "meal_types": [
+      "lunch"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Куриный суп с картофелем и морковью.",
+    "steps": [
+      "Нарежьте курицу небольшими кусочками, залейте 800 мл воды и варите 20 минут, снимая пену.",
+      "Добавьте нарезанные морковь и картофель. Варите 15 минут до мягкости овощей и полной готовности курицы."
+    ],
+    "cooking_time_minutes": 40,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: куриный суп.",
+      "steps": [
+        "Нарежьте курицу и овощи.",
+        "Варите ингредиенты до готовности."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "chicken",
+        "name": "Курица",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "potato",
+        "name": "Картофель",
+        "unit": "g",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-chicken-soup.webp",
+      "source": "https://www.pexels.com/photo/chicken-soup-with-potatoes-and-carrots-10338451/",
+      "author": "Istvan Szabo",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-yogurt-apple",
+    "title": "Йогурт с яблоком",
+    "meal_types": [
+      "snack",
+      "breakfast"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Йогурт со свежим яблоком, быстрый завтрак или перекус.",
+    "steps": [
+      "Вымойте яблоко, удалите сердцевину и нарежьте небольшими кусочками.",
+      "Разложите йогурт по двум мискам и добавьте яблоко."
+    ],
+    "cooking_time_minutes": 5,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: йогурт с яблоком.",
+      "steps": [
+        "Нарежьте яблоко.",
+        "Добавьте его в йогурт."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "yogurt",
+        "name": "Йогурт",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "apple",
+        "name": "Яблоко",
+        "unit": "pcs",
+        "quantity": "1.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-yogurt-apple.webp",
+      "source": "https://pixabay.com/photos/glass-jar-yogurt-dessert-apple-617387/",
+      "author": "bzwei",
+      "license": "https://pixabay.com/service/license-summary/"
+    }
+  },
+  {
+    "slug": "demo-egg-sandwich",
+    "title": "Сэндвич с яйцом",
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Сэндвич с яйцом вкрутую и сыром.",
+    "steps": [
+      "Сварите яйца вкрутую, остудите, очистите и нарежьте кружочками.",
+      "Подрумяньте хлеб на сухой сковороде. Выложите яйца и сыр, накройте вторым ломтиком."
+    ],
+    "cooking_time_minutes": 15,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: сэндвич с яйцом.",
+      "steps": [
+        "Приготовьте яйца.",
+        "Соберите сэндвич из хлеба, яиц и сыра."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "egg",
+        "name": "Яйцо",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "cheese",
+        "name": "Сыр",
+        "unit": "g",
+        "quantity": "40.000"
+      },
+      {
+        "slug": "bread",
+        "name": "Хлеб",
+        "unit": "g",
+        "quantity": "120.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-egg-sandwich.webp",
+      "source": "https://unsplash.com/photos/a-stack-of-toasted-sandwiches-with-eggs-and-cheese-Bh0qxeLRMRw",
+      "author": "Hybrid Storytellers",
+      "license": "https://unsplash.com/license"
+    }
+  },
+  {
+    "slug": "demo-fish-potato",
+    "title": "Рыба с картофелем",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Рыба, запечённая с тонкими ломтиками картофеля.",
+    "steps": [
+      "Нарежьте картофель тонкими ломтиками и запекайте в форме 20 минут при 200 °C.",
+      "Выложите сверху рыбу и запекайте ещё 15–20 минут до готовности."
+    ],
+    "cooking_time_minutes": 45,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: рыба с картофелем.",
+      "steps": [
+        "Нарежьте картофель.",
+        "Запеките рыбу вместе с картофелем."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "potato",
+        "name": "Картофель",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "fish",
+        "name": "Рыба",
+        "unit": "g",
+        "quantity": "300.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-fish-potato.webp",
+      "source": "https://www.pexels.com/photo/fish-and-potatoes-on-a-plate-16273766/",
+      "author": "Nadin Sh",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-vegetable-rice",
+    "title": "Рис с овощами",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Рассыпчатый рис с морковью и томатами.",
+    "steps": [
+      "Отварите рис по инструкции на упаковке.",
+      "Мелко нарежьте морковь и помидоры. Тушите под крышкой с небольшим количеством воды до мягкости моркови.",
+      "Добавьте рис, перемешайте и прогрейте."
+    ],
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: рис с овощами.",
+      "steps": [
+        "Отварите рис.",
+        "Потушите овощи и смешайте с рисом."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидор",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-vegetable-rice.webp",
+      "source": "https://www.pexels.com/photo/delicious-rice-on-a-pot-8837229/",
+      "author": "Kübra Doğu",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-banana-smoothie",
+    "title": "Банановый смузи",
+    "meal_types": [
+      "snack"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Молочный смузи со спелым бананом и йогуртом.",
+    "steps": [
+      "Очистите бананы и нарежьте крупными кусочками.",
+      "Взбейте бананы, холодное молоко и йогурт в блендере до однородности."
+    ],
+    "cooking_time_minutes": 5,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: банановый смузи.",
+      "steps": [
+        "Очистите банан.",
+        "Взбейте банан, молоко и йогурт."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "banana",
+        "name": "Банан",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "yogurt",
+        "name": "Йогурт",
+        "unit": "g",
+        "quantity": "100.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-banana-smoothie.webp",
+      "source": "https://www.pexels.com/photo/banana-smoothie-in-glass-4051764/",
+      "author": "alleksana",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "slug": "demo-chicken-salad",
+    "title": "Салат с курицей",
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "base_servings": 2,
+    "is_active": true,
+    "description": "Салат с курицей, свежими огурцами и томатами.",
+    "steps": [
+      "Отварите курицу до полной готовности, остудите и нарежьте кубиками.",
+      "Вымойте овощи, нарежьте и смешайте с курицей."
+    ],
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "previous": {
+      "description": "Демонстрационный рецепт: салат с курицей.",
+      "steps": [
+        "Приготовьте курицу.",
+        "Нарежьте овощи и смешайте с курицей."
+      ],
+      "cooking_time_minutes": 20
+    },
+    "ingredients": [
+      {
+        "slug": "chicken",
+        "name": "Курица",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидор",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "cucumber",
+        "name": "Огурец",
+        "unit": "g",
+        "quantity": "150.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/demo-chicken-salad.webp",
+      "source": "https://www.pexels.com/photo/chicken-salad-20272479/",
+      "author": "Aida Shukuhi",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Овсянка с ягодами",
+    "description": "Тёплая овсянка на молоке с ягодами и мёдом.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Всыпьте хлопья в молоко и варите на слабом огне 5–7 минут, помешивая.",
+      "Разложите по мискам, добавьте ягоды и мёд."
+    ],
+    "slug": "berry-oatmeal",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "oats",
+        "name": "Овсяные хлопья",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "360.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "160.000"
+      },
+      {
+        "slug": "med",
+        "name": "Мёд",
+        "unit": "g",
+        "quantity": "15"
+      }
+    ],
+    "photo": {
+      "file": "photos/berry-oatmeal.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Healthy_Oatmeal_with_Berries.jpg",
+      "author": "FitTasteTic",
+      "license": "https://creativecommons.org/licenses/by-sa/2.0"
+    }
+  },
+  {
+    "title": "Зелёный боул с киноа",
+    "description": "Киноа, свежие овощи и авокадо с лимонной заправкой.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Промойте киноа и отварите по инструкции на упаковке.",
+      "Нарежьте помидоры и авокадо, вымойте зелень.",
+      "Смешайте киноа и овощи, заправьте маслом и соком половины лимона."
+    ],
+    "slug": "quinoa-green-bowl",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "kinoa",
+        "name": "Киноа",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "avokado",
+        "name": "Авокадо",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "40"
+      },
+      {
+        "slug": "limon",
+        "name": "Лимон",
+        "unit": "pcs",
+        "quantity": "1"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15"
+      }
+    ],
+    "photo": {
+      "file": "photos/quinoa-green-bowl.webp",
+      "source": "https://ccnull.de/foto/quinoa-buddha-bowl-mit-avocado-und-farbe/1148377",
+      "author": "Marco Verch",
+      "license": "https://creativecommons.org/licenses/by/2.0/de/"
+    }
+  },
+  {
+    "title": "Паста с песто и томатами",
+    "description": "Паста с зелёным песто, сладкими томатами и пармезаном.",
+    "cooking_time_minutes": 20,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите пасту по инструкции на упаковке.",
+      "Нарежьте томаты и прогрейте их в сотейнике 5 минут.",
+      "Перемешайте пасту, томаты и песто, посыпьте тёртым пармезаном."
+    ],
+    "slug": "pesto-tomato-pasta",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "pasta",
+        "name": "Паста",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "pesto",
+        "name": "Песто",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "parmezan",
+        "name": "Пармезан",
+        "unit": "g",
+        "quantity": "35"
+      }
+    ],
+    "photo": {
+      "file": "photos/pesto-tomato-pasta.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Pasta_with_pesto.jpg",
+      "author": "Paul Goyette",
+      "license": "https://creativecommons.org/licenses/by-sa/2.0"
+    }
+  },
+  {
+    "title": "Лосось с рисом",
+    "description": "Запечённый лосось с рассыпчатым рисом и зеленью.",
+    "cooking_time_minutes": 30,
+    "difficulty": 3,
+    "base_servings": 2,
+    "meal_types": [
+      "dinner"
+    ],
+    "steps": [
+      "Отварите рис по инструкции на упаковке.",
+      "Запекайте порции лосося при 190 °C около 15–20 минут до готовности.",
+      "Подайте лосося с рисом и зеленью."
+    ],
+    "slug": "salmon-rice",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "losos",
+        "name": "Лосось",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "15"
+      }
+    ],
+    "photo": {
+      "file": "photos/salmon-rice.webp",
+      "source": "https://www.pexels.com/photo/a-plate-with-salmon-and-rice-on-it-27672770/",
+      "author": "Nadin Sh",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Банановые панкейки",
+    "description": "Мягкие панкейки со спелым бананом и ягодами.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Разомните бананы, смешайте с яйцами, молоком и мукой.",
+      "Смажьте сковороду маслом и жарьте небольшие панкейки на среднем огне по 2–3 минуты с каждой стороны.",
+      "Подавайте с ягодами."
+    ],
+    "slug": "banana-pancakes",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "banana",
+        "name": "Бананы",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "muka",
+        "name": "Мука",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "100"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "60"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10"
+      }
+    ],
+    "photo": {
+      "file": "photos/banana-pancakes.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Homemade_Banana_Pancakes_(Unsplash).jpg",
+      "author": "Elli O. oelli",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/deed.en"
+    }
+  },
+  {
+    "title": "Тыквенный крем-суп",
+    "description": "Бархатистый суп из тыквы и моркови со сливками.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте тыкву и морковь, залейте водой и варите 20 минут до мягкости.",
+      "Измельчите овощи вместе с отваром погружным блендером.",
+      "Влейте сливки и прогрейте суп."
+    ],
+    "slug": "pumpkin-cream-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tykva",
+        "name": "Тыква",
+        "unit": "g",
+        "quantity": "500.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "slivki",
+        "name": "Сливки",
+        "unit": "ml",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "450"
+      }
+    ],
+    "photo": {
+      "file": "photos/pumpkin-cream-soup.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:DSC_7126_Creamy_pumpkin_soup_garnished_with_a_swirl_of_cream_and_chopped_herbs_served_in_a_white_soup_cup.jpg",
+      "author": "PattayaPatrol",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Овсянка с яблоком и корицей",
+    "description": "Молочная каша с тёплым яблоком и пряной корицей.",
+    "cooking_time_minutes": 15,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast"
+    ],
+    "steps": [
+      "Нарежьте яблоко небольшими кубиками.",
+      "Варите хлопья с молоком и яблоком 10 минут, помешивая.",
+      "Добавьте корицу и дайте каше постоять 2 минуты."
+    ],
+    "slug": "apple-cinnamon-oatmeal",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "oats",
+        "name": "Овсяные хлопья",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "apple",
+        "name": "Яблоки",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "koritsa",
+        "name": "Корица",
+        "unit": "g",
+        "quantity": "2.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/apple-cinnamon-oatmeal.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Havregr%C3%B8d_med_%C3%A6bler,_kanel_og_mandler_(5128231630).jpg",
+      "author": "cyclonebill from Copenhagen, Denmark",
+      "license": "https://creativecommons.org/licenses/by-sa/2.0/"
+    }
+  },
+  {
+    "title": "Пшённая каша с тыквой",
+    "description": "Нежная пшённая каша с кусочками сладкой тыквы.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast"
+    ],
+    "steps": [
+      "Промойте пшено, тыкву нарежьте кубиками.",
+      "Варите тыкву в воде 10 минут.",
+      "Добавьте пшено и молоко, готовьте на слабом огне 20 минут."
+    ],
+    "slug": "pumpkin-millet-porridge",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "psheno",
+        "name": "Пшено",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "tykva",
+        "name": "Тыква",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/pumpkin-millet-porridge.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:%D0%93%D0%B0%D1%80%D0%B1%D1%83%D0%B7%D0%BE%D0%B2%D0%BE-%D0%BF%D1%88%D0%BE%D0%BD%D1%8F%D0%BD%D0%B0_%D0%BA%D0%B0%D1%88%D0%B0.jpg",
+      "author": "Samurai2593",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Гречка с грибами",
+    "description": "Рассыпчатая гречка с обжаренными шампиньонами и луком.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите гречку в воде до готовности.",
+      "Нарежьте грибы и лук, обжарьте на масле 10 минут.",
+      "Смешайте с гречкой и прогрейте 2 минуты."
+    ],
+    "slug": "buckwheat-mushrooms",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "grechnevaya-krupa",
+        "name": "Гречневая крупа",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "shampinony",
+        "name": "Шампиньоны",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "300.000"
+      }
+    ]
+  },
+  {
+    "title": "Сырники с ягодами",
+    "description": "Творожные сырники с ягодами для подачи.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Смешайте творог, яйцо, сахар и муку.",
+      "Сформируйте сырники и обжарьте на масле на небольшом огне по 4–5 минут с каждой стороны.",
+      "Подайте с ягодами."
+    ],
+    "slug": "berry-syrniki",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tvorog",
+        "name": "Творог",
+        "unit": "g",
+        "quantity": "350.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "muka",
+        "name": "Мука",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "sakhar",
+        "name": "Сахар",
+        "unit": "g",
+        "quantity": "20.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "100.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/berry-syrniki.webp",
+      "source": "https://www.pexels.com/photo/delicious-syrniki-with-berries-on-a-plate-37174575/",
+      "author": "Unaizat Abdulgamidova",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Творожная запеканка",
+    "description": "Запеканка из творога с манкой и йогуртом.",
+    "cooking_time_minutes": 45,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Смешайте манку с йогуртом, оставьте на 10 минут.",
+      "Добавьте творог, яйца и сахар, перемешайте.",
+      "Переложите в форму с пергаментом и выпекайте 30 минут при 180 °C."
+    ],
+    "slug": "cottage-cheese-casserole",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tvorog",
+        "name": "Творог",
+        "unit": "g",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "mannaya-krupa",
+        "name": "Манная крупа",
+        "unit": "g",
+        "quantity": "40.000"
+      },
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "sakhar",
+        "name": "Сахар",
+        "unit": "g",
+        "quantity": "25.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/cottage-cheese-casserole.webp",
+      "source": "https://www.pexels.com/photo/cottage-cheese-casserole-on-plate-7803315/",
+      "author": "Надежда Мустафаева",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Скрэмбл с томатами",
+    "description": "Мягкая яичница-болтунья со свежими томатами.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast"
+    ],
+    "steps": [
+      "Нарежьте томаты и прогрейте на масле 2 минуты.",
+      "Взбейте яйца с молоком и влейте в сковороду.",
+      "Помешивайте на слабом огне до полной готовности яиц."
+    ],
+    "slug": "tomato-scramble",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "4.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "40.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/tomato-scramble.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Uova_strapazzate_e_pomodori,_piatto_tradizionale_cinese.jpg",
+      "author": "Mastrocom",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Омлет со шпинатом и сыром",
+    "description": "Омлет с зелёным шпинатом и тягучим сыром.",
+    "cooking_time_minutes": 15,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast"
+    ],
+    "steps": [
+      "Прогрейте шпинат на масле до мягкости.",
+      "Взбейте яйца с молоком, влейте к шпинату и посыпьте сыром.",
+      "Готовьте под крышкой на слабом огне до полной готовности яиц."
+    ],
+    "slug": "spinach-cheese-omelet",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "4.000"
+      },
+      {
+        "slug": "shpinat",
+        "name": "Шпинат",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "cheese",
+        "name": "Твёрдый сыр",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "60.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/spinach-cheese-omelet.webp",
+      "source": "https://www.pexels.com/photo/spinach-omelette-on-white-ceramic-plate-10756661/",
+      "author": "Follow Fauzia",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Шакшука со сладким перцем",
+    "description": "Яйца в густом соусе из помидоров, лука и сладкого перца.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "lunch"
+    ],
+    "steps": [
+      "Обжарьте нарезанный лук и перец на масле 5 минут.",
+      "Добавьте помидоры, тушите 10 минут.",
+      "Сделайте углубления, разбейте яйца и готовьте под крышкой до их полной готовности."
+    ],
+    "slug": "bell-pepper-shakshuka",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "4.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/bell-pepper-shakshuka.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Shakshuka_(28310896066).jpg",
+      "author": "Luca Nebuloni from Milan, Italy",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Тосты с авокадо и яйцом",
+    "description": "Хрустящий хлеб с авокадо, лимоном и варёным яйцом.",
+    "cooking_time_minutes": 15,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Сварите яйца вкрутую и подрумяньте хлеб на сухой сковороде.",
+      "Разомните авокадо с соком половины лимона.",
+      "Намажьте хлеб авокадо и выложите нарезанные яйца."
+    ],
+    "slug": "avocado-egg-toast",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tselnozernovoy-khleb",
+        "name": "Цельнозерновой хлеб",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "avokado",
+        "name": "Авокадо",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "limon",
+        "name": "Лимон",
+        "unit": "pcs",
+        "quantity": "1.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/avocado-egg-toast.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Smashed_Avocado_On_Toast_(with_one_poached_egg)_-_Jonny%27s_2026-01-06.jpg",
+      "author": "Andy Li",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  },
+  {
+    "title": "Тосты с творогом и бананом",
+    "description": "Сладкие цельнозерновые тосты с творожной начинкой.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Подсушите хлеб на сухой сковороде.",
+      "Намажьте творог, выложите кружочки банана.",
+      "Полейте небольшим количеством мёда."
+    ],
+    "slug": "cottage-cheese-banana-toast",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tselnozernovoy-khleb",
+        "name": "Цельнозерновой хлеб",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "tvorog",
+        "name": "Творог",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "banana",
+        "name": "Бананы",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "med",
+        "name": "Мёд",
+        "unit": "g",
+        "quantity": "15.000"
+      }
+    ]
+  },
+  {
+    "title": "Йогурт с гранолой и ягодами",
+    "description": "Быстрый завтрак слоями из йогурта, гранолы и ягод.",
+    "cooking_time_minutes": 5,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Разложите йогурт по двум мискам.",
+      "Добавьте гранолу и вымытые ягоды непосредственно перед подачей."
+    ],
+    "slug": "granola-berry-yogurt",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "granola",
+        "name": "Гранола",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "150.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/granola-berry-yogurt.webp",
+      "source": "https://www.pexels.com/photo/delicious-berry-and-yogurt-parfaits-with-granola-28734803/",
+      "author": "Giordano",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Чиа-пудинг с манго",
+    "description": "Пудинг на молоке с манго; время включает 2 часа охлаждения.",
+    "cooking_time_minutes": 135,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Смешайте чиа с молоком, перемешайте ещё раз через 10 минут.",
+      "Уберите в холодильник на 2 часа.",
+      "Добавьте измельчённую мякоть манго."
+    ],
+    "slug": "mango-chia-pudding",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "semena-chia",
+        "name": "Семена чиа",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "myakot-mango",
+        "name": "Мякоть манго",
+        "unit": "g",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/mango-chia-pudding.webp",
+      "source": "https://www.pexels.com/photo/person-holding-a-glass-of-mango-and-orange-chia-pudding-6544218/",
+      "author": "Alesia Kozik",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Яблочные оладьи",
+    "description": "Оладьи на кефире с тёртым яблоком.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Натрите яблоки и смешайте с кефиром, яйцом и мукой.",
+      "Выкладывайте тесто ложкой на сковороду с маслом.",
+      "Жарьте небольшие оладьи на среднем огне по 3–4 минуты с каждой стороны."
+    ],
+    "slug": "apple-fritters",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "apple",
+        "name": "Яблоки",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "kefir",
+        "name": "Кефир",
+        "unit": "ml",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "muka",
+        "name": "Мука",
+        "unit": "g",
+        "quantity": "140.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/apple-fritters.webp",
+      "source": "https://www.pexels.com/photo/delicious-apple-fritters-with-apricot-sauce-and-coffee-39886104/",
+      "author": "Kovacs Apor",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Блинчики с сыром и зеленью",
+    "description": "Тонкие молочные блинчики с сырной начинкой.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Взбейте яйцо с молоком, мукой и половиной масла.",
+      "Испеките тонкие блинчики на слегка смазанной сковороде.",
+      "Заверните тёртый сыр с зеленью в блинчики и прогрейте до расплавления сыра."
+    ],
+    "slug": "cheese-herb-crepes",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "muka",
+        "name": "Мука",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "cheese",
+        "name": "Твёрдый сыр",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "20.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/cheese-herb-crepes.webp",
+      "source": "https://www.pexels.com/photo/rolled-crepes-with-melted-cheese-and-herbs-on-white-plate-20582726/",
+      "author": "Nadin Sh",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Курица с рисом и морковью",
+    "description": "Куриное филе с рисом, приготовленное в одной сковороде.",
+    "cooking_time_minutes": 40,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте филе и овощи, обжарьте на масле 7 минут.",
+      "Всыпьте промытый рис, влейте воду.",
+      "Тушите под крышкой около 25 минут до готовности риса и курицы."
+    ],
+    "slug": "chicken-rice-carrot",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "chicken",
+        "name": "Куриное филе",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "350.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/chicken-rice-carrot.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Parboiled_rice_with_chicken,_peppers,_cucurbita,_peas_and_tomato.jpg",
+      "author": "Petar Milošević",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Индейка с булгуром",
+    "description": "Булгур с кусочками индейки и сладким перцем.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте индейку и перец, обжарьте на масле 7 минут.",
+      "Добавьте булгур и воду.",
+      "Тушите под крышкой 20 минут до готовности крупы и индейки."
+    ],
+    "slug": "turkey-bulgur",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "file-indeyki",
+        "name": "Филе индейки",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "bulgur",
+        "name": "Булгур",
+        "unit": "g",
+        "quantity": "140.000"
+      },
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "300.000"
+      }
+    ]
+  },
+  {
+    "title": "Рис с нутом и овощами",
+    "description": "Рисовая тарелка с нутом, кабачком и томатами.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите рис в воде.",
+      "Нарезанные овощи потушите на масле 12 минут.",
+      "Добавьте промытый нут и рис, прогрейте вместе."
+    ],
+    "slug": "chickpea-vegetable-rice",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "140.000"
+      },
+      {
+        "slug": "nut-konservirovannyy-bez-zhidkosti",
+        "name": "Нут консервированный без жидкости",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "kabachok",
+        "name": "Кабачок",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "280.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/chickpea-vegetable-rice.webp",
+      "source": "https://foto.wuestenigel.com/close-up-of-chickpeas-with-sliced-vegetables-and-rice-on-a-plate/",
+      "author": "Marco Verch",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Гречка с курицей",
+    "description": "Гречневая крупа с куриным филе и морковью.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Обжарьте нарезанные курицу, морковь и лук на масле 7 минут.",
+      "Добавьте промытую крупу и воду.",
+      "Тушите под крышкой 20 минут до готовности крупы и курицы."
+    ],
+    "slug": "buckwheat-chicken",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "grechnevaya-krupa",
+        "name": "Гречневая крупа",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "chicken",
+        "name": "Куриное филе",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "320.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/buckwheat-chicken.webp",
+      "source": "https://recepty.mobi/vtorye-blyuda/blyuda-iz-myasa/blyuda-iz-ptitsy/blyuda-iz-kuritsy/grechka-s-myasom-zapechennaya-v-dukhovke.html",
+      "author": "Artyom",
+      "license": "https://recepty.mobi/",
+      "note": "Снимок из веб-архива; сохранён без обрезки и изменений пикселей."
+    }
+  },
+  {
+    "title": "Кускус с запечёнными овощами",
+    "description": "Кускус с кабачком и перцем, запечёнными в духовке.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте овощи, смешайте с маслом и запекайте 20 минут при 200 °C.",
+      "Залейте кускус кипящей водой и накройте на 5 минут.",
+      "Разрыхлите вилкой и смешайте с овощами."
+    ],
+    "slug": "roast-vegetable-couscous",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "kuskus",
+        "name": "Кускус",
+        "unit": "g",
+        "quantity": "140.000"
+      },
+      {
+        "slug": "kabachok",
+        "name": "Кабачок",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "20.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "180.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/roast-vegetable-couscous.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Couscous_%227_vegetables%22.jpg",
+      "author": "ZRAFIQA",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Паста с грибами в сливках",
+    "description": "Паста со сливочным соусом из шампиньонов.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите пасту по инструкции на упаковке.",
+      "Обжарьте лук и грибы на масле 10 минут.",
+      "Влейте сливки, прогрейте 3 минуты и смешайте с пастой."
+    ],
+    "slug": "creamy-mushroom-pasta",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "pasta",
+        "name": "Паста",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "shampinony",
+        "name": "Шампиньоны",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "slivki",
+        "name": "Сливки",
+        "unit": "ml",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "60.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/creamy-mushroom-pasta.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Pasta_with_cream_tuffle_and_mushrooms_in_Savour_Cafe.jpg",
+      "author": "Peachyeung316",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Паста с тунцом и томатами",
+    "description": "Быстрая паста с консервированным тунцом в томатном соусе.",
+    "cooking_time_minutes": 20,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите пасту по инструкции на упаковке.",
+      "Потушите нарезанные томаты с маслом 10 минут.",
+      "Добавьте тунец и пасту, перемешайте и прогрейте."
+    ],
+    "slug": "tomato-tuna-pasta",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "pasta",
+        "name": "Паста",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "tunets-konservirovannyy-bez-zhidkosti",
+        "name": "Тунец консервированный без жидкости",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/tomato-tuna-pasta.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Pasta_with_tuna,_squash,_tomatoes_and_philadelphia_(5896331175).jpg",
+      "author": "Luca Nebuloni from Milan, Italy",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Паста с брокколи и сыром",
+    "description": "Паста с соцветиями брокколи и сырным соусом.",
+    "cooking_time_minutes": 20,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите пасту, добавив брокколи в последние 4 минуты варки.",
+      "Прогрейте молоко с тёртым сыром на слабом огне.",
+      "Слейте воду с пасты и смешайте с соусом."
+    ],
+    "slug": "broccoli-cheese-pasta",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "pasta",
+        "name": "Паста",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "brokkoli",
+        "name": "Брокколи",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "cheese",
+        "name": "Твёрдый сыр",
+        "unit": "g",
+        "quantity": "70.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "100.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/broccoli-cheese-pasta.webp",
+      "source": "https://www.pexels.com/photo/fusilli-pasta-with-broccoli-sauce-12738628/",
+      "author": "Katja Burger",
+      "license": "https://www.pexels.com/license/",
+      "note": "Вариант с соусом из брокколи."
+    }
+  },
+  {
+    "title": "Суп из красной чечевицы",
+    "description": "Густой овощной суп с красной чечевицей.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Обжарьте нарезанные лук и морковь на масле 5 минут.",
+      "Добавьте томаты, промытую чечевицу и воду.",
+      "Варите 25 минут до мягкости; при желании измельчите блендером."
+    ],
+    "slug": "red-lentil-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "krasnaya-chechevitsa",
+        "name": "Красная чечевица",
+        "unit": "g",
+        "quantity": "140.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "800.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/red-lentil-soup.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Rote_Linsensuppe_(K%C4%B1rm%C4%B1z%C4%B1_mercimek_%C3%A7orbas%C4%B1).jpg",
+      "author": "Conny",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Грибной крем-суп",
+    "description": "Суп-пюре из шампиньонов и картофеля со сливками.",
+    "cooking_time_minutes": 35,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Обжарьте лук и грибы на масле.",
+      "Добавьте картофель кубиками и воду, варите 20 минут.",
+      "Измельчите блендером, влейте сливки и прогрейте."
+    ],
+    "slug": "mushroom-cream-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "shampinony",
+        "name": "Шампиньоны",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "potato",
+        "name": "Картофель",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "slivki",
+        "name": "Сливки",
+        "unit": "ml",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "600.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/mushroom-cream-soup.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Cream_of_mushroom_soup.jpg",
+      "author": "MichalPL",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Томатный суп с фасолью",
+    "description": "Сытный томатный суп с белой фасолью.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Обжарьте лук и морковь на масле.",
+      "Добавьте нарезанные помидоры и воду, варите 15 минут.",
+      "Всыпьте промытую фасоль и прогрейте ещё 5 минут."
+    ],
+    "slug": "tomato-bean-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "500.000"
+      },
+      {
+        "slug": "fasol-konservirovannaya-bez-zhidkosti",
+        "name": "Фасоль консервированная без жидкости",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "500.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/tomato-bean-soup.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:White_Bean,_Tomato,_and_Rosemary_Soup_(2267968994).jpg",
+      "author": "Kari Sullivan from Austin, TX",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Куриный суп с лапшой",
+    "description": "Лёгкий суп с куриным филе, морковью и лапшой.",
+    "cooking_time_minutes": 40,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch"
+    ],
+    "steps": [
+      "Нарежьте филе, залейте водой и варите 20 минут, снимая пену.",
+      "Добавьте мелко нарезанные овощи и варите 10 минут.",
+      "Добавьте лапшу и варите до её готовности."
+    ],
+    "slug": "chicken-noodle-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "chicken",
+        "name": "Куриное филе",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "pasta",
+        "name": "Паста",
+        "unit": "g",
+        "quantity": "70.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "60.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "1000.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/chicken-noodle-soup.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Chicken_Noodle_Soup_US.jpg",
+      "author": "Nichijyou123",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Гороховый суп с овощами",
+    "description": "Густой суп из колотого гороха с картофелем.",
+    "cooking_time_minutes": 70,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch"
+    ],
+    "steps": [
+      "Промойте горох и варите в воде около 45 минут.",
+      "Нарежьте картофель, морковь и лук, добавьте в кастрюлю.",
+      "Варите ещё 20 минут до мягкости гороха и овощей."
+    ],
+    "slug": "vegetable-pea-soup",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "gorokh-kolotyy",
+        "name": "Горох колотый",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "potato",
+        "name": "Картофель",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "1000.000"
+      }
+    ]
+  },
+  {
+    "title": "Греческий салат",
+    "description": "Свежие овощи с фетой, оливками и оливковым маслом.",
+    "cooking_time_minutes": 15,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Вымойте и крупно нарежьте овощи.",
+      "Добавьте кубики феты и оливки.",
+      "Заправьте маслом и аккуратно перемешайте."
+    ],
+    "slug": "greek-salad",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "cucumber",
+        "name": "Огурцы",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "feta",
+        "name": "Фета",
+        "unit": "g",
+        "quantity": "120.000"
+      },
+      {
+        "slug": "olivki-bez-kostochek",
+        "name": "Оливки без косточек",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/greek-salad.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:GreekSalad.jpg",
+      "author": "en:User:Action st",
+      "license": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  },
+  {
+    "title": "Салат со свёклой и фетой",
+    "description": "Салат с варёной свёклой, фетой и грецкими орехами.",
+    "cooking_time_minutes": 65,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите свёклу до мягкости, остудите и очистите.",
+      "Нарежьте свёклу и фету, выложите на вымытый шпинат.",
+      "Добавьте орехи и масло."
+    ],
+    "slug": "beet-feta-salad",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "svekla",
+        "name": "Свёкла",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "feta",
+        "name": "Фета",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "gretskie-orekhi",
+        "name": "Грецкие орехи",
+        "unit": "g",
+        "quantity": "30.000"
+      },
+      {
+        "slug": "shpinat",
+        "name": "Шпинат",
+        "unit": "g",
+        "quantity": "60.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/beet-feta-salad.webp",
+      "source": "https://www.pexels.com/photo/close-up-of-a-beetroot-and-feta-cheese-salad-20792225/",
+      "author": "Laura Alessia",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Салат с тунцом и фасолью",
+    "description": "Быстрый салат с тунцом, фасолью и огурцом.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Слейте жидкость с тунца и фасоли, фасоль промойте.",
+      "Нарежьте огурец и зелень.",
+      "Смешайте ингредиенты и заправьте маслом."
+    ],
+    "slug": "tuna-bean-salad",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tunets-konservirovannyy-bez-zhidkosti",
+        "name": "Тунец консервированный без жидкости",
+        "unit": "g",
+        "quantity": "180.000"
+      },
+      {
+        "slug": "fasol-konservirovannaya-bez-zhidkosti",
+        "name": "Фасоль консервированная без жидкости",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "cucumber",
+        "name": "Огурцы",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "20.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/tuna-bean-salad.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Insalata_di_Fagioli_e_Tonno_%E2%80%93_Bohnensalat_mit_Thunfisch_(7327273414).jpg",
+      "author": "Katrin Gilger",
+      "license": "https://creativecommons.org/licenses/by-sa/2.0/"
+    }
+  },
+  {
+    "title": "Форель с брокколи",
+    "description": "Запечённая форель с брокколи и лимоном.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Разложите рыбу и брокколи в форме.",
+      "Полейте маслом и соком половины лимона.",
+      "Запекайте при 190 °C около 25 минут до готовности рыбы."
+    ],
+    "slug": "trout-broccoli",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "file-foreli",
+        "name": "Филе форели",
+        "unit": "g",
+        "quantity": "350.000"
+      },
+      {
+        "slug": "brokkoli",
+        "name": "Брокколи",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "limon",
+        "name": "Лимон",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/trout-broccoli.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Steelhead_trout_on_boiled_broccoli_and_potatoes_-_Massachusetts.jpg",
+      "author": "Daderot",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  },
+  {
+    "title": "Котлеты из индейки",
+    "description": "Запечённые котлеты из филе индейки с луком.",
+    "cooking_time_minutes": 35,
+    "difficulty": 3,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Замочите хлеб в молоке и измельчите индейку с луком в фарш.",
+      "Добавьте хлеб и яйцо, вымесите и сформируйте котлеты.",
+      "Запекайте на пергаменте около 25 минут при 200 °C до полной готовности."
+    ],
+    "slug": "turkey-patties",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "file-indeyki",
+        "name": "Филе индейки",
+        "unit": "g",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "egg",
+        "name": "Яйца",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "tselnozernovoy-khleb",
+        "name": "Цельнозерновой хлеб",
+        "unit": "g",
+        "quantity": "50.000"
+      },
+      {
+        "slug": "milk",
+        "name": "Молоко",
+        "unit": "ml",
+        "quantity": "60.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/turkey-patties.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Bodybuilder_meal_prep.jpg",
+      "author": "Khane Rokhl Barazani",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Говядина, тушённая с овощами",
+    "description": "Мягкая говядина с морковью, луком и томатами.",
+    "cooking_time_minutes": 100,
+    "difficulty": 3,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте мясо небольшими кусочками и обжарьте на масле.",
+      "Добавьте нарезанные овощи и воду.",
+      "Тушите под крышкой 80–90 минут до мягкости мяса."
+    ],
+    "slug": "vegetable-beef-stew",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "govyadina",
+        "name": "Говядина",
+        "unit": "g",
+        "quantity": "400.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "400.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/vegetable-beef-stew.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Beef_stew_with_potatoes,_carrots,_celery,_and_peas_-_Massachusetts.jpg",
+      "author": "Daderot",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/"
+    }
+  },
+  {
+    "title": "Перцы с рисом и индейкой",
+    "description": "Сладкие перцы с начинкой из риса и индейки.",
+    "cooking_time_minutes": 60,
+    "difficulty": 3,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Отварите рис до полуготовности, измельчите индейку и лук в фарш.",
+      "Смешайте начинку и наполните очищенные перцы.",
+      "Выложите в кастрюлю с томатами и водой, тушите под крышкой 40 минут до готовности начинки."
+    ],
+    "slug": "turkey-rice-stuffed-peppers",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "500.000"
+      },
+      {
+        "slug": "rice",
+        "name": "Рис",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "file-indeyki",
+        "name": "Филе индейки",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "300.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/turkey-rice-stuffed-peppers.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:%D0%9F%D0%BE%D0%BB%D0%BD%D0%B5%D1%82%D0%B8_%D0%BF%D0%B8%D0%BF%D0%B5%D1%80%D0%BA%D0%B8_01.jpg",
+      "author": "Стефанија Видовски",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "note": "Вариант фаршированного перца с рисом. Вид мяса на фото не подтверждён."
+    }
+  },
+  {
+    "title": "Рататуй",
+    "description": "Запечённые кружочки баклажана, кабачка и помидора.",
+    "cooking_time_minutes": 55,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Нарежьте овощи тонкими кружочками.",
+      "Уложите в форму, чередуя овощи, полейте маслом.",
+      "Запекайте 40 минут при 190 °C и посыпьте зеленью."
+    ],
+    "slug": "ratatouille",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "baklazhan",
+        "name": "Баклажан",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "kabachok",
+        "name": "Кабачок",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "350.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "25.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "20.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/ratatouille.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Ratatouille.jpg",
+      "author": "Marcus Guimarães",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Картофель с творогом и зеленью",
+    "description": "Печёный картофель с прохладной творожной начинкой.",
+    "cooking_time_minutes": 60,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Вымойте картофель, наколите вилкой и запекайте 50 минут при 200 °C.",
+      "Смешайте творог с йогуртом и нарезанной зеленью.",
+      "Разрежьте готовые клубни и выложите сверху начинку."
+    ],
+    "slug": "potato-herb-quark",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "potato",
+        "name": "Картофель",
+        "unit": "g",
+        "quantity": "500.000"
+      },
+      {
+        "slug": "tvorog",
+        "name": "Творог",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "30.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/potato-herb-quark.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:2026_Pellkartoffeln_mit_Quark_4.jpg",
+      "author": "Burkhard Mücke",
+      "license": "https://creativecommons.org/licenses/by-sa/4.0/"
+    }
+  },
+  {
+    "title": "Карри из нута со шпинатом",
+    "description": "Нут в кокосовом соусе с томатами, шпинатом и карри.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Прогрейте карри на масле и добавьте нарезанные томаты.",
+      "Влейте кокосовое молоко, добавьте промытый нут и тушите 10 минут.",
+      "Добавьте шпинат и готовьте ещё 3 минуты."
+    ],
+    "slug": "spinach-chickpea-curry",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "nut-konservirovannyy-bez-zhidkosti",
+        "name": "Нут консервированный без жидкости",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "kokosovoe-moloko",
+        "name": "Кокосовое молоко",
+        "unit": "ml",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "shpinat",
+        "name": "Шпинат",
+        "unit": "g",
+        "quantity": "100.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "karri",
+        "name": "Карри",
+        "unit": "g",
+        "quantity": "5.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "10.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/spinach-chickpea-curry.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Spinach-Chickpea_Curry_(3117324894).jpg",
+      "author": "Kari Sullivan from Austin, TX",
+      "license": "https://creativecommons.org/licenses/by/2.0/"
+    }
+  },
+  {
+    "title": "Фасоль в томатном соусе",
+    "description": "Тушёная фасоль со сладким перцем и помидорами.",
+    "cooking_time_minutes": 25,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "lunch",
+      "dinner"
+    ],
+    "steps": [
+      "Обжарьте нарезанный лук с перцем на масле 5 минут.",
+      "Добавьте помидоры и тушите 10 минут.",
+      "Всыпьте промытую фасоль и прогрейте ещё 5 минут."
+    ],
+    "slug": "beans-tomato-sauce",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "fasol-konservirovannaya-bez-zhidkosti",
+        "name": "Фасоль консервированная без жидкости",
+        "unit": "g",
+        "quantity": "350.000"
+      },
+      {
+        "slug": "tomato",
+        "name": "Помидоры",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "sladkiy-perets",
+        "name": "Сладкий перец",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "luk",
+        "name": "Лук",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/beans-tomato-sauce.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Baked_beans_in_tomato_sauce.jpg",
+      "author": "Mk2010",
+      "license": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  },
+  {
+    "title": "Хумус с овощными палочками",
+    "description": "Домашний хумус из консервированного нута с огурцом и морковью.",
+    "cooking_time_minutes": 15,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "snack"
+    ],
+    "steps": [
+      "Промойте нут и измельчите с тахини, маслом, водой и соком половины лимона.",
+      "При необходимости добавьте оставшийся лимонный сок по вкусу.",
+      "Нарежьте вымытые овощи палочками и подайте с хумусом."
+    ],
+    "slug": "hummus-crudites",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "nut-konservirovannyy-bez-zhidkosti",
+        "name": "Нут консервированный без жидкости",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "takhini",
+        "name": "Тахини",
+        "unit": "g",
+        "quantity": "30.000"
+      },
+      {
+        "slug": "limon",
+        "name": "Лимон",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "olivkovoe-maslo",
+        "name": "Оливковое масло",
+        "unit": "ml",
+        "quantity": "15.000"
+      },
+      {
+        "slug": "carrot",
+        "name": "Морковь",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "cucumber",
+        "name": "Огурцы",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "voda",
+        "name": "Вода",
+        "unit": "ml",
+        "quantity": "50.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/hummus-crudites.webp",
+      "source": "https://www.pexels.com/photo/colorful-veggie-sticks-with-creamy-hummus-dip-34644302/",
+      "author": "Novkov Visuals – Videographer Budapest (https://novkov.com)",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Ягодный йогуртовый крем",
+    "description": "Нежный десерт из натурального йогурта и ягод.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "snack"
+    ],
+    "steps": [
+      "Промойте свежие ягоды или разморозьте замороженные.",
+      "Измельчите половину ягод с йогуртом и мёдом.",
+      "Разложите по стаканам и украсьте оставшимися ягодами."
+    ],
+    "slug": "berry-yogurt-cream",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "300.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "200.000"
+      },
+      {
+        "slug": "med",
+        "name": "Мёд",
+        "unit": "g",
+        "quantity": "20.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/berry-yogurt-cream.webp",
+      "source": "https://www.pexels.com/photo/a-person-is-spooning-berries-into-a-dessert-28284752/",
+      "author": "Esra Afşar",
+      "license": "https://www.pexels.com/license/"
+    }
+  },
+  {
+    "title": "Фруктовый салат с йогуртом",
+    "description": "Салат из яблока, груши и апельсина с йогуртом.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Вымойте фрукты, очистите апельсин и удалите семена.",
+      "Нарежьте фрукты небольшими кусочками.",
+      "Заправьте йогуртом непосредственно перед подачей."
+    ],
+    "slug": "yogurt-fruit-salad",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "apple",
+        "name": "Яблоки",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "grushi",
+        "name": "Груши",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "apelsiny",
+        "name": "Апельсины",
+        "unit": "pcs",
+        "quantity": "1.000"
+      },
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "150.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/yogurt-fruit-salad.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Fruit_salad_with_greek_yoghurt.jpeg",
+      "author": "Maryjeanne.li",
+      "license": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  },
+  {
+    "title": "Творожный дип с зеленью",
+    "description": "Несладкий творожный крем с зеленью и свежим огурцом.",
+    "cooking_time_minutes": 10,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "snack"
+    ],
+    "steps": [
+      "Измельчите творог с йогуртом до кремовой консистенции.",
+      "Добавьте мелко нарезанную зелень.",
+      "Подайте с вымытым огурцом, нарезанным палочками."
+    ],
+    "slug": "herb-quark-dip",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "tvorog",
+        "name": "Творог",
+        "unit": "g",
+        "quantity": "250.000"
+      },
+      {
+        "slug": "yogurt",
+        "name": "Натуральный йогурт",
+        "unit": "g",
+        "quantity": "80.000"
+      },
+      {
+        "slug": "zelen",
+        "name": "Зелень",
+        "unit": "g",
+        "quantity": "30.000"
+      },
+      {
+        "slug": "cucumber",
+        "name": "Огурцы",
+        "unit": "g",
+        "quantity": "200.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/herb-quark-dip.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Kr%C3%A4uterquark_(K%C3%A4smatte)_mit_Roggenbrot.jpg",
+      "author": "Manfred&Barbara Aulbach",
+      "license": "https://creativecommons.org/licenses/by-sa/3.0/"
+    }
+  },
+  {
+    "title": "Запечённые яблоки с орехами",
+    "description": "Тёплые яблоки с начинкой из грецких орехов и мёда.",
+    "cooking_time_minutes": 30,
+    "difficulty": 2,
+    "base_servings": 2,
+    "meal_types": [
+      "snack"
+    ],
+    "steps": [
+      "Вымойте яблоки и удалите сердцевины, сохранив дно.",
+      "Наполните смесью рубленых орехов, мёда и корицы.",
+      "Запекайте 20–25 минут при 180 °C до мягкости."
+    ],
+    "slug": "baked-nut-apples",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "apple",
+        "name": "Яблоки",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "gretskie-orekhi",
+        "name": "Грецкие орехи",
+        "unit": "g",
+        "quantity": "40.000"
+      },
+      {
+        "slug": "med",
+        "name": "Мёд",
+        "unit": "g",
+        "quantity": "20.000"
+      },
+      {
+        "slug": "koritsa",
+        "name": "Корица",
+        "unit": "g",
+        "quantity": "2.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/baked-nut-apples.webp",
+      "source": "https://www.pexels.com/photo/faceless-woman-with-delicious-baked-apples-in-house-6210973/",
+      "author": "Tim Douglas",
+      "license": "https://www.pexels.com/license/",
+      "note": "Вариант с орехами и сушёной клюквой."
+    }
+  },
+  {
+    "title": "Бананово-ягодный смузи",
+    "description": "Густой смузи из банана, ягод и кефира.",
+    "cooking_time_minutes": 5,
+    "difficulty": 1,
+    "base_servings": 2,
+    "meal_types": [
+      "breakfast",
+      "snack"
+    ],
+    "steps": [
+      "Очистите бананы, промойте свежие ягоды или разморозьте замороженные.",
+      "Поместите фрукты и кефир в блендер.",
+      "Взбейте до однородности и разлейте по двум стаканам."
+    ],
+    "slug": "banana-berry-smoothie",
+    "is_active": true,
+    "ingredients": [
+      {
+        "slug": "banana",
+        "name": "Бананы",
+        "unit": "pcs",
+        "quantity": "2.000"
+      },
+      {
+        "slug": "yagody",
+        "name": "Ягоды",
+        "unit": "g",
+        "quantity": "150.000"
+      },
+      {
+        "slug": "kefir",
+        "name": "Кефир",
+        "unit": "ml",
+        "quantity": "300.000"
+      }
+    ],
+    "photo": {
+      "file": "photos/banana-berry-smoothie.webp",
+      "source": "https://commons.wikimedia.org/wiki/File:Strawberry_and_banana_smoothie_1_(14084474069).jpg",
+      "author": "Katie from UNITED STATES",
+      "license": "https://creativecommons.org/licenses/by/2.0/",
+      "note": "Вариант с клубникой и бананом."
+    }
+  }
+]

@@ -1,3 +1,5 @@
+import mimetypes
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -16,4 +18,6 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    # The base Alpine image may not have a WebP MIME mapping.
+    mimetypes.add_type("image/webp", ".webp")
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
