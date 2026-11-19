@@ -1,8 +1,6 @@
 # FoodTinder: Yandex Cloud deployment
 
-This is a **manual** deployment workflow. The GitHub Actions button appears once
-`.github/workflows/deploy.yml` is merged to the default branch (`master`).
-It deliberately refuses to deploy any branch other than `master`.
+Deployment is a manual job in the **same** GitHub Actions CI workflow. Open Actions → ci → Run workflow, select `master`, and enable `deploy_production`. The deploy job runs **only after all seven CI jobs succeed**. A normal pull request or push never deploys.
 
 ## One-time prerequisites
 
@@ -13,8 +11,8 @@ It deliberately refuses to deploy any branch other than `master`.
 - Restrict the GitHub `production` environment to the protected `master`
   branch. Consider required reviewers.
 - GitHub repository Actions must have permission to publish GHCR packages.
-  Both `ghcr.io/devoid13/food_tinder-backend` and
-  `ghcr.io/devoid13/food_tinder-frontend` must be publicly pullable, or the VM
+  Both `ghcr.io/dev0id13/food_tinder-backend` and
+  `ghcr.io/dev0id13/food_tinder-frontend` must be publicly pullable, or the VM
   must separately authenticate to GHCR with a read-only package token.
 - Repository/environment secrets:
   - `DEPLOY_HOST`: VM public IPv4 / DNS name.
@@ -56,12 +54,15 @@ accounts. For **temporary local/public-IP troubleshooting only**, use
 
 ## Deploy
 
-1. Merge the reviewed FT-06 PR into master after its existing CI checks pass.
-2. Open GitHub → Actions → Deploy Production → Run workflow on master.
-3. The workflow builds and publishes images tagged with the commit SHA and
-   deploys those exact images. SSH verifies the known host key.
-4. The server pulls images, starts PostgreSQL, applies migrations, collects
-   Django static files, starts Django/Caddy and checks Django health via Caddy.
+1. After reviewed changes are merged to master, open GitHub → Actions → ci.
+2. Select Run workflow, choose master and tick `deploy_production`.
+3. All seven CI jobs run first. Only if all succeed does the `deploy` job
+   build and publish images tagged with the commit SHA.
+4. GitHub deploys the exact commit over verified SSH. The server pulls images,
+   applies migrations, collects static files, and checks Django health.
+5. Before enabling deploy, confirm the `production` environment secrets exist.
+   An additional in-graph approval button requires configuring GitHub Environment
+   protection rules, if available to this repository.
 
 Persistent named Docker volumes: `postgres_data`, `recipe_photos`,
 `staticfiles`, `caddy_data`, `caddy_config`. Never run `down -v` in
