@@ -59,15 +59,20 @@ accounts. For **temporary local/public-IP troubleshooting only**, use
 
 ## Deploy
 
-1. After reviewed changes are merged to master, open GitHub → Actions → ci.
-2. Select Run workflow, choose master and tick `deploy_production`.
-3. All seven CI jobs run first. Only if all succeed does the `deploy` job
-   build and publish images tagged with the commit SHA.
-4. GitHub deploys the exact commit over verified SSH. The server pulls images,
-   applies migrations, collects static files, and checks Django health.
-5. Before enabling deploy, confirm the `production` environment secrets exist.
-   An additional in-graph approval button requires configuring GitHub Environment
-   protection rules, if available to this repository.
+1. Merge an approved PR to `master`. Seven CI checks run automatically.
+2. After all seven succeed, the `deploy production` job waits for the
+   `production` Environment reviewer. Click **Review deployments** and approve.
+   No second CI run is required.
+3. The job builds and pushes images with immutable SHA tags, validates
+   Compose, pulls images, applies migrations and collects Django static files.
+4. For the temporary `SITE_ADDRESS=:80` configuration, the workflow also
+   checks the Caddy reverse proxy via localhost. For a real HTTPS domain,
+   verify public DNS, TLS and the browser separately.
+5. The deploy job is **not** triggered for pull requests or manual dispatch.
+   Treat the `production` Environment reviewer requirement as a critical
+   protection; it must be saved before merges.
+6. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
+   `sudo env IMAGE_TAG=...` rather than relying on exported shell variables.
 
 Persistent named Docker volumes: `postgres_data`, `recipe_photos`,
 `staticfiles`, `caddy_data`, `caddy_config`. Never run `down -v` in
