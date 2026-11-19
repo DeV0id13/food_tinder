@@ -184,6 +184,21 @@ jobs:
         run: docker build --target development -t foodtinder-backend:ci-dev .
       - name: Build production target
         run: docker build --target production -t foodtinder-backend:ci-prod .
+      - name: Validate production Compose with placeholder secrets
+        run: |
+          trap 'rm -f .env.prod' EXIT
+          cat > .env.prod <<'EOF'
+          DJANGO_SECRET_KEY=ci-compose-placeholder
+          DJANGO_DEBUG=false
+          DJANGO_ALLOWED_HOSTS=localhost
+          CSRF_TRUSTED_ORIGINS=http://localhost
+          POSTGRES_DB=foodtinder
+          POSTGRES_USER=foodtinder
+          POSTGRES_PASSWORD=ci-compose-placeholder
+          POSTGRES_HOST=postgres
+          SITE_ADDRESS=:80
+          EOF
+          IMAGE_TAG=ci-validation docker compose -f compose.prod.yaml --env-file .env.prod config --quiet
       - name: Trivy full vulnerability report (all severities)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
