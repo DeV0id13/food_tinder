@@ -1,4 +1,5 @@
 import pytest
+from django.db import transaction
 from django.urls import reverse
 
 from apps.catalog.models import Recipe, RecipeIngredient
@@ -152,6 +153,61 @@ def test_admin_uploads_replaces_and_clears_recipe_photo(
     recipe.refresh_from_db()
     assert not recipe.photo
     assert not replacement.exists()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("bulk", [False, True], ids=["single", "bulk"])
+def test_admin_deletes_recipe_photos_after_commit(admin_client, recipe_media, photo_upload, bulk):
+    slugs = ["first-recipe", "second-recipe"] if bulk else ["first-recipe"]
+    recipes = []
+    for slug in slugs:
+        response = admin_client.post(
+            reverse("admin:catalog_recipe_add"),
+            {**recipe_form_data(), "slug": slug, "photo": photo_upload()},
+        )
+        assert response.status_code == 302
+        recipes.append(Recipe.objects.get(slug=slug))
+
+    photos = [recipe_media / recipe.photo.name for recipe in recipes]
+    with transaction.atomic():
+        if bulk:
+            response = admin_client.post(
+                reverse("admin:catalog_recipe_changelist"),
+                {
+                    "action": "delete_selected",
+                    "_selected_action": [recipe.pk for recipe in recipes],
+                    "post": "yes",
+                },
+            )
+        else:
+            response = admin_client.post(
+                reverse("admin:catalog_recipe_delete", args=[recipes[0].pk]), {"post": "yes"}
+            )
+        assert response.status_code == 302
+        assert not Recipe.objects.filter(slug__in=slugs).exists()
+        assert all(photo.is_file() for photo in photos)
+
+    assert all(not photo.exists() for photo in photos)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_shared_recipe_photo_is_deleted_only_after_last_reference(
+    admin_client, recipe, recipe_media, photo_upload
+):
+    recipe.photo = photo_upload()
+    recipe.save()
+    photo = recipe_media / recipe.photo.name
+    response = admin_client.post(reverse("admin:catalog_recipe_add"), recipe_form_data())
+    assert response.status_code == 302
+    other_recipe = Recipe.objects.get(slug="admin-recipe")
+    other_recipe.photo = recipe.photo.name
+    other_recipe.save()
+
+    recipe.delete()
+    assert photo.is_file()
+
+    other_recipe.delete()
+    assert not photo.exists()
 
 
 @pytest.mark.parametrize(("filename", "format"), [("fake.jpg", "PNG"), ("animation.gif", "GIF")])

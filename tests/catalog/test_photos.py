@@ -2,7 +2,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
 
+from apps.catalog.models import Recipe
 from apps.catalog.validators import MAX_RECIPE_PHOTO_BYTES
 
 pytestmark = pytest.mark.django_db
@@ -45,3 +47,32 @@ def test_model_rejects_oversized_photo(recipe, recipe_media, photo_upload):
     with pytest.raises(ValidationError, match="10 MB or smaller"):
         recipe.save()
     assert not list(recipe_media.glob("recipes/*"))
+
+
+@pytest.mark.django_db(transaction=True)
+def test_recipe_photo_survives_deletion_rollback(recipe, recipe_media, photo_upload):
+    recipe.photo = photo_upload()
+    recipe.save()
+    recipes = Recipe.objects.filter(pk=recipe.pk)
+    photo = recipe_media / recipe.photo.name
+
+    with transaction.atomic():
+        recipes.delete()
+        assert not recipes.exists()
+        transaction.set_rollback(True)
+
+    assert recipes.exists()
+    assert photo.is_file()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_deleting_stale_recipe_removes_current_photo(recipe, recipe_media, photo_upload):
+    stale = Recipe.objects.get(pk=recipe.pk)
+    recipe.photo = photo_upload()
+    recipe.save()
+    photo = recipe_media / recipe.photo.name
+    assert photo.is_file()
+
+    stale.delete()
+
+    assert not photo.exists()

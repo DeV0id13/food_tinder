@@ -3,9 +3,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
+from django.core.files.storage import Storage
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
+from django.db.models.signals import pre_delete
+from django.dispatch import receiver
 
 from .validators import validate_meal_types, validate_recipe_photo, validate_steps
 
@@ -111,6 +114,30 @@ class Recipe(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+def delete_unused_recipe_photo_on_commit(storage: Storage, name: str | None, *, using: str) -> None:
+    if not name:
+        return
+
+    def delete_if_unused() -> None:
+        if not Recipe.objects.using(using).filter(photo=name).exists():
+            storage.delete(name)
+
+    transaction.on_commit(delete_if_unused, using=using, robust=True)
+
+
+@receiver(pre_delete, sender=Recipe)
+def schedule_deleted_recipe_photo_cleanup(instance: Recipe, using: str, **kwargs) -> None:
+    # Read under the same row lock used by Admin when replacing a photo.
+    name = (
+        Recipe.objects.using(using)
+        .select_for_update()
+        .filter(pk=instance.pk)
+        .values_list("photo", flat=True)
+        .first()
+    )
+    delete_unused_recipe_photo_on_commit(instance.photo.storage, name, using=using)
 
 
 class RecipeIngredient(models.Model):
