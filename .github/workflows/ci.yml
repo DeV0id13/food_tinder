@@ -6,19 +6,13 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-    inputs:
-      deploy_production:
-        description: "Deploy to Yandex Cloud after all CI jobs pass"
-        type: boolean
-        required: true
-        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   lint:
@@ -239,7 +233,7 @@ jobs:
   deploy:
     name: deploy production
     needs: [lint, typecheck, secrets, sast, backend, frontend, docker]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.deploy_production == true
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     permissions:
       contents: read
       packages: write
@@ -273,9 +267,16 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          printf '%s\n' "$DEPLOY_KEY" > /tmp/deploy-key
-          printf '%s\n' "$HOST_KEYS" > /tmp/deploy-known-hosts
+          # GitHub secrets may have CRLF or escaped line breaks after copying.
+          # Normalize the key and fail clearly if it is still malformed.
+          printf '%s' "$DEPLOY_KEY" | tr -d '\r' | sed 's/\\n/\n/g' > /tmp/deploy-key
+          printf '\n' >> /tmp/deploy-key
+          printf '%s\n' "$HOST_KEYS" | tr -d '\r' > /tmp/deploy-known-hosts
           test -n "$DEPLOY_HOST"
+          if ! ssh-keygen -y -P '' -f /tmp/deploy-key >/dev/null 2>&1; then
+            echo "::error::DEPLOY_SSH_KEY is not a valid unencrypted OpenSSH private key. Re-save the full key (including BEGIN/END lines) in the production environment secret." >&2
+            exit 1
+          fi
           ssh -i /tmp/deploy-key -o IdentitiesOnly=yes \
               -o StrictHostKeyChecking=yes \
               -o UserKnownHostsFile=/tmp/deploy-known-hosts \
