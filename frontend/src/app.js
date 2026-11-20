@@ -5,6 +5,7 @@ import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
 import {invalidateShopping} from './utils/plans.js';
 import {renderShell} from './views/shell.js';
+import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
 
 export class FoodTinderApp {
   constructor({root, dialog, toast, api}) {
@@ -19,6 +20,7 @@ export class FoodTinderApp {
     this.root.addEventListener('click', (event) => this.onClick(event));
     this.root.addEventListener('submit', (event) => this.onSubmit(event));
     this.root.addEventListener('change', (event) => this.onChange(event));
+    this.root.addEventListener('input', (event) => this.onInput(event));
     this.dialog.addEventListener('click', (event) => this.onClick(event));
     this.dialog.addEventListener('click', (event) => {
       if (event.target === this.dialog) this.dialog.close();
@@ -384,6 +386,15 @@ export class FoodTinderApp {
     }
   }
 
+  onInput(event) {
+    if (event.target.dataset.input !== 'recipe-search') return;
+    this.state.catalogQuery = event.target.value;
+    const results = this.root.querySelector('[data-catalog-results]');
+    if (results) results.innerHTML = renderCatalogResults(this.state);
+    const count = this.root.querySelector('[data-catalog-count]');
+    if (count) count.textContent = catalogSearchCount(this.state);
+  }
+
   async onChange(event) {
     if (this.state.busy) return;
     if (event.target.dataset.change === 'active-plan') {
@@ -446,8 +457,11 @@ export class FoodTinderApp {
     }
     await this.runMutation(`recipe-${recipeId}`, async () => {
       await this.api.swipe(recipeId, action);
-      await this.loadFeed(false);
-      this.toast(action === 'like' ? 'Лайк сохранён' : 'Рецепт скрыт до завтра');
+      await Promise.all([
+        this.loadFeed(false),
+        action === 'like' ? this.loadFavorites(false) : undefined,
+      ]);
+      this.toast(action === 'like' ? 'Добавлено в избранное' : 'Рецепт скрыт до завтра');
     });
   }
 

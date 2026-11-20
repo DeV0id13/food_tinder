@@ -353,3 +353,36 @@ test('plans 404 is kept with its resource and a successful retry clears only tha
   assert.equal(app.state.plansStatus, 'ready');
   assert.deepEqual(app.state.plans, []);
 });
+
+test('liking a recipe refreshes favorites in the frontend', async () => {
+  const calls = [];
+  const app = createApp({
+    swipe: async (id, action) => { calls.push({id, action}); },
+    getFavorites: async () => [{id: 11, title: 'Борщ'}],
+  });
+  await app.swipe(11, 'like');
+  assert.deepEqual(calls, [{id: 11, action: 'like'}]);
+  assert.deepEqual([...app.state.favoriteIds], [11]);
+  assert.ok(app.messages.includes('Добавлено в избранное'));
+});
+
+test('catalog search updates results without rerendering the input', () => {
+  const app = createApp();
+  app.state.catalogStatus = 'ready';
+  app.state.catalog = [
+    {id: 1, title: 'Борщ с говядиной', meal_types: ['lunch'], cooking_time_minutes: 60, difficulty: 2},
+    {id: 2, title: 'Омлет с сыром', meal_types: ['breakfast'], cooking_time_minutes: 15, difficulty: 1},
+  ];
+  const results = {innerHTML: ''};
+  const count = {textContent: ''};
+  app.root.querySelector = (selector) => ({
+    '[data-catalog-results]': results,
+    '[data-catalog-count]': count,
+  })[selector];
+  app.onInput({target: {dataset: {input: 'recipe-search'}, value: 'омлет'}});
+  assert.equal(app.state.catalogQuery, 'омлет');
+  assert.match(results.innerHTML, /Омлет с сыром/);
+  assert.doesNotMatch(results.innerHTML, /Борщ с говядиной/);
+  assert.equal(count.textContent, 'Найдено: 1 из 2');
+  assert.match(app.root.innerHTML, /^$/);
+});
