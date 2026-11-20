@@ -321,6 +321,7 @@ export class FoodTinderApp {
     await this.runMutation('account', async () => {
       const account = await this.api.updateAccount(payload);
       if (!this.isCurrentSession(context)) return;
+      this.beginRequest('account');
       this.state.account = account;
       this.state.accountStatus = 'ready';
       this.toast('Личные данные сохранены');
@@ -337,6 +338,7 @@ export class FoodTinderApp {
     await this.runMutation('account', async () => {
       const account = await this.api.changeEmail(payload);
       if (!this.isCurrentSession(context)) return;
+      this.beginRequest('account');
       this.state.account = account;
       this.state.accountStatus = 'ready';
       this.state.session = {...this.state.session, email: account.email};
