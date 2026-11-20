@@ -1,8 +1,12 @@
-# FoodTinder Backend
+# FoodTinder
 
-Основа backend FoodTinder для командной разработки. На этом этапе реализованы
-пользователь, профиль и инфраструктура; рецепты, свайпы, рекомендации, планы питания
-и списки покупок будут отдельными задачами.
+Веб-приложение для выбора рецептов, планирования питания и покупок. После регистрации
+и входа можно сохранять рецепты из ленты, собирать рацион на 1, 3 или 7 дней вручную
+или из избранного, отмечать покупки и скачивать список в CSV/TXT.
+
+Запуск интерфейса и сквозная проверка описаны во [frontend README](frontend/README.md).
+Для наполнения локальной базы используйте [импорт каталога](docs/modules/catalog.md#импорт-каталога)
+или Django Admin.
 
 ## Stack
 
@@ -11,7 +15,8 @@
 - Django sessions, SessionAuthentication, Django Admin.
 - psycopg 3 для PostgreSQL, Pillow для проверки изображений в ImageField.
 - Docker / Docker Compose; Gunicorn в production image.
-- pytest, pytest-django, Ruff.
+- Vite и vanilla JavaScript; Caddy раздаёт frontend, static и media в production.
+- pytest, pytest-django, Ruff, mypy и встроенный Node test runner.
 
 Прямые Python-зависимости закреплены точными версиями в `[dependency-groups]`
 файла `pyproject.toml`: группы `base`, `dev` и `prod`.
@@ -23,15 +28,14 @@
 
 | App | Ответственность |
 | --- | --- |
-| accounts | Пользователь, профиль, аутентификация; позднее ограничения питания |
-| catalog | Будущие рецепты, ингредиенты, теги, оборудование, категории и шаги |
-| preferences | Будущие реакции, избранное, история и выдача ленты |
-| planning | Будущие планы питания и слоты |
-| shopping | Будущие списки покупок и CSV/TXT экспорт |
+| [accounts](docs/modules/accounts.md) | Регистрация, сессия, профиль и изменение данных аккаунта |
+| [catalog](docs/modules/catalog.md) | Рецепты, ингредиенты, состав, фотографии, Admin и импорт |
+| [preferences](docs/modules/preferences.md) | Персональная лента, реакции, отмена свайпа и закладки |
+| [planning](docs/modules/planning.md) | Планы на 1/3/7 дней, слоты, порции и атомарное сохранение |
+| [shopping](docs/modules/shopping.md) | Расчёт покупок, отметки и CSV/TXT экспорт |
 
-`catalog`, `preferences`, `planning` и `shopping` пока содержат только AppConfig.
-Общие слои добавляются по необходимости: сейчас в `common` находится health view,
-а искусственных service/repository/selector слоёв нет.
+В `common` находится health view. [Автоподбор рациона](docs/modules/auto-plan.md)
+работает в клиентском черновике и сохраняет результат через существующий API планов.
 
 ```text
 .
@@ -44,6 +48,8 @@
 │   ├── planning/
 │   └── shopping/
 ├── common/
+├── frontend/            # Vite, экраны, клиент API и JS-тесты
+├── deploy/              # frontend image и конфигурация Caddy
 ├── tests/
 ├── docker/init_env.py
 ├── Dockerfile
@@ -70,12 +76,11 @@
 цифры и `_` разрешены, поскольку они обязательны по требованиям.
 Также включены стандартные проверки сходства с данными пользователя и распространённых паролей.
 Django проверяет пароль в Admin/createsuperuser. Как и стандартный Django,
-`create_user()` сам не вызывает password validation: будущий API должен вызывать
-`django.contrib.auth.password_validation.validate_password` перед сохранением.
+`create_user()` сам не вызывает password validation. При регистрации проверку
+`django.contrib.auth.password_validation.validate_password` вызывает API.
 
-Профиль — отдельная необязательная запись OneToOne; создаётся явно, сейчас через Admin.
-Никаких сигналов для автоматического создания и медицинских расчётов нет.
-Локальные аватары хранятся в `media/`, исключённой из Git.
+Профиль — отдельная запись OneToOne, которая создаётся при регистрации или
+первом изменении профиля старого аккаунта. Имя, фамилия и email хранятся в `User`.
 
 ### API
 
@@ -83,12 +88,17 @@ Django проверяет пароль в Admin/createsuperuser. Как и ст�
 | --- | --- |
 | GET /api/v1/health/ | `{"status":"ok"}` |
 | GET /api/v1/auth/session/ | `{"authenticated":false,"id":null,"email":null}` для гостя; id/email вошедшего пользователя |
+| /api/v1/auth/ | Регистрация с именем, вход, выход, профиль, данные аккаунта и смена email с текущим паролем |
+| /api/v1/recipes/ | Публичный каталог и подробности рецепта |
+| /api/v1/preferences/ | Публичная лента, приватные свайпы, отмена и избранное |
+| /api/v1/meal-plans/ | Планы, слоты, порции и пакетное сохранение |
+| /api/v1/shopping-list/ | Покупки, отметки и экспорт выбранного плана |
 
 Health проверяет работоспособность HTTP-процесса, не доступность БД.
 Сессия проверяется через Django session cookie. Оба endpoint публичны, только для чтения.
 По умолчанию новые DRF endpoints требуют аутентификации.
-Session response запрещён для кеширования. Signup/login/profile CRUD пока отсутствуют;
-для ручной проверки сессии можно войти в Admin и открыть session endpoint в том же браузере.
+Session response запрещён для кеширования. После регистрации пользователь отдельно
+входит в аккаунт.
 Для инициализации CSRF frontend вызывает `GET /api/v1/auth/session/`: endpoint
 устанавливает cookie `csrftoken` даже для анонимного пользователя через `ensure_csrf_cookie`.
 Затем frontend передаёт значение cookie в заголовке `X-CSRFToken` изменяющих запросов.
@@ -217,8 +227,8 @@ docker compose down
 docker compose run --rm web pytest
 ```
 
-Проверяются system check, health/session, email-пользователь и аутентификация,
-ограничения БД, валидатор пароля, профиль, Admin и CSRF.
+Тесты проверяют аккаунт и CSRF, каталог и Admin, медиа и импорт, реакции и избранное,
+планы, список покупок и экспорт. Отдельный тест проходит через подключённый URLConf.
 Временный POST endpoint для проверки SessionAuthentication существует только в тестовом URLConf.
 
 ## Lint
@@ -226,6 +236,7 @@ docker compose run --rm web pytest
 ```sh
 docker compose run --rm web ruff check .
 docker compose run --rm web ruff format --check .
+docker compose run --rm web python .github/scripts/run_mypy.py
 ```
 
 Автоформатирование: `docker compose run --rm web ruff format .`.
@@ -259,7 +270,7 @@ Django прекращает запуск без DJANGO_SECRET_KEY, POSTGRES_DB, 
   перед включением includeSubDomains и preload. Прежние имена переменных
   `SECURE_HSTS_*` без префикса `DJANGO_` больше не используются.
 - Same-origin deployment использует Django sessions и CSRF middleware.
-  Для будущих изменяющих запросов frontend должен передавать `X-CSRFToken`.
+  Frontend передаёт `X-CSRFToken` в изменяющих запросах.
 - `DJANGO_TRUST_PROXY_HEADERS=true` допустим только за доверенным TLS proxy,
   который удаляет присланный клиентом `X-Forwarded-Proto` и выставляет его сам.
 - `POSTGRES_*` задают подключение, `POSTGRES_SSLMODE=verify-full` — для БД с
@@ -281,4 +292,5 @@ docker build --target production -t foodtinder-backend:prod .
 в production окружении. Пока HSTS выключен, deploy check выдаёт ожидаемое предупреждение;
 рассмотрите остальные предупреждения отдельно. TLS termination и раздача `staticfiles/` / `media/`
 должны обеспечиваться платформой размещения; Gunicorn их не обслуживает.
-Production deployment и внешние сервисы в этот scaffold не входят.
+Production workflow, ручное подтверждение и постоянные тома описаны в
+[инструкции по развёртыванию](docs/deployment.md).

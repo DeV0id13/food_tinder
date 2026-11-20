@@ -80,8 +80,8 @@ production. Database migrations are **not** rolled back automatically.
 
 ## Catalog images and backups
 
-The FT-06 recipe import command and its photo inputs are not baked into the
-container images (the `catalog-import` directory is gitignored).
+The backend image includes the recipe import command and the tracked manifest.
+Prepare photo inputs separately in the ignored `catalog-import` directory.
 A fresh database will not automatically contain the 62 recipe records or 58
 photographs verified locally in FT-06. Import approved data and upload source
 photos separately using `docs/modules/catalog.md`. Do not assume that the
