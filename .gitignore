@@ -27,3 +27,5 @@ dist/
 *.egg-info/
 
 /catalog-import/
+# uv's optional local package cache (uv.lock is committed).
+.uv-cache/

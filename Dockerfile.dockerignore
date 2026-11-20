@@ -25,8 +25,9 @@ catalog-import
 **/.pnpm-store
 # Not needed by the backend application at runtime.
 frontend
-tests
 docs
 deploy
 .github
-.pre-commit-config.yaml
+!.github/
+!.github/scripts/
+!.github/scripts/run_mypy.py

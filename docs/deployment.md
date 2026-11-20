@@ -20,6 +20,8 @@ otherwise the deploy job may start without approval.
 - A permanent public IP and, before real use, a domain with DNS A record.
 - Restrict the GitHub `production` environment to the protected `master`
   branch. Consider required reviewers.
+- Python production dependencies come from `uv.lock` (installed with uv
+  during Docker build); no package manager is required on the Yandex VM.
 - GitHub repository Actions must have permission to publish GHCR packages.
   Both `ghcr.io/dev0id13/food_tinder-backend` and
   `ghcr.io/dev0id13/food_tinder-frontend` must be publicly pullable, or the VM

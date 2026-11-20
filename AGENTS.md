@@ -22,9 +22,12 @@ FoodTinder — десктопное веб-приложение: выбор ре
 ## Архитектура
 
 - Сохраняй модульный монолит: Python 3.12+, Django, DRF, Django ORM и PostgreSQL 16+.
-- Используй версии зависимостей из `[dependency-groups]` в `pyproject.toml`,
-  не обновляй их попутно. Установка: `python -m pip install --group dev` или
-  `--group prod` (pip >= 25.1). Обе группы включают `base`.
+- Используй версии из `pyproject.toml` и коммитируемого `uv.lock` без
+  попутных обновлений. Менеджер Python-зависимостей — **uv 0.13.9**:
+  `uv sync --locked --only-group dev` или `uv sync --locked --only-group prod`.
+  Группы `dev` и `prod` включают `base`; `security` отдельная.
+  При изменении зависимостей обновляй `uv.lock` через `uv lock`, проверяй
+  `uv lock --check`. Для frontend используется pnpm.
 - Сохраняй Django sessions и `SessionAuthentication`; frontend и `/api/` рассчитаны
   на один origin. Не заменяй это JWT и не отключай CSRF ради подключения интерфейса.
 - `accounts` владеет пользователями, профилями и аутентификацией.

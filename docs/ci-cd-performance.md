@@ -17,10 +17,13 @@ increase total wall-clock time and is intentionally retained.
 
 - The pytest-only `MD5PasswordHasher` speeds functional authentication tests.
   Production Django password hashers are untouched.
-- Python and pnpm caches are keyed by dependency manifests.
-- Buildx uses remote GitHub Actions caches across ephemeral runners.
-- A Dockerfile-specific backend ignore file prevents frontend/docs/tests changes
-  from invalidating the backend image layers.
+- Python uses uv 0.13.9, committed `uv.lock` (78 locked packages) and
+  GitHub Actions uv dependency caches; pnpm uses its own lockfile cache.
+- Buildx uses remote GitHub Actions caches for **backend only**. Frontend
+  remote cache export took 29.3 s on a ~5 s build, so it is disabled.
+- A Dockerfile-specific backend ignore file prevents frontend/docs changes
+  from invalidating the backend image layers; tests and mypy helper remain
+  available in the development target.
 - Each production image is built exactly once per workflow run; the backend
   artifact is scanned before publication. Only `push` to `master` can publish
   SHA-tagged images, and only the gated production job can deploy them.
@@ -32,12 +35,13 @@ increase total wall-clock time and is intentionally retained.
 
 1. On the PR, confirm the **seven** required checks are green. No `deploy`
    job, GHCR publication, or production Environment approval should occur.
-2. Review `backend` logs: `pytest --durations=20` must report the slowest tests
-   and should run faster than the baseline without reducing test count.
+2. Review `backend` logs: `uv run --locked --only-group dev pytest --durations=20`
+   must report the slowest tests without reducing test count.
 3. Review `docker` logs: the production image is scanned twice (full report and
    blocking HIGH/CRITICAL gate). Failed scans must prevent publish and deploy.
-4. Compare a cold build and subsequent warm-cache run; GitHub cache scopes are
-   `foodtinder-backend-dev`, `foodtinder-backend-prod`, `foodtinder-frontend`.
+4. Compare cold/warm runs for backend Buildx cache scopes
+   `foodtinder-backend-dev` and `foodtinder-backend-prod`; frontend builds
+   without GHA Docker cache export. CI must pass `uv lock --check`.
 5. After approved merge, verify each image has a GHCR tag exactly equal to
    `GITHUB_SHA` and that the `deploy production` job waits for production
    Environment approval even if both images were published already.
@@ -51,5 +55,8 @@ Semgrep, Ruff, mypy, PostgreSQL migrations/tests, frontend tests, Trivy
 HIGH/CRITICAL gate, `needs` on all seven checks, SHA verification and a
 reviewer-protected `production` Environment.
 
-No actual post-change speedup should be claimed until GitHub Actions completes
-on this branch and, after a reviewed merge, on production.
+Baseline PR run before uv migration: 363 passed in 10.27 s vs 48.07 s on
+master; backend job 40 s vs ~90 s before. Docker cache reduced the
+development target from 45 s to 8 s on warm cache. Re-run all seven checks
+after migrating to uv and compare the new measurements; production speed remains
+unverified until an approved merge and full deploy.
