@@ -10,16 +10,6 @@ export const DURATIONS = [1, 3, 7];
 export const COOKING_TIMES = [15, 30, 60];
 export const API_BASE = '/api/v1/';
 
-export const VIEW_TITLES = {
-  feed: 'Лента',
-  recipes: 'Все рецепты',
-  favorites: 'Избранное',
-  plans: 'Рационы',
-  shopping: 'Покупки',
-  auth: 'Аккаунт',
-};
-
-
 export const FAVORITE_SORTS = {
   added: 'По дате добавления',
   title: 'По названию',

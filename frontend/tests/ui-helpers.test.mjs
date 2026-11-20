@@ -4,7 +4,8 @@ import {compatibleFavorites, buildPlanDays, slotFor} from '../src/utils/plans.js
 import {validationMessages} from '../src/api/errors.js';
 import {renderFeedView, visibleFeedRecipes} from '../src/views/feed-view.js';
 import {renderRecipeDetail} from '../src/components/recipe-card.js';
-import {filterRecipes, renderRecipesView} from '../src/views/recipes-view.js';
+import {filterRecipes} from '../src/utils/search.js';
+import {renderRecipesView} from '../src/views/recipes-view.js';
 import {favoriteMatches, renderFavoritesView} from '../src/views/favorites-view.js';
 import {renderAuthView} from '../src/views/auth-view.js';
 import {renderShell} from '../src/views/shell.js';

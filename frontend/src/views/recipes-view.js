@@ -4,9 +4,7 @@ import {matchesRecipeFilters} from '../utils/search.js';
 
 import {renderRecipeFilters} from '../components/recipe-filters.js';
 
-export {filterRecipes} from '../utils/search.js';
-
-export function catalogMatches(state) {
+function catalogMatches(state) {
   return matchesRecipeFilters(state.catalog || [], {
     query: state.catalogQuery, meal: state.catalogMeal, maxTime: state.catalogMaxTime,
   }).filter((recipe) =>

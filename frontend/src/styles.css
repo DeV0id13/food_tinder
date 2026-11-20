@@ -255,10 +255,8 @@ main:focus { outline: none; }
 .button-dislike:hover:not(:disabled),
 .favorite-button:hover:not(:disabled) { background: var(--paper-deep); border-color: var(--ink); }
 
-.button-danger,
 .button-ghost { color: var(--accent); }
 
-.button-danger:hover:not(:disabled),
 .button-ghost:hover:not(:disabled) { border-color: var(--line); }
 
 .button:disabled,
