@@ -57,8 +57,9 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
     assert client.get("/api/v1/auth/session/", **origin).data["authenticated"] is False
 
     account = {"email": "integration@example.com", "password": "ReadyFlow_7259"}
+    registration = {**account, "first_name": "Иван"}
     assert (
-        client.post("/api/v1/auth/register/", account, format="json", **origin).status_code == 403
+        client.post("/api/v1/auth/register/", registration, format="json", **origin).status_code == 403
     )
 
     def unsafe(method, path, payload=None):
@@ -70,7 +71,7 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
             **origin,
         )
 
-    assert unsafe("post", "/api/v1/auth/register/", account).status_code == 201
+    assert unsafe("post", "/api/v1/auth/register/", registration).status_code == 201
     assert client.get("/api/v1/auth/session/", **origin).data["authenticated"] is False
     assert unsafe("post", "/api/v1/auth/login/", account).data["authenticated"] is True
     assert "sessionid" in client.cookies
