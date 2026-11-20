@@ -9,6 +9,18 @@ export class RealApi {
     return this.client.request('auth/session/');
   }
 
+  getAccount() {
+    return this.client.request('auth/account/');
+  }
+
+  updateAccount(payload) {
+    return this.client.request('auth/account/', {method: 'PATCH', body: payload});
+  }
+
+  changeEmail(payload) {
+    return this.client.request('auth/account/email/', {method: 'POST', body: payload});
+  }
+
   register(payload) {
     return this.client.request('auth/register/', {method: 'POST', body: payload});
   }
