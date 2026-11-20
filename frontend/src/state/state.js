@@ -8,6 +8,7 @@ export function createInitialState() {
     feedStatus: 'idle',
     catalog: null,
     catalogStatus: 'idle',
+    catalogQuery: '',
     favorites: null,
     favoritesStatus: 'idle',
     favoriteIds: new Set(),
