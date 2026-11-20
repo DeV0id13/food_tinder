@@ -148,9 +148,7 @@ def change_email(request):
     with transaction.atomic():
         user = user_model.objects.select_for_update().get(pk=request.user.pk)
         if not user.check_password(serializer.validated_data["current_password"]):
-            raise serializers.ValidationError(
-                {"current_password": ["Incorrect current password."]}
-            )
+            raise serializers.ValidationError({"current_password": ["Incorrect current password."]})
         if user_model.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
             raise serializers.ValidationError({"email": ["This email is already registered."]})
         user.email = new_email
