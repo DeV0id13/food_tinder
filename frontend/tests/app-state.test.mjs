@@ -684,3 +684,20 @@ test('logout removes private data and back navigation shows sign-in without priv
   assert.doesNotMatch(app.root.innerHTML, /Личный рецепт/);
   assert.equal(app.state.favoriteIds.size, 0);
 });
+
+test('returning to plans shows loading before any stale slot buttons can be used', async () => {
+  const plans = deferred();
+  const app = createApp({getPlans: () => plans.promise});
+  const plan = {
+    id: 1, start_date: '2026-11-20', duration_days: 1, enabled_meals: ['lunch'], slots: [],
+  };
+  Object.assign(app.state, {
+    initialLoading: false, plans: [plan], plansStatus: 'ready',
+    activePlan: plan, activePlanId: plan.id, activePlanStatus: 'ready',
+  });
+  const navigating = app.navigate('plans');
+  assert.match(app.root.innerHTML, /Загружаем рационы/);
+  assert.doesNotMatch(app.root.innerHTML, /Выбрать блюдо/);
+  plans.resolve([]);
+  await navigating;
+});

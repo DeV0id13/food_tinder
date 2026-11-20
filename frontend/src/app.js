@@ -393,13 +393,13 @@ export class FoodTinderApp {
     if (view === 'plans' && authenticated) {
       await Promise.all([
         this.loadFavorites(false),
-        this.loadPlans(false),
+        this.loadPlans(),
       ]);
       this.render();
     }
     if (view === 'shopping' && authenticated) {
       if (!this.state.plans) await this.loadPlans(false);
-      if (this.state.view === view && this.state.plans?.length) await this.loadShopping(false);
+      if (this.state.view === view && this.state.plans?.length) await this.loadShopping();
       this.render();
     }
   }
