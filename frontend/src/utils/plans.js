@@ -71,7 +71,11 @@ export function makePlanDraft(saved = null) {
   const plan = saved ? structuredClone(saved) : {
     title: '', start_date: isoToday(), duration_days: 3, enabled_meals: ['breakfast', 'lunch', 'dinner'], slots: [],
   };
-  return {plan, dirty: false, creationKey: saved ? null : creationKey(), omitted: 0, duplicate: false};
+  return {
+    plan, dirty: false, creationKey: saved ? null : creationKey(), omitted: 0, duplicate: false,
+    generationServings: saved?.slots?.[0]?.servings || 1,
+    generationRotation: 0, generationNotice: '',
+  };
 }
 
 export function duplicatePlanDraft(source, favorites) {
@@ -89,6 +93,7 @@ export function duplicatePlanDraft(source, favorites) {
   draft.duplicate = true;
   draft.dirty = true;
   draft.omitted = source.slots.length - slots.length;
+  draft.generationServings = slots[0]?.servings || 1;
   return draft;
 }
 
