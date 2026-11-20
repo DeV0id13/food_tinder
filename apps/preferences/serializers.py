@@ -20,6 +20,10 @@ class SwipeSerializer(StrictSerializer):
     action = serializers.ChoiceField(choices=("like", "dislike"))
 
 
+class UndoSwipeSerializer(StrictSerializer):
+    undo_token = serializers.UUIDField()
+
+
 class StrictBooleanField(serializers.Field):
     default_error_messages = {"invalid": "Expected a JSON boolean."}
 
