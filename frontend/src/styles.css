@@ -871,6 +871,9 @@ dialog:has(.slot-picker) { width: min(54rem, calc(100% - 2rem)); }
 .plan-settings { border: 1px solid var(--line); padding: clamp(1rem, 1.75vw, 1.5rem); }
 .plan-configuration { display: grid; gap: 1.25rem; }
 
+.account-form { width: min(100%, 34rem); padding-block: 1.25rem; border-top: 1px solid var(--line); }
+.account-form h2 { font-size: clamp(1.5rem, 2.5vw, 2rem); }
+
 .plan-auto-fill {
   display: grid;
   gap: 0.8rem;
