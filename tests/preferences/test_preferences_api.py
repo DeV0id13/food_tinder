@@ -181,6 +181,10 @@ class TestPreferencesAPI:
         state = UserRecipeState.objects.get(user=user, recipe=recipe)
         assert state.liked_at == BEFORE_MIDNIGHT
         assert state.disliked_until is None
+        assert state.is_favorite is True
+        assert response.json()["is_favorite"] is True
+        favorites = self.client.get(BASE + "favorites/")
+        assert [row["id"] for row in favorites.json()["results"]] == [recipe.id]
 
     def test_repeated_like_preserves_original_liked_at(self):
         user = self.create_user()
@@ -259,6 +263,43 @@ class TestPreferencesAPI:
         assert response.status_code == 200
         state = UserRecipeState.objects.get(user=user, recipe=recipe)
         assert state.disliked_until == MIDNIGHT
+        assert state.is_favorite is False
+
+    def test_like_readds_recipe_after_removing_favorite(self):
+        user = self.create_user()
+        recipe = self.create_recipe()
+        UserRecipeState.objects.create(
+            user=user, recipe=recipe, liked_at=BEFORE_MIDNIGHT, is_favorite=False,
+        )
+        self.login(user)
+
+        response = self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+        )
+
+        assert response.status_code == 200
+        state = UserRecipeState.objects.get(user=user, recipe=recipe)
+        assert state.liked_at == BEFORE_MIDNIGHT
+        assert state.is_favorite is True
+
+    def test_previous_likes_backfill_to_favorites(self):
+        from importlib import import_module
+        from types import SimpleNamespace
+
+        from django.apps import apps
+        from django.db import connection
+
+        user = self.create_user()
+        liked = self.create_recipe()
+        untouched = self.create_recipe(number=2)
+        UserRecipeState.objects.create(user=user, recipe=liked, liked_at=BEFORE_MIDNIGHT)
+        UserRecipeState.objects.create(user=user, recipe=untouched, disliked_until=MIDNIGHT)
+
+        migration = import_module("apps.preferences.migrations.0002_favorite_existing_likes")
+        migration.favorite_existing_likes(apps, SimpleNamespace(connection=connection))
+
+        assert UserRecipeState.objects.get(user=user, recipe=liked).is_favorite is True
+        assert UserRecipeState.objects.get(user=user, recipe=untouched).is_favorite is False
 
     def test_inactive_recipe_cannot_be_swiped(self):
         user = self.create_user()
