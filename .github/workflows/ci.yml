@@ -191,7 +191,7 @@ jobs:
 
       # The small frontend builds faster than exporting its Node layers to GHA.
       - name: Build frontend image (no redundant remote cache export)
-        run: docker build -f deploy/Dockerfile.frontend -t foodtinder-frontend:ci .
+        run: docker build -f ../deploy/Dockerfile.frontend -t foodtinder-frontend:ci ..
       - name: Login to GHCR for master only
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
