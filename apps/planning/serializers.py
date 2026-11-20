@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from datetime import date, timedelta
+
 from rest_framework import serializers
 
 from apps.catalog.serializers import recipe_image_url
@@ -8,23 +12,31 @@ MEAL_ORDER = {meal: index for index, meal in enumerate(MEAL_TYPES)}
 
 
 class StrictSerializer(serializers.Serializer):
-    def validate(self, attrs):
-        if isinstance(self.initial_data, dict):
-            unknown_fields = set(self.initial_data) - set(self.fields)
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            unknown_fields = set(data) - set(self.fields)
             if unknown_fields:
                 raise serializers.ValidationError(
                     {"non_field_errors": ["Unknown fields are not allowed."]}
                 )
-        return attrs
+        return super().to_internal_value(data)
 
 
 class MealPlanCreateSerializer(StrictSerializer):
+    title = serializers.CharField(max_length=120, allow_blank=True, default="")
     start_date = serializers.DateField()
     duration_days = serializers.IntegerField()
     enabled_meals = serializers.ListField(
         child=serializers.ChoiceField(choices=MEAL_TYPES),
         allow_empty=False,
     )
+
+    def validate(self, attrs):
+        if attrs["start_date"] > date.max - timedelta(days=attrs["duration_days"] - 1):
+            raise serializers.ValidationError(
+                {"start_date": ["The plan ends outside the calendar."]}
+            )
+        return attrs
 
     def validate_duration_days(self, value):
         if value not in ALLOWED_DURATIONS:
@@ -42,11 +54,53 @@ class SlotWriteSerializer(StrictSerializer):
     servings = serializers.IntegerField(min_value=1, max_value=20)
 
 
+class EditorSlotSerializer(SlotWriteSerializer):
+    recipe_id = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+    day_index = serializers.IntegerField(min_value=0, max_value=6)
+    meal_type = serializers.ChoiceField(choices=MEAL_TYPES)
+
+
+class EditorCreateSerializer(MealPlanCreateSerializer):
+    slots: serializers.ListSerializer[list[dict[str, int | str]]] = serializers.ListSerializer(
+        child=EditorSlotSerializer(), max_length=28, required=False
+    )
+    creation_key = serializers.UUIDField(required=False)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if "slots" in attrs and "creation_key" not in attrs:
+            raise serializers.ValidationError({"creation_key": ["A creation key is required."]})
+        return attrs
+
+
+class EditorUpdateSerializer(MealPlanCreateSerializer):
+    slots: serializers.ListSerializer[list[dict[str, int | str]]] = serializers.ListSerializer(
+        child=EditorSlotSerializer(), max_length=28
+    )
+    version = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
+
+
 class MealPlanSummarySerializer(serializers.ModelSerializer):
+    filled_slots = serializers.SerializerMethodField()
+
     class Meta:
         model = MealPlan
-        fields: tuple[str, ...] = ("id", "start_date", "duration_days", "enabled_meals")
+        fields: tuple[str, ...] = (
+            "id",
+            "start_date",
+            "duration_days",
+            "enabled_meals",
+            "title",
+            "version",
+            "filled_slots",
+        )
         read_only_fields: tuple[str, ...] = fields
+
+    def get_filled_slots(self, plan: MealPlan) -> int:
+        return sum(
+            slot.day_index < plan.duration_days and slot.meal_type in plan.enabled_meals
+            for slot in plan.slots.all()
+        )
 
 
 class MealPlanSlotSerializer(serializers.ModelSerializer):

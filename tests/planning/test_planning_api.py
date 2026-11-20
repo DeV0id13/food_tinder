@@ -1,5 +1,7 @@
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from uuid import uuid4
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -180,6 +182,174 @@ class TestPlanningAPI:
         plan_id = plan.id if hasattr(plan, "id") else plan
         return self.client.delete(f"{BASE}{plan_id}/slots/{day_index}/{meal_type}/")
 
+    def test_editor_create_is_atomic_and_retries_reuse_the_same_plan(self):
+        user = self.create_user()
+        self.login(user)
+        recipe = self.create_recipe()
+        self.make_favorite(user, recipe)
+        payload = {
+            "title": "  План на декабрь  ",
+            "start_date": "2026-12-12",
+            "duration_days": 3,
+            "enabled_meals": ["lunch", "dinner"],
+            "creation_key": str(uuid4()),
+            "slots": [
+                {"day_index": 0, "meal_type": "lunch", "recipe_id": recipe.id, "servings": 4},
+                {"day_index": 2, "meal_type": "dinner", "recipe_id": recipe.id, "servings": 21},
+            ],
+        }
+        assert self.client.post(BASE, payload, format="json").status_code == 400
+        assert not MealPlan.objects.filter(user=user).exists()
+        payload["slots"][1]["servings"] = 2
+        first = self.client.post(BASE, payload, format="json")
+        assert first.status_code == 201
+        saved = first.json()
+        assert saved["title"] == "План на декабрь"
+        assert saved["version"] == 1 and saved["filled_slots"] == 2
+        assert saved["start_date"] == "2026-12-12"
+        replay = self.client.post(BASE, payload, format="json")
+        assert replay.status_code == 200 and replay.json() == saved
+        assert (
+            self.client.post(BASE, {**payload, "title": "Другой"}, format="json").status_code == 409
+        )
+        assert MealPlan.objects.filter(user=user).count() == 1
+        assert MealPlanSlot.objects.filter(plan_id=saved["id"]).count() == 2
+
+        self.login(self.create_user("copy-owner@example.com"))
+        assert self.client.post(BASE, {**payload, "slots": []}, format="json").status_code == 201
+        assert self.client.get(f"{BASE}{saved['id']}/").status_code == 404
+
+    def test_editor_failed_update_keeps_config_slots_and_version(self):
+        user = self.create_user()
+        self.login(user)
+        plan = self.create_plan(user, duration_days=3)
+        recipe = self.create_recipe()
+        old_slot = MealPlanSlot.objects.create(
+            plan=plan, day_index=0, meal_type="lunch", recipe=recipe, servings=2
+        )
+        base = {
+            "version": plan.version,
+            "title": "Изменён",
+            "start_date": "2027-01-02",
+            "duration_days": 1,
+            "enabled_meals": ["lunch"],
+        }
+        allowed = {"day_index": 0, "meal_type": "lunch", "recipe_id": recipe.id, "servings": 3}
+        url = f"{BASE}{plan.id}/"
+        for invalid_slots in [
+            [allowed, allowed],
+            [{**allowed, "day_index": 1}],
+            [{**allowed, "meal_type": "dinner"}],
+            [{**allowed, "recipe_id": self.create_recipe(number=2).id}],
+            [{**allowed, "surprise": True}],
+        ]:
+            assert (
+                self.client.put(url, {**base, "slots": invalid_slots}, format="json").status_code
+                == 400
+            )
+        assert (
+            self.client.put(
+                url,
+                {**base, "duration_days": 3, "start_date": "9999-12-31", "slots": []},
+                format="json",
+            ).status_code
+            == 400
+        )
+        plan.refresh_from_db()
+        old_slot.refresh_from_db()
+        assert (plan.title, plan.start_date, plan.duration_days, plan.version) == (
+            "",
+            date(2026, 10, 1),
+            3,
+            1,
+        )
+        assert old_slot.servings == 2
+
+    def test_editor_moves_dates_and_shrinks_plan_with_a_retained_unbookmarked_recipe(self):
+        user = self.create_user()
+        self.login(user)
+        plan = self.create_plan(user, duration_days=3)
+        recipe = self.create_recipe()
+        for day in (0, 2):
+            MealPlanSlot.objects.create(
+                plan=plan, day_index=day, meal_type="lunch", recipe=recipe, servings=2
+            )
+        payload = {
+            "version": 1,
+            "title": "",
+            "start_date": "2027-01-02",
+            "duration_days": 1,
+            "enabled_meals": ["lunch"],
+            "slots": [
+                {"day_index": 0, "meal_type": "lunch", "recipe_id": recipe.id, "servings": 3}
+            ],
+        }
+        url = f"{BASE}{plan.id}/"
+        response = self.client.put(url, payload, format="json")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["version"] == 2 and data["filled_slots"] == 1
+        assert data["start_date"] == "2027-01-02"
+        assert list(plan.slots.values_list("day_index", "servings")) == [(0, 3)]
+        assert self.client.put(url, payload, format="json").json() == data
+        assert self.client.put(url, {**payload, "title": "Stale"}, format="json").status_code == 409
+
+        assert self.put_slot(plan, 0, "lunch", recipe.id, 5).status_code == 200
+        assert self.client.get(url).json()["version"] == 3
+        assert self.client.put(url, {**payload, "version": 2}, format="json").status_code == 409
+        self.login(self.create_user("another-planner@example.com"))
+        assert self.client.put(url, payload, format="json").status_code == 404
+
+    def test_atomic_create_and_update_enforce_csrf(self):
+        user = self.create_user()
+        self.login(user)
+        plan = self.create_plan(user)
+        body = {
+            "start_date": "2026-12-15",
+            "duration_days": 1,
+            "enabled_meals": ["lunch"],
+            "slots": [],
+        }
+        self.client.handler.enforce_csrf_checks = True
+        assert (
+            self.client.post(
+                BASE, {**body, "creation_key": str(uuid4())}, format="json"
+            ).status_code
+            == 403
+        )
+        assert (
+            self.client.put(f"{BASE}{plan.id}/", {**body, "version": 1}, format="json").status_code
+            == 403
+        )
+
+    @pytest.mark.django_db(transaction=True)
+    def test_concurrent_editor_creates_with_one_key_create_one_plan(self):
+        user = self.create_user()
+        payload = {
+            "start_date": "2026-12-12",
+            "duration_days": 1,
+            "enabled_meals": ["lunch"],
+            "creation_key": str(uuid4()),
+            "slots": [],
+        }
+        ready = threading.Barrier(2, timeout=10)
+
+        def create():
+            try:
+                client = APIClient()
+                client.force_authenticate(user=user)
+                ready.wait()
+                response = client.post(BASE, payload, format="json")
+                return response.status_code, response.json()["id"]
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first, second = [pool.submit(create) for _ in range(2)]
+            outcomes = [first.result(timeout=15), second.result(timeout=15)]
+        plan = MealPlan.objects.get(user=user)
+        assert sorted(outcomes) == [(200, plan.id), (201, plan.id)]
+
     def test_create_plan_returns_detail_with_empty_slots(self):
         user = self.create_user()
         self.login(user)
@@ -310,7 +480,15 @@ class TestPlanningAPI:
         data = response.json()
         assert data["count"] == 2
         assert [item["id"] for item in data["results"]] == [second.id, first.id]
-        assert set(data["results"][0]) == {"id", "start_date", "duration_days", "enabled_meals"}
+        assert set(data["results"][0]) == {
+            "id",
+            "start_date",
+            "duration_days",
+            "enabled_meals",
+            "title",
+            "version",
+            "filled_slots",
+        }
 
     def test_list_requires_authentication(self):
         assert self.client.get(BASE).status_code == 403

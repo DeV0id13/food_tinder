@@ -597,3 +597,41 @@ class TestAccess:
         response = APIClient().get(url, {"plan_id": foreign_plan.id, "file_type": "csv"})
 
         assert response.status_code == 403
+
+
+def test_atomic_editor_preserves_unchanged_marks_and_updates_shopping(
+    client, owner, contract_catalog
+):
+    plan = create_plan(owner)
+    recipe, other_recipe = contract_catalog
+    add_slot(plan, recipe, servings=2)
+    UserRecipeState.objects.create(user=owner, recipe=other_recipe, is_favorite=True)
+    before = checklist_items(client, plan)
+    for item in before:
+        assert mark_purchased(client, plan, item).status_code == 204
+
+    body = {
+        "start_date": "2027-04-12",
+        "duration_days": 1,
+        "enabled_meals": ["lunch", "dinner"],
+        "slots": [{"day_index": 0, "meal_type": "lunch", "recipe_id": recipe.id, "servings": 2}],
+        "version": 1,
+    }
+    url = f"{PLANS}{plan.id}/"
+    edited = client.put(url, body, format="json")
+    assert edited.status_code == 200
+    assert all(item["purchased"] for item in checklist_items(client, plan))
+    body["version"] = edited.json()["version"]
+    body["slots"].append(
+        {"day_index": 0, "meal_type": "dinner", "recipe_id": other_recipe.id, "servings": 2},
+    )
+    assert client.put(url, body, format="json").status_code == 200
+    results = {
+        item["name"]: (item["quantity"], item["purchased"])
+        for item in checklist_items(client, plan)
+    }
+    assert results == {
+        "Рис": ("300.000", False),
+        "Курица": ("300.000", True),
+        "Молоко": ("200.000", False),
+    }
