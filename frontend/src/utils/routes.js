@@ -1,4 +1,4 @@
-import {COOKING_TIMES, MEAL_LABELS} from '../constants.js';
+import {COOKING_TIMES, FAVORITE_SORTS, MEAL_LABELS} from '../constants.js';
 
 const VIEW_PATHS = {
   feed: '/',
@@ -17,15 +17,22 @@ export function isPrivateView(view) {
 export function readRoute({pathname, search}) {
   const view = PATH_VIEWS.get(pathname.replace(/\/$/, '') || '/') ?? 'feed';
   const params = new URLSearchParams(search);
-  if (view === 'recipes') {
+  if (view === 'recipes' || view === 'favorites') {
     const meal = params.get('meal');
     const time = Number(params.get('time'));
+    const query = params.get('q') ?? '';
+    const mealType = Object.hasOwn(MEAL_LABELS, meal) ? meal : '';
+    const maxTime = COOKING_TIMES.includes(time) ? time : 0;
+    if (view === 'favorites') {
+      const sort = params.get('sort');
+      return {view, favoriteFilters: {
+        query, meal: mealType, maxTime, sort: Object.hasOwn(FAVORITE_SORTS, sort) ? sort : 'added',
+      }};
+    }
     return {
       view,
       filters: {
-        catalogQuery: params.get('q') ?? '',
-        catalogMeal: Object.hasOwn(MEAL_LABELS, meal) ? meal : '',
-        catalogMaxTime: COOKING_TIMES.includes(time) ? time : 0,
+        catalogQuery: query, catalogMeal: mealType, catalogMaxTime: maxTime,
         catalogFavoritesOnly: params.get('favorites') === '1',
       },
     };
@@ -41,6 +48,13 @@ export function routeUrl(view, state, next) {
     if (state.catalogMeal) params.set('meal', state.catalogMeal);
     if (state.catalogMaxTime) params.set('time', state.catalogMaxTime);
     if (state.session.authenticated && state.catalogFavoritesOnly) params.set('favorites', '1');
+  }
+  if (view === 'favorites') {
+    const {query, meal, maxTime, sort} = state.favoriteFilters;
+    if (query) params.set('q', query);
+    if (meal) params.set('meal', meal);
+    if (maxTime) params.set('time', maxTime);
+    if (sort !== 'added') params.set('sort', sort);
   }
   if (view === 'auth' && isPrivateView(next)) params.set('next', next);
   return (VIEW_PATHS[view] ?? '/') + (params.size ? `?${params}` : '');

@@ -701,3 +701,85 @@ test('returning to plans shows loading before any stale slot buttons can be used
   plans.resolve([]);
   await navigating;
 });
+
+test('swipe clock updates in place, replaces the old deadline and expires on visibility change', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const browser = createBrowser('/');
+  browser.document = Object.assign(new EventTarget(), {hidden: false});
+  browser.matchMedia = () => ({matches: true});
+  const app = createApp({swipe: () => assert.fail('Guest called the server')}, browser);
+  app.setSession(guest);
+  app.state.initialLoading = false;
+  let now = 0;
+  app.now = () => now;
+  let removed = 0;
+  const number = {parentElement: {style: {setProperty() {}}}};
+  const description = {};
+  const nodes = {
+    '[data-swipe-seconds]': number, '[data-swipe-description]': description,
+    '[data-swipe-notice]': {remove() { removed++; }, contains: () => false},
+  };
+  app.root.querySelector = (selector) => app.state.lastSwipe ? nodes[selector] : null;
+
+  await app.swipe(1, 'dislike');
+  assert.equal(number.textContent, 5);
+  const html = app.root.innerHTML;
+  now = 1000;
+  t.mock.timers.tick(1000);
+  assert.equal(number.textContent, 4);
+  assert.match(description.textContent, /4 сек/);
+  assert.equal(app.root.innerHTML, html);
+
+  await app.swipe(2, 'dislike');
+  browser.document.hidden = true;
+  now = 5000;
+  browser.document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(number.textContent, 1);
+  now = 6000;
+  browser.document.hidden = false;
+  browser.document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(removed, 1);
+  assert.equal(app.state.lastSwipe, null);
+  await app.undoSwipe();
+  assert.deepEqual([...app.state.guestHidden], [1, 2]);
+});
+
+test('a late server rejection removes undo and refreshes both collections', async () => {
+  let refreshed = 0;
+  const app = createApp({
+    swipe: async () => ({undo_token: 'current', undo_remaining_ms: 4800}),
+    undoSwipe: async () => { throw new ApiError({status: 409}); },
+    getFeed: async () => { refreshed++; return {results: []}; },
+    getFavorites: async () => { refreshed++; return []; },
+  });
+  await app.swipe(1, 'like');
+  await app.undoSwipe();
+  assert.equal(refreshed, 4);
+  assert.equal(app.state.lastSwipe, null);
+  assert.match(app.messages.at(-1), /уже нельзя отменить/);
+});
+
+test('favorite filters survive reload and removing a bookmark updates the count without another read', async () => {
+  const browser = createBrowser('/favorites?q=%D0%B5%D0%B6&meal=lunch&time=30&sort=time');
+  const recipes = [
+    {id: 1, title: 'Ёжики', meal_types: ['lunch'], cooking_time_minutes: 28},
+    {id: 2, title: 'Ёжики с рисом', meal_types: ['lunch'], cooking_time_minutes: 17},
+    ...Array.from({length: 101}, (_, index) => ({
+      id: index + 3, title: 'Ёжики', cooking_time_minutes: 31, meal_types: ['lunch'],
+    })),
+  ];
+  let reads = 0;
+  const app = createApp({
+    getSession: async () => userA,
+    getFavorites: async () => { reads++; return recipes; },
+    setFavorite: async (id, value) => assert.deepEqual([id, value], [2, false]),
+  }, browser);
+  await app.start();
+  assert.match(app.root.innerHTML, /Найдено 2 из 103/);
+  assert.ok(app.root.innerHTML.indexOf('Ёжики с рисом') < app.root.innerHTML.lastIndexOf('Ёжики'));
+  await app.toggleFavorite(2);
+  assert.match(app.root.innerHTML, /Найдено 1 из 102/);
+  assert.doesNotMatch(app.root.innerHTML, /Ёжики с рисом/);
+  assert.equal(reads, 1);
+  assert.equal(browser.location.searchParams.get('sort'), 'time');
+});

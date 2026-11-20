@@ -209,11 +209,15 @@ main:focus { outline: none; }
   align-items: center;
   gap: 0.5rem 1rem;
   flex-wrap: wrap;
-  width: fit-content;
-  margin-bottom: 1.25rem;
+  position: fixed;
+  z-index: 3;
+  inset: auto var(--gutter) 1.25rem auto;
+  max-width: calc(100% - 2 * var(--gutter));
   padding: 0.5rem 0.75rem;
-  border-inline-start: 2px solid var(--accent);
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--accent);
   background: var(--paper-deep);
+  box-shadow: 0 6px 20px #2c251a22;
 }
 
 .button,
@@ -820,4 +824,24 @@ dialog:has(.slot-picker) { width: min(54rem, calc(100% - 2rem)); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+.swipe-clock {
+  --swipe-progress: 1;
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--swipe-progress) * 1turn), var(--line) 0);
+  font-variant-numeric: tabular-nums;
+}
+
+.swipe-clock span {
+  display: grid;
+  place-items: center;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  border-radius: inherit;
+  background: var(--paper-deep);
 }

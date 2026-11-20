@@ -18,3 +18,10 @@ export const VIEW_TITLES = {
   shopping: 'Покупки',
   auth: 'Аккаунт',
 };
+
+
+export const FAVORITE_SORTS = {
+  added: 'По дате добавления',
+  title: 'По названию',
+  time: 'По времени приготовления',
+};

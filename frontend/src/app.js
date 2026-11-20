@@ -1,22 +1,27 @@
 import {ApiError, apiErrorMessage} from './api/errors.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {MEAL_LABELS} from './constants.js';
-import {clearPrivateState, createInitialState, setFavorites} from './state/state.js';
+import {clearPrivateState, createInitialState, defaultFavoriteFilters, setFavorites} from './state/state.js';
 import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
 import {compatibleFavorites, invalidateShopping, slotFor} from './utils/plans.js';
 import {isPrivateView, readRoute, routeUrl} from './utils/routes.js';
+import {UNDO_WINDOW_MS} from './utils/swipe-notice.js';
 import {renderShell} from './views/shell.js';
+import {favoriteSearchCount, renderFavoriteResults} from './views/favorites-view.js';
 import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
 import {pickedRecipeTitle, renderPickerResults, renderSlotPicker} from './views/slot-picker.js';
 
 export class FoodTinderApp {
-  constructor({root, dialog, toast, api, browser = globalThis.window}) {
+  constructor({root, dialog, toast, api, browser = globalThis.window, now = Date.now}) {
     this.root = root;
     this.dialog = dialog;
     this.toastElement = toast;
     this.api = api;
     this.browser = browser;
+    this.now = now;
+    this.swipeTimer = null;
+    this.browser?.document?.addEventListener('visibilitychange', () => this.updateSwipeNotice());
     this.initializingSession = false;
     this.authReturnView = null;
     this.state = createInitialState();
@@ -55,7 +60,46 @@ export class FoodTinderApp {
   }
 
   render() {
+    this.expireSwipeNotice();
     this.root.innerHTML = renderShell(this.state);
+    this.updateSwipeNotice();
+  }
+
+  clearSwipeNotice() {
+    clearTimeout(this.swipeTimer);
+    this.swipeTimer = null;
+    this.state.lastSwipe = null;
+  }
+
+  expireSwipeNotice() {
+    if (this.state.lastSwipe?.deadline > this.now()) return;
+    const notice = this.root.querySelector?.('[data-swipe-notice]');
+    const focused = notice?.contains(this.browser?.document?.activeElement);
+    this.clearSwipeNotice();
+    notice?.remove();
+    if (focused) this.focusFeedRecipe() || this.root.querySelector('#main-content')?.focus();
+  }
+
+  updateSwipeNotice() {
+    clearTimeout(this.swipeTimer);
+    this.expireSwipeNotice();
+    if (!this.state.lastSwipe) return;
+    const remaining = this.state.lastSwipe.deadline - this.now();
+    const seconds = Math.ceil(remaining / 1000);
+    const number = this.root.querySelector?.('[data-swipe-seconds]');
+    const description = this.root.querySelector?.('[data-swipe-description]');
+    if (number) {
+      if (number.textContent !== String(seconds)) number.textContent = seconds;
+      number.parentElement.style.setProperty('--swipe-progress', remaining / UNDO_WINDOW_MS);
+    }
+    if (description) {
+      const text = `До окончания отмены — ${seconds} сек.`;
+      if (description.textContent !== text) description.textContent = text;
+    }
+    const reducedMotion = this.browser?.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const interval = reducedMotion || this.browser?.document?.hidden ? 1000 : 32;
+    this.swipeTimer = setTimeout(() => this.updateSwipeNotice(), Math.min(interval, remaining % 1000 || 1000));
+    this.swipeTimer?.unref?.();
   }
 
   sessionContext() {
@@ -83,6 +127,7 @@ export class FoodTinderApp {
         this.mutation = null;
         this.state.busy = null;
       }
+      this.clearSwipeNotice();
       clearPrivateState(this.state);
       this.state.feed = null;
       this.state.feedStatus = 'idle';
@@ -341,9 +386,10 @@ export class FoodTinderApp {
     return this.navigate('auth', {next: isPrivateView(this.state.view) ? this.state.view : null});
   }
 
-  applyRoute({view, filters, next}) {
+  applyRoute({view, filters, favoriteFilters, next}) {
     this.state.view = view;
     this.authReturnView = next ?? null;
+    if (favoriteFilters) this.state.favoriteFilters = favoriteFilters;
     if (filters) {
       Object.assign(this.state, filters, {
         catalogFavoritesOnly: this.state.session.authenticated && filters.catalogFavoritesOnly,
@@ -431,6 +477,13 @@ export class FoodTinderApp {
       this.root.querySelector?.('#recipe-search')?.focus();
       return;
     }
+    if (action === 'reset-favorites') {
+      this.state.favoriteFilters = defaultFavoriteFilters();
+      this.writeRoute(true);
+      this.render();
+      this.root.querySelector?.('#favorite-search')?.focus();
+      return;
+    }
     if (action === 'retry-favorites') return this.loadFavorites();
     if (action === 'retry-plans') return this.loadPlans();
     if (action === 'retry-active-plan') return this.loadActivePlan();
@@ -478,17 +531,22 @@ export class FoodTinderApp {
       this.updatePickerResults();
       return;
     }
+    if (event.target.dataset.input === 'favorite-search') {
+      this.state.favoriteFilters.query = event.target.value;
+      return this.updateRecipeResults('favorites');
+    }
     if (event.target.dataset.input !== 'recipe-search') return;
     this.state.catalogQuery = event.target.value;
-    this.updateCatalogResults();
+    this.updateRecipeResults('catalog');
   }
 
-  updateCatalogResults() {
-    if (this.state.view === 'recipes') this.writeRoute(true);
-    const results = this.root.querySelector('[data-catalog-results]');
-    if (results) results.innerHTML = renderCatalogResults(this.state);
-    const count = this.root.querySelector('[data-catalog-count]');
-    if (count) count.textContent = catalogSearchCount(this.state);
+  updateRecipeResults(scope) {
+    const favorites = scope === 'favorites';
+    this.writeRoute(true);
+    const results = this.root.querySelector(`[data-${scope}-results]`);
+    if (results) results.innerHTML = favorites ? renderFavoriteResults(this.state) : renderCatalogResults(this.state);
+    const count = this.root.querySelector(`[data-${scope}-count]`);
+    if (count) count.textContent = favorites ? favoriteSearchCount(this.state) : catalogSearchCount(this.state);
   }
 
   async onChange(event) {
@@ -499,7 +557,15 @@ export class FoodTinderApp {
       if (change === 'catalog-favorites' && this.state.session.authenticated) {
         this.state.catalogFavoritesOnly = event.target.checked;
       }
-      this.updateCatalogResults();
+      this.updateRecipeResults('catalog');
+      return;
+    }
+    if (['favorites-meal', 'favorites-time', 'favorites-sort'].includes(change)) {
+      const {value} = event.target;
+      if (change === 'favorites-meal') this.state.favoriteFilters.meal = value;
+      if (change === 'favorites-time') this.state.favoriteFilters.maxTime = Number(value);
+      if (change === 'favorites-sort') this.state.favoriteFilters.sort = value;
+      this.updateRecipeResults('favorites');
       return;
     }
     if (this.state.busy) return;
@@ -570,28 +636,34 @@ export class FoodTinderApp {
     if (!this.state.session.authenticated) {
       if (action === 'dislike') {
         this.state.guestHidden.add(recipeId);
-        this.state.lastSwipe = {recipeId, message: 'Скрыто до перезагрузки'};
+        this.state.lastSwipe = {recipeId, message: 'Скрыто до перезагрузки', deadline: this.now() + UNDO_WINDOW_MS};
         this.render();
         this.focusUndo();
         return;
       }
       return this.showAuth('Войдите, чтобы оценивать рецепты.');
     }
-    let completed = false;
+    let succeeded = false;
     await this.runMutation(`recipe-${recipeId}`, async () => {
+      const started = this.now();
       const result = await this.api.swipe(recipeId, action);
       if (!this.isCurrentSession(context)) return;
       const message = action === 'like' ? 'Добавлено в избранное' : 'Скрыто до завтра';
-      this.state.lastSwipe = result?.undo_token ? {recipeId, token: result.undo_token, message} : null;
-      await Promise.all([
-        this.loadFeed(false),
-        action === 'like' ? this.loadFavorites(false) : undefined,
-      ]);
-      if (!this.isCurrentSession(context)) return;
-      completed = true;
-      if (this.state.view !== 'feed' || !this.state.lastSwipe) this.toast(message);
+      const deadline = Math.min(started + UNDO_WINDOW_MS, this.now() + (result?.undo_remaining_ms ?? UNDO_WINDOW_MS));
+      this.state.lastSwipe = result?.undo_token ? {recipeId, token: result.undo_token, message, deadline} : null;
+      if (this.state.feed) {
+        this.state.feed = {...this.state.feed, results: this.state.feed.results.filter(({id}) => id !== recipeId)};
+      }
+      succeeded = true;
+      if (!this.state.lastSwipe) this.toast(message);
     });
-    if (completed && this.isCurrentSession(context)) this.focusUndo();
+    if (!succeeded || !this.isCurrentSession(context)) return;
+    this.focusUndo();
+    await Promise.all([
+      this.loadFeed(false),
+      action === 'like' ? this.loadFavorites(false) : undefined,
+    ]);
+    if (this.isCurrentSession(context) && !this.state.busy) this.render();
   }
 
   focusUndo() {
@@ -599,12 +671,13 @@ export class FoodTinderApp {
   }
 
   async undoSwipe() {
+    this.expireSwipeNotice();
     const swipe = this.state.lastSwipe;
     if (!swipe || this.state.busy) return;
     const context = this.sessionContext();
     if (!context.authenticated) {
       this.state.guestHidden.delete(swipe.recipeId);
-      this.state.lastSwipe = null;
+      this.clearSwipeNotice();
       this.render();
       this.toast('Действие отменено');
       this.focusFeedRecipe();
@@ -620,7 +693,7 @@ export class FoodTinderApp {
         message = 'Это действие уже нельзя отменить';
       }
       if (!this.isCurrentSession(context)) return;
-      this.state.lastSwipe = null;
+      this.clearSwipeNotice();
       await Promise.all([this.loadFeed(false), this.loadFavorites(false)]);
       if (!this.isCurrentSession(context)) return;
       this.toast(message);
@@ -630,7 +703,10 @@ export class FoodTinderApp {
   }
 
   focusFeedRecipe() {
-    if (this.state.view === 'feed') this.root.querySelector?.('.feature-recipe [data-action="recipe-detail"]')?.focus();
+    const recipe = this.state.view === 'feed'
+      && this.root.querySelector?.('.feature-recipe [data-action="recipe-detail"]');
+    if (recipe) recipe.focus();
+    return Boolean(recipe);
   }
 
   async toggleFavorite(recipeId) {
@@ -640,8 +716,13 @@ export class FoodTinderApp {
     await this.runMutation(`recipe-${recipeId}`, async () => {
       await this.api.setFavorite(recipeId, shouldFavorite);
       if (!this.isCurrentSession(context)) return;
-      if (this.state.lastSwipe?.recipeId === recipeId) this.state.lastSwipe = null;
-      await this.loadFavorites(false);
+      if (this.state.lastSwipe?.recipeId === recipeId) this.clearSwipeNotice();
+      if (!shouldFavorite && this.state.favoritesStatus === 'ready') {
+        this.beginRequest('favorites');
+        setFavorites(this.state, this.state.favorites.filter(({id}) => id !== recipeId));
+      } else {
+        await this.loadFavorites(false);
+      }
       if (this.isCurrentSession(context)) this.toast(shouldFavorite ? 'Добавлено в избранное' : 'Удалено из избранного');
     });
   }

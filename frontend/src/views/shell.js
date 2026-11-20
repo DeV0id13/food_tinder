@@ -6,6 +6,7 @@ import {renderFeedView} from './feed-view.js';
 import {renderPlansView} from './plans-view.js';
 import {renderRecipesView} from './recipes-view.js';
 import {renderShoppingView} from './shopping-view.js';
+import {renderSwipeNotice} from '../utils/swipe-notice.js';
 import {plansUnavailable} from '../components/plans-error.js';
 
 const NAV_ITEMS = [
@@ -55,7 +56,7 @@ export function renderShell(state) {
         </button>
       </header>
       ${errorBanner(state)}
-      <main id="main-content" tabindex="-1">${viewContent(state)}</main>
+      <main id="main-content" tabindex="-1">${renderSwipeNotice(state.lastSwipe, state.busy)}${viewContent(state)}</main>
       <footer class="site-footer"><span>FoodTinder</span><a href="/assets/editorial/photo-credits.html">Авторы фотографий</a></footer>
     </div>`;
 }

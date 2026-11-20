@@ -1,3 +1,7 @@
+export function defaultFavoriteFilters() {
+  return {query: '', meal: '', maxTime: 0, sort: 'added'};
+}
+
 export function createInitialState() {
   return {
     initialLoading: true,
@@ -12,6 +16,7 @@ export function createInitialState() {
     catalogMeal: '',
     catalogMaxTime: 0,
     catalogFavoritesOnly: false,
+    favoriteFilters: defaultFavoriteFilters(),
     favorites: null,
     favoritesStatus: 'idle',
     favoriteIds: new Set(),
