@@ -1,9 +1,14 @@
 # FoodTinder: Yandex Cloud deployment
 
 The production deploy job is part of the same GitHub Actions CI graph.
-On a push to `master` (including a PR merge), all seven CI jobs run.
-After they pass, the deploy job **waits for the required reviewer approval**
-from the `production` GitHub Environment. Pull request runs never deploy.
+On a push to `master` (including a PR merge), all seven CI jobs run in parallel.
+The `frontend` job builds/tests the client and publishes its immutable SHA-tagged
+image; the `docker` job builds the backend once, scans that exact production
+image with Trivy, and publishes it with the same commit SHA **only after both
+Trivy scans pass**. Pull request and manual CI runs build and scan but never
+publish images or deploy. After **all seven checks** pass, the deploy job
+**waits for the required reviewer approval** from the `production` GitHub
+Environment. The deploy job never rebuilds an image.
 Configure and **save** Required reviewers before merging this change,
 otherwise the deploy job may start without approval.
 
@@ -57,22 +62,47 @@ accounts. For **temporary local/public-IP troubleshooting only**, use
 `SECURE_SSL_REDIRECT=false`, `SESSION_COOKIE_SECURE=false` and
 `CSRF_COOKIE_SECURE=false`. Do not use that HTTP setup for real accounts.
 
+## One-time volume ownership
+
+Production uses the unprivileged `app` user. The `staticfiles` and
+`recipe_photos` volumes must be writable by `app`. Existing servers that ran
+the earlier pipeline already have these permissions. On a **new deployment**,
+start PostgreSQL and initialize permissions once using the published master
+image (do not run a recursive chown on every release):
+
+```sh
+cd /opt/foodtinder
+sudo env IMAGE_TAG=<published-master-sha> docker compose -f compose.prod.yaml --env-file .env.prod up -d --wait postgres
+sudo env IMAGE_TAG=<published-master-sha> docker compose -f compose.prod.yaml --env-file .env.prod run --rm -T --user root web sh -c 'chown -R app:app /app/staticfiles /app/media/recipes'
+```
+
+The deploy job checks write access before migrations/collectstatic and fails
+with a clear error if ownership has not been initialized. No production data
+or volumes are deleted by the workflow.
+
 ## Deploy
 
-1. Merge an approved PR to `master`. Seven CI checks run automatically.
-2. After all seven succeed, the `deploy production` job waits for the
-   `production` Environment reviewer. Click **Review deployments** and approve.
+1. Merge an approved PR to `master`. Seven CI checks run automatically,
+   while the images are built in the `docker` and `frontend` jobs.
+2. The exact production backend image is scanned by Trivy before its SHA tag
+   can be pushed to GHCR. PRs never publish images.
+3. After **all seven** checks succeed, the `deploy production` job waits for
+   the `production` Environment reviewer. Click **Review deployments** and approve.
    No second CI run is required.
-3. The job builds and pushes images with immutable SHA tags, validates
-   Compose, pulls images, applies migrations and collects Django static files.
-4. For the temporary `SITE_ADDRESS=:80` configuration, the workflow also
-   checks the Caddy reverse proxy via localhost. For a real HTTPS domain,
-   verify public DNS, TLS and the browser separately.
-5. The deploy job is **not** triggered for pull requests or manual dispatch.
-   Treat the `production` Environment reviewer requirement as a critical
-   protection; it must be saved before merges.
-6. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
+4. The deploy job checks `origin/master` against the approved commit SHA,
+   pulls **only web and proxy** images, runs migrations and collectstatic in one
+   temporary container, and updates the web/proxy services without rebuilding.
+5. For the temporary `SITE_ADDRESS=:80` configuration, the workflow checks
+   Caddy via localhost. For a real HTTPS domain, also verify public DNS, TLS
+   and the browser separately.
+6. The deploy job is **not** triggered for pull requests or manual dispatch.
+   Keep required Environment reviewers and master branch protection enabled.
+7. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
    `sudo env IMAGE_TAG=...` rather than relying on exported shell variables.
+
+Routine application deployments deliberately do not `docker compose pull`
+PostgreSQL. Update PostgreSQL independently after a verified backup and
+maintenance planning. The scheduled `security.yml` Trivy re-scan stays enabled.
 
 Persistent named Docker volumes: `postgres_data`, `recipe_photos`,
 `staticfiles`, `caddy_data`, `caddy_config`. Never run `down -v` in

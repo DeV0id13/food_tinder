@@ -1,0 +1,32 @@
+# Dockerfile-specific context: a frontend/docs change must not invalidate Django layers.
+# Keep this file aligned with the shared .dockerignore rules.
+.git
+.env
+.env.*
+.venv
+venv
+.idea
+.vscode
+**/__pycache__
+**/*.py[cod]
+**/*.sqlite3*
+.pytest_cache
+.ruff_cache
+.coverage*
+htmlcov
+coverage.xml
+media
+staticfiles
+*.log
+*.tmp
+catalog-import
+**/node_modules
+**/dist
+**/.pnpm-store
+# Not needed by the backend application at runtime.
+frontend
+tests
+docs
+deploy
+.github
+.pre-commit-config.yaml
