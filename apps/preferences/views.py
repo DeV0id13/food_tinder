@@ -92,9 +92,11 @@ def swipes(request):
             if state.liked_at is None:
                 state.liked_at = now
             state.disliked_until = None
+            state.is_favorite = True
+            state.save(update_fields=("liked_at", "disliked_until", "is_favorite"))
         else:
             state.disliked_until = _next_midnight_utc(now)
-        state.save(update_fields=("liked_at", "disliked_until"))
+            state.save(update_fields=("disliked_until",))
 
     return _state_response(state)
 
