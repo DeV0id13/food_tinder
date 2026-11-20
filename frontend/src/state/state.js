@@ -38,12 +38,16 @@ export function createInitialState() {
     authTab: 'login',
     authNotice: null,
     registeredEmail: '',
+    account: null,
+    accountStatus: 'idle',
   };
 }
 
 export function clearPrivateState(state) {
   state.catalogFavoritesOnly = false;
   state.lastSwipe = null;
+  state.account = null;
+  state.accountStatus = 'idle';
   state.favorites = null;
   state.favoritesStatus = 'idle';
   state.favoriteIds = new Set();
