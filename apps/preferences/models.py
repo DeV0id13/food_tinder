@@ -18,6 +18,7 @@ class UserRecipeState(models.Model):
     liked_at = models.DateTimeField(null=True, blank=True)
     disliked_until = models.DateTimeField(null=True, blank=True)
     is_favorite = models.BooleanField(default=False)
+    favorited_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -37,3 +38,5 @@ class LastSwipe(models.Model):
     liked_at = models.DateTimeField(null=True)
     disliked_until = models.DateTimeField(null=True)
     is_favorite = models.BooleanField()
+    favorited_at = models.DateTimeField(null=True)
+    swiped_at = models.DateTimeField(null=True)

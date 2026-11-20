@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import Barrier
 
@@ -68,6 +68,7 @@ class TestPreferencesAPI:
             liked_at=BEFORE_MIDNIGHT,
             disliked_until=MIDNIGHT,
             is_favorite=was_favorite,
+            favorited_at=BEFORE_MIDNIGHT if was_favorite else None,
         )
         self.login(user)
         swipe = self.client.post(
@@ -81,7 +82,54 @@ class TestPreferencesAPI:
             MIDNIGHT,
             was_favorite,
         )
+        assert prior.favorited_at == (BEFORE_MIDNIGHT if was_favorite else None)
         assert self.client.post(UNDO, payload, format="json").status_code == 409
+
+    @pytest.mark.parametrize("elapsed_ms", [4999, 5000, 5001, None])
+    def test_undo_window_starts_at_the_swipe_and_excludes_legacy_tokens(
+        self, elapsed_ms, monkeypatch
+    ):
+        user, recipe = self.create_user(), self.create_recipe()
+        self.login(user)
+        clock = BEFORE_MIDNIGHT
+        monkeypatch.setattr("apps.preferences.views.django_timezone.now", lambda: clock)
+        swipe = self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+        )
+        assert swipe.json()["undo_remaining_ms"] == 5000
+        if elapsed_ms is None:
+            LastSwipe.objects.filter(user=user).update(swiped_at=None)
+        else:
+            clock += timedelta(milliseconds=elapsed_ms)
+        expected = 200 if elapsed_ms == 4999 else 409
+        assert (
+            self.client.post(
+                UNDO, {"undo_token": swipe.json()["undo_token"]}, format="json"
+            ).status_code
+            == expected
+        )
+        assert UserRecipeState.objects.filter(user=user, recipe=recipe).exists() == (
+            expected == 409
+        )
+
+    def test_bookmark_date_tracks_readdition_and_preserves_first_like(self, monkeypatch):
+        user, recipe = self.create_user(), self.create_recipe()
+        self.login(user)
+        clock = BEFORE_MIDNIGHT
+        monkeypatch.setattr("apps.preferences.views.django_timezone.now", lambda: clock)
+        self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+        )
+        clock += timedelta(minutes=5)
+        url = BASE + f"favorites/{recipe.id}/"
+        self.client.put(url, {"is_favorite": False}, format="json")
+        self.client.put(url, {"is_favorite": True}, format="json")
+        clock += timedelta(minutes=5)
+        self.client.put(url, {"is_favorite": True}, format="json")
+        date = self.client.get(BASE + "favorites/").json()["results"][0]["favorited_at"]
+        state = UserRecipeState.objects.get(user=user, recipe=recipe)
+        assert datetime.fromisoformat(date) == state.favorited_at == clock - timedelta(minutes=5)
+        assert state.liked_at == BEFORE_MIDNIGHT
 
     def test_latest_swipe_and_bookmark_changes_invalidate_tokens(self):
         user, first, second = self.create_user(), self.create_recipe(), self.create_recipe(number=2)

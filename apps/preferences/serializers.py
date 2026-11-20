@@ -46,3 +46,10 @@ class RecipeStateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserRecipeState
         fields = ("recipe_id", "liked_at", "disliked_until", "is_favorite")
+
+
+class FavoriteRecipeSerializer(RecipeSummarySerializer):
+    favorited_at = serializers.DateTimeField(read_only=True, allow_null=True)
+
+    class Meta(RecipeSummarySerializer.Meta):
+        fields = (*RecipeSummarySerializer.Meta.fields, "favorited_at")

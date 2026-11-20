@@ -5,6 +5,7 @@ import {validationMessages} from '../src/api/errors.js';
 import {renderFeedView, visibleFeedRecipes} from '../src/views/feed-view.js';
 import {renderRecipeDetail} from '../src/components/recipe-card.js';
 import {filterRecipes, renderRecipesView} from '../src/views/recipes-view.js';
+import {favoriteMatches, renderFavoritesView} from '../src/views/favorites-view.js';
 import {renderAuthView} from '../src/views/auth-view.js';
 import {renderShell} from '../src/views/shell.js';
 import {createInitialState, clearPrivateState} from '../src/state/state.js';
@@ -175,4 +176,23 @@ test('shopping categories match ingredient words, including yogurt and cucumbers
     ['Молочные продукты и яйца', ['Греческий йогурт']],
     ['Бакалея', ['Молотая корица']],
   ]);
+});
+
+test('favorite date and title sorting are deterministic and missing dates come last', () => {
+  const state = createInitialState();
+  Object.assign(state, {
+    session: {authenticated: true}, favoritesStatus: 'ready',
+    favorites: [
+      {id: 1, title: 'Яичница', favorited_at: '2026-11-20T00:00:00Z'},
+      {id: 2, title: 'Борщ', favorited_at: null},
+      {id: 3, title: 'Ёжики', favorited_at: '2026-11-21T00:00:00Z'},
+    ],
+  });
+  assert.deepEqual(favoriteMatches(state).map(({id}) => id), [3, 1, 2]);
+  state.favoriteFilters.sort = 'title';
+  assert.deepEqual(favoriteMatches(state).map(({id}) => id), [2, 3, 1]);
+  state.favoriteFilters.query = 'нет совпадений';
+  assert.match(renderFavoritesView(state), /Ничего не найдено/);
+  state.favorites = [];
+  assert.match(renderFavoritesView(state), /В избранном пусто/);
 });

@@ -23,12 +23,20 @@ class MealPlan(models.Model):
         on_delete=models.CASCADE,
         related_name="meal_plans",
     )
+    title = models.CharField(max_length=120, blank=True, default="")
+    version = models.PositiveBigIntegerField(default=1)
+    creation_key = models.UUIDField(null=True, editable=False)
+    creation_digest = models.CharField(max_length=64, blank=True, default="", editable=False)
     start_date = models.DateField()
     duration_days = models.PositiveSmallIntegerField()
     enabled_meals = models.JSONField(validators=[validate_enabled_meals])
 
     class Meta:
         constraints = [
+            models.UniqueConstraint(
+                fields=("user", "creation_key"),
+                name="planning_user_creation_key_unique",
+            ),
             models.CheckConstraint(
                 condition=Q(duration_days__in=list(ALLOWED_DURATIONS)),
                 name="planning_duration_in_1_3_7",
