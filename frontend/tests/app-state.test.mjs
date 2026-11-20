@@ -272,7 +272,7 @@ for (const plansAfter of [[savedPlan(2)], []]) {
         return reads.length === 1 ? stale.promise : Promise.resolve(fresh);
       },
     });
-    app.confirm = () => true;
+    app.askConfirmation = async () => true;
     Object.assign(app.state, {
       initialLoading: false, view: 'plans', plans: [savedPlan(1), ...plansAfter],
       plansStatus: 'ready', shoppingPlanId: 1,
@@ -824,12 +824,15 @@ test('unsaved navigation can be canceled and an accepted Back keeps the draft fo
   app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Мой черновик'}});
   const reload = new Event('beforeunload', {cancelable: true});
   assert.equal(browser.dispatchEvent(reload), false);
-  browser.confirm = () => false;
   browser.history.back();
+  assert.match(app.dialog.innerHTML, /Сохранить и перейти/);
+  assert.equal(app.dialog.open, true);
   assert.equal(browser.location.search, '?plan_id=1');
   assert.equal(app.state.planDraft.plan.title, 'Мой черновик');
-  browser.confirm = () => true;
+  app.dialog.dispatchEvent(new Event('cancel', {cancelable: true}));
+  assert.equal(app.dialog.open, false);
   browser.history.back();
+  await app.resolveNavigationDecision(false);
   assert.equal(browser.location.search, '');
   browser.history.forward();
   await new Promise(setImmediate);
@@ -862,7 +865,7 @@ test('duplicate uses eligible source slots only, writes no plan and clears priva
   assert.doesNotMatch(app.root.innerHTML, /Личный рецепт/);
 });
 
-test('shopping from a dirty plan offers save or discard and opens the selected plan', async () => {
+test('shopping uses the same decision and preserves the draft and selected plan', async () => {
   const original = savedPlan(2);
   const browser = createBrowser('/plans?plan_id=2');
   const shoppingReads = [];
@@ -873,17 +876,17 @@ test('shopping from a dirty plan offers save or discard and opens the selected p
     getShoppingList: async (id) => { shoppingReads.push(id); return {plan_id: id, items: []}; },
   }, browser);
   await app.start();
-  app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Будет отменено'}});
+  app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Останется в черновике'}});
   await app.openPlanShopping(2);
   assert.equal(app.state.view, 'plans');
-  assert.match(app.dialog.innerHTML, /Сохранить и открыть покупки/);
+  assert.match(app.dialog.innerHTML, /Сохранить и перейти/);
   assert.deepEqual(shoppingReads, []);
-  await app.resolveShoppingDecision('discard-and-shop');
+  await app.resolveNavigationDecision(false);
   assert.equal(browser.location.pathname + browser.location.search, '/shopping?plan_id=2');
   assert.deepEqual(shoppingReads, [2]);
   browser.history.back();
   await new Promise(setImmediate);
-  assert.equal(app.state.planDraft.plan.title, '');
+  assert.equal(app.state.planDraft.plan.title, 'Останется в черновике');
 });
 
 test('shortening a draft asks before dropping occupied days and keeps saved slots untouched', async () => {
@@ -895,10 +898,10 @@ test('shortening a draft asks before dropping occupied days and keeps saved slot
   app.state.initialLoading = false;
   editSavedPlan(app, original);
   const duration = {dataset: {change: 'plan-duration'}, value: '1'};
-  app.confirm = () => false;
+  app.askConfirmation = async () => false;
   await app.onChange({target: duration});
   assert.equal(app.state.planDraft.plan.duration_days, 3);
-  app.confirm = (warning) => {
+  app.askConfirmation = async (warning) => {
     assert.match(warning, /удалены блюда · 1/);
     return true;
   };
@@ -954,10 +957,10 @@ test('auto-fill refuses to overwrite existing draft without confirmation and kee
     ],
   });
   app.state.planDraft = draft;
-  app.confirm = () => false;
+  app.askConfirmation = async () => false;
   await app.autoFillPlan({replace: true});
   assert.equal(draft.plan.slots[0].recipe_id, 5);
-  app.confirm = () => true;
+  app.askConfirmation = async () => true;
   await app.autoFillPlan({replace: true});
   assert.equal(draft.plan.slots[0].recipe_id, 6);
   assert.equal(draft.dirty, true);
@@ -995,4 +998,232 @@ test('registration sends first name with email and password', async () => {
   await app.register({first_name: 'Алиса', email: 'alice@example.com', password: 'Valid_pass123'});
   assert.equal(payload.first_name, 'Алиса');
   assert.equal(app.state.registeredEmail, 'alice@example.com');
+});
+
+function editTitle(app, value) {
+  app.onInput({target: {dataset: {input: 'plan-title'}, value}});
+}
+
+function unloadIsBlocked(browser) {
+  return !browser.dispatchEvent(new Event('beforeunload', {cancelable: true}));
+}
+
+test('beforeunload is registered exactly while the active draft is dirty, including after reload', async () => {
+  const browser = createBrowser('/plans?plan_id=1');
+  const original = savedPlan();
+  const api = {getSession: async () => userA, getPlan: async () => original,
+    updatePlan: async (_, data) => ({...original, ...data, version: 2})};
+  const app = createApp(api, browser);
+  await app.start();
+  assert.equal(unloadIsBlocked(browser), false);
+  editTitle(app, 'Первая правка');
+  assert.equal(unloadIsBlocked(browser), true);
+  editTitle(app, '');
+  assert.equal(unloadIsBlocked(browser), false);
+  editTitle(app, 'Последняя правка');
+  const reloaded = createApp(api, browser);
+  // A real reload removes listeners attached to the old document.
+  browser.removeEventListener('beforeunload', app.confirmUnload);
+  await reloaded.start();
+  assert.match(reloaded.root.innerHTML, /Восстановлен несохранённый черновик/);
+  assert.equal(reloaded.state.planDraft.plan.title, 'Последняя правка');
+  assert.equal(unloadIsBlocked(browser), true);
+  await reloaded.savePlan();
+  assert.equal(unloadIsBlocked(browser), false);
+  assert.match(reloaded.root.innerHTML, /Сохранено/);
+  editTitle(reloaded, 'Удаляемая правка');
+  const discarding = reloaded.discardDraft();
+  assert.match(reloaded.dialog.innerHTML, /Удалить несохранённые изменения/);
+  await reloaded.onClick({target: {closest: () => ({dataset: {action: 'accept-confirmation'}})}});
+  await discarding;
+  assert.equal(unloadIsBlocked(browser), false);
+  assert.equal(reloaded.planDrafts.get(userA.id, 1), null);
+});
+
+test('new drafts restore after reload without opening a new plan or changing the creation key', async () => {
+  const browser = createBrowser('/plans?draft=new');
+  const api = {getSession: async () => userA, createPlan: () => assert.fail('Reload sent a plan write')};
+  const app = createApp(api, browser);
+  await app.start();
+  editTitle(app, 'Новый черновик после обновления');
+  const key = app.state.planDraft.creationKey;
+  const reloaded = createApp(api, browser);
+  await reloaded.start();
+  assert.match(reloaded.root.innerHTML, /Восстановлен несохранённый черновик/);
+  assert.equal(reloaded.state.planDraft.plan.title, 'Новый черновик после обновления');
+  assert.equal(reloaded.state.planDraft.creationKey, key);
+});
+
+for (const [count, view, options] of [
+  [1, 'feed'], [2, 'recipes'], [5, 'favorites'], [5, 'auth'], [5, 'plans', {planMode: 'list'}],
+  [5, 'plans', {planMode: 'edit', planId: 2}], [5, 'shopping', {shoppingPlanId: 1}],
+]) {
+  test(`after ${count} edits, ${view} uses one dialog and keeps all changes without a write`, async () => {
+    const browser = createBrowser('/plans?plan_id=1');
+    browser.confirm = () => assert.fail('Internal navigation opened a system dialog');
+    const api = {
+      getSession: async () => userA, getPlan: async (id) => savedPlan(id), getPlans: async () => [savedPlan()],
+      getRecipes: async () => [], getShoppingList: async (id) => ({plan_id: id, items: []}),
+      updatePlan: () => assert.fail('Leaving without saving sent a plan write'),
+    };
+    const app = createApp(api, browser);
+    await app.start();
+    for (let i = 1; i <= count; i++) editTitle(app, `Правка ${i}`);
+    await app.navigate(view, options);
+    await app.navigate('feed');
+    assert.equal(app.navigationDecision.destination.view, view);
+    assert.equal(app.dialog.open, true);
+    assert.equal(browser.location.search, '?plan_id=1');
+    await app.resolveNavigationDecision(false);
+    assert.equal(app.dialog.open, false);
+    assert.equal(app.state.view, view);
+    assert.equal(app.planDrafts.get(userA.id, 1).plan.title, `Правка ${count}`);
+    assert.equal(unloadIsBlocked(browser), false);
+  });
+}
+
+for (const error of [networkError(), new ApiError({status: 409}), new ApiError({status: 403, type: 'auth'}),
+  new ApiError({status: 400, type: 'validation'})]) {
+  test(`save and leave error (${error.status || error.type}) keeps route, undoable content and storage`, async () => {
+    const browser = createBrowser('/plans?plan_id=1');
+    const write = deferred();
+    let writes = 0;
+    const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan(),
+      updatePlan: () => { writes++; return write.promise; }}, browser);
+    await app.start();
+    editTitle(app, 'Мой рацион');
+    await app.navigate('auth');
+    const choosing = app.resolveNavigationDecision(true);
+    await app.resolveNavigationDecision(true);
+    await app.navigate('feed');
+    assert.equal(writes, 1);
+    assert.match(app.root.innerHTML, /Сохраняем рацион…/);
+    write.reject(error);
+    await choosing;
+    assert.equal(browser.location.pathname + browser.location.search, '/plans?plan_id=1');
+    assert.equal(app.state.planDraft.plan.title, 'Мой рацион');
+    assert.equal(app.planDrafts.get(userA.id, 1).plan.title, 'Мой рацион');
+    assert.ok(app.state.error);
+    await app.navigate('recipes');
+    assert.equal(app.dialog.open, true);
+  });
+}
+
+test('save and leave creates a new plan before opening its shopping list', async () => {
+  const browser = createBrowser('/plans?draft=new');
+  const app = createApp({
+    getSession: async () => userA, getPlans: async () => [savedPlan(8)],
+    createPlan: async (payload) => ({...payload, id: 8, version: 1}),
+    getShoppingList: async (id) => ({plan_id: id, items: []}),
+  }, browser);
+  await app.start();
+  editTitle(app, 'Поход за продуктами');
+  await app.navigate('shopping');
+  assert.match(app.dialog.innerHTML, /Покупки доступны после сохранения/);
+  assert.doesNotMatch(app.dialog.innerHTML, /Перейти без сохранения/);
+  await app.resolveNavigationDecision(true);
+  assert.equal(browser.location.pathname + browser.location.search, '/shopping?plan_id=8');
+  assert.equal(app.state.shopping.plan_id, 8);
+  assert.equal(app.planDrafts.get(userA.id, null), null);
+});
+
+test('transfer and undo use draft storage, older transfers cannot overwrite new edits', async () => {
+  const browser = createBrowser('/plans?plan_id=1');
+  const recipe = {id: 10, title: 'Рагу', meal_types: ['lunch'], image_url: '/media/10.webp'};
+  const update = [];
+  const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan(),
+    getFavorites: async () => [recipe],
+    updatePlan: async (id, payload) => {
+      update.push(payload);
+      return {...payload, id, version: 2};
+    },
+  }, browser);
+  await app.start();
+  const source = {type: 'favorite', recipe_id: recipe.id};
+  const lunch = {day_index: 0, meal_type: 'lunch'};
+  const add = () => app.applyTransfer(app.transferSource(source), lunch);
+  assert.equal(add().result, 'added');
+  assert.equal(unloadIsBlocked(browser), true);
+  assert.equal(app.planDrafts.get(userA.id, 1).plan.slots[0].recipe_id, 10);
+  assert.deepEqual(update, []);
+  app.undoTransfer();
+  assert.equal(unloadIsBlocked(browser), false);
+  assert.deepEqual(app.state.planDraft.plan.slots, []);
+  assert.equal(add().result, 'added');
+  const previousContext = app.transferSource(source);
+  editTitle(app, 'Новая правка');
+  app.undoTransfer();
+  assert.equal(app.state.planDraft.plan.slots.length, 1);
+  assert.equal(app.applyTransfer(previousContext, {...lunch, day_index: 1}).result, 'blocked');
+  assert.deepEqual(update, []);
+  await app.savePlan();
+  assert.equal(update.length, 1);
+  assert.deepEqual(update[0].slots, [{...lunch, recipe_id: 10, servings: 1}]);
+});
+
+test('session switch cancels the dialog and cannot commit a destination for the old user', async () => {
+  const browser = createBrowser('/plans?plan_id=1');
+  const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan()}, browser);
+  await app.start();
+  editTitle(app, 'Первый аккаунт');
+  await app.navigate('recipes');
+  assert.equal(app.dialog.open, true);
+  app.setSession(userB);
+  await app.resolveNavigationDecision(false);
+  assert.equal(app.dialog.open, false);
+  assert.equal(app.state.view, 'plans');
+  assert.equal(app.planDrafts.get(userA.id, 1), null);
+  assert.equal(unloadIsBlocked(browser), false);
+});
+
+test('Forward asks before leaving a dirty plan and replays the original destination once', async () => {
+  const browser = createBrowser('/plans?plan_id=1');
+  const app = createApp({
+    getSession: async () => userA,
+    getPlan: async (id) => savedPlan(id),
+    getRecipes: async () => [],
+    updatePlan: async (id, data) => ({...savedPlan(id), ...data, version: 2}),
+  }, browser);
+  await app.start();
+  await app.navigate('recipes');
+  browser.history.back();
+  await new Promise(setImmediate);
+  editTitle(app, 'Сохранить перед переходом вперёд');
+  browser.history.forward();
+  assert.equal(browser.location.search, '?plan_id=1');
+  assert.equal(app.dialog.open, true);
+  browser.history.forward();
+  assert.equal(browser.location.search, '?plan_id=1');
+  await app.resolveNavigationDecision(true);
+  assert.equal(browser.location.pathname, '/recipes');
+  assert.equal(app.dialog.open, false);
+  browser.history.back();
+  assert.equal(browser.location.search, '?plan_id=1');
+});
+
+test('a stale auto-fill response cannot replace later changes to editor settings', async () => {
+  const read = deferred();
+  const app = createApp({getFavorites: () => read.promise});
+  editSavedPlan(app, savedPlan());
+  const generating = app.autoFillPlan();
+  await app.changePlanSettings({dataset: {change: 'plan-duration'}, value: '1'});
+  read.resolve([{id: 4, title: 'Суп', meal_types: ['lunch']}]);
+  await generating;
+  assert.equal(app.state.planDraft.plan.duration_days, 1);
+  assert.deepEqual(app.state.planDraft.plan.slots, []);
+});
+
+test('session expiry protects the draft until the original account signs in again', async () => {
+  const browser = createBrowser('/plans?plan_id=1');
+  const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan()}, browser);
+  await app.start();
+  editTitle(app, 'Черновик после истечения сессии');
+  app.setSession(guest);
+  assert.equal(app.state.planDraft, null);
+  assert.equal(unloadIsBlocked(browser), false);
+  assert.equal(app.planDrafts.get(userA.id, 1).plan.title, 'Черновик после истечения сессии');
+  app.setSession(userA);
+  await app.openPlanEditor('edit', 1);
+  assert.equal(app.state.planDraft.plan.title, 'Черновик после истечения сессии');
+  assert.equal(app.state.restoredDraft, true);
 });

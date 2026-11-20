@@ -2,7 +2,7 @@ import {calendarDay, isoToday} from './format.js';
 import {MEALS} from '../constants.js';
 
 export function compatibleFavorites(favorites, mealType) {
-  return (favorites || []).filter((recipe) => recipe.meal_types?.includes(mealType));
+  return (favorites || []).filter((recipe) => recipe.is_active !== false && recipe.meal_types?.includes(mealType));
 }
 
 export function slotFor(plan, dayIndex, mealType) {
@@ -72,7 +72,7 @@ export function makePlanDraft(saved = null) {
     title: '', start_date: isoToday(), duration_days: 3, enabled_meals: ['breakfast', 'lunch', 'dinner'], slots: [],
   };
   return {
-    plan, dirty: false, creationKey: saved ? null : creationKey(), omitted: 0, duplicate: false,
+    plan, initialContent: saved ? undefined : planContentKey(plan), dirty: false, creationKey: saved ? null : creationKey(), omitted: 0, duplicate: false,
     generationServings: saved?.slots?.[0]?.servings || 1,
     generationRotation: 0, generationNotice: '',
   };
@@ -95,6 +95,13 @@ export function duplicatePlanDraft(source, favorites) {
   draft.omitted = source.slots.length - slots.length;
   draft.generationServings = slots[0]?.servings || 1;
   return draft;
+}
+
+export function planContentKey(plan) {
+  const {title, enabled_meals, start_date, duration_days, slots} = planDraftPayload({plan});
+  return JSON.stringify([title, start_date, duration_days, [...enabled_meals].sort(),
+    slots.map(({day_index, meal_type, recipe_id, servings}) =>
+      [day_index, meal_type, recipe_id, servings].join(':')).sort()]);
 }
 
 export function planDraftPayload(draft) {

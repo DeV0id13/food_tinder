@@ -14,7 +14,11 @@ export class PlanDrafts {
     const key = this.key(userId, planId);
     if (this.memory.has(key)) return this.memory.get(key);
     try {
-      return JSON.parse(this.browser?.sessionStorage?.getItem(key) || 'null');
+      const draft = JSON.parse(this.browser?.sessionStorage?.getItem(key) || 'null');
+      const plan = draft?.plan;
+      if (!plan || (plan.id ?? null) !== (planId ?? null) || typeof plan.start_date !== 'string'
+        || !Array.isArray(plan.slots) || !Array.isArray(plan.enabled_meals)) return null;
+      return draft;
     } catch {
       return null;
     }
@@ -24,9 +28,12 @@ export class PlanDrafts {
     const key = this.key(userId, planId);
     this.memory.set(key, draft);
     try {
-      this.browser?.sessionStorage?.setItem(key, JSON.stringify(draft));
+      const storage = this.browser?.sessionStorage;
+      if (!storage) return false;
+      storage.setItem(key, JSON.stringify(draft));
+      return true;
     } catch {
-      // The current page can still keep the draft if tab storage is unavailable.
+      return false;
     }
   }
 

@@ -27,6 +27,8 @@ export function createInitialState() {
     plansError: null,
     planMode: 'list',
     planDraft: null,
+    restoredDraft: false,
+    draftStorageUnavailable: false,
     activePlanId: null,
     activePlan: null,
     activePlanStatus: 'idle',
@@ -56,6 +58,8 @@ export function clearPrivateState(state) {
   state.plansError = null;
   state.planMode = 'list';
   state.planDraft = null;
+  state.restoredDraft = false;
+  state.draftStorageUnavailable = false;
   state.activePlanId = null;
   state.activePlan = null;
   state.activePlanStatus = 'idle';
