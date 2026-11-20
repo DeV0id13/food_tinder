@@ -56,3 +56,19 @@ test('feed always requests the first page', async () => {
   assert.equal(captured.path, 'preferences/feed/');
   assert.deepEqual(captured.options.query, {limit: 30, offset: 0});
 });
+
+test('account API methods use strict authenticated endpoints and expected HTTP methods', async () => {
+  const calls = [];
+  const client = {request: async (path, options = {}) => {
+    calls.push({path, options});
+    return {email: 'new@example.com', first_name: 'Иван', last_name: 'Иванов'};
+  }};
+  const api = new RealApi(client);
+  await api.getAccount();
+  await api.updateAccount({first_name: 'Иван', last_name: 'Иванов'});
+  await api.changeEmail({email: 'new@example.com', current_password: 'Valid_pass123'});
+  assert.deepEqual(calls.map(({path, options}) => [path, options.method || 'GET']), [
+    ['auth/account/', 'GET'], ['auth/account/', 'PATCH'], ['auth/account/email/', 'POST'],
+  ]);
+  assert.equal(calls[2].options.body.current_password, 'Valid_pass123');
+});
