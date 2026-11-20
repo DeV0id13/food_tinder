@@ -1,12 +1,13 @@
 import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
-import {formatDate, formatQuantity, formatUnit} from '../utils/format.js';
+import {formatQuantity, formatUnit} from '../utils/format.js';
 import {renderPlansError} from '../components/plans-error.js';
+import {planTitle} from '../utils/plans.js';
 import {groupShoppingItems} from '../utils/shopping.js';
 
 function planSelect(state) {
   return `<label class="select-label">Рацион
     <select data-change="shopping-plan" ${state.busy ? 'disabled' : ''}>
-      ${state.plans.map((plan) => `<option value="${plan.id}" ${Number(state.shoppingPlanId) === plan.id ? 'selected' : ''}>${escapeHtml(formatDate(plan.start_date))}, ${plan.duration_days} дн. (№ ${plan.id})</option>`).join('')}
+      ${state.plans.map((plan) => `<option value="${plan.id}" ${Number(state.shoppingPlanId) === plan.id ? 'selected' : ''}>${escapeHtml(planTitle(plan))}</option>`).join('')}
     </select>
   </label>`;
 }
@@ -60,7 +61,7 @@ export function renderShoppingView(state) {
           <button class="button button-secondary button-small" data-action="refresh-shopping" ${disabled}>Обновить</button>
         </header>
         ${items.length ? checklist(state, items) : `<div class="compact-empty"><b>Список покупок пуст</b>
-          <span>Добавьте блюда в выбранный рацион.</span><button class="text-button" data-action="open-plans">Открыть рационы</button>
+          <span>Добавьте блюда в выбранный рацион.</span><button class="text-button" data-action="edit-plan" data-plan-id="${state.shoppingPlanId}">Открыть рацион</button>
         </div>`}
         ${purchased ? `<button class="button button-small button-ghost" data-action="clear-purchases"
           data-plan-id="${state.shopping.plan_id}" ${disabled}>Снять все отметки</button>` : ''}

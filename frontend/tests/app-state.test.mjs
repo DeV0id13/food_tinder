@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {FoodTinderApp} from '../src/app.js';
 import {ApiError} from '../src/api/errors.js';
 import {RealApi} from '../src/api/real-api.js';
+import {makePlanDraft} from '../src/utils/plans.js';
 import {setFavorites} from '../src/state/state.js';
 
 const userA = {authenticated: true, id: 1, email: 'a@example.com'};
@@ -15,6 +16,17 @@ function deferred() {
   let reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return {promise, resolve, reject};
+}
+
+function savedPlan(id = 1, slots = []) {
+  return {id, title: '', version: 1, start_date: '2026-11-20', duration_days: 3, enabled_meals: ['lunch'], slots};
+}
+
+function editSavedPlan(app, plan) {
+  Object.assign(app.state, {
+    view: 'plans', planMode: 'edit', activePlan: plan,
+    activePlanId: plan.id, activePlanStatus: 'ready', planDraft: makePlanDraft(plan),
+  });
 }
 
 function createApp(overrides = {}, browser) {
@@ -91,39 +103,37 @@ test('a newer request for the same plan wins even when the selection ID has not 
   assert.deepEqual(app.state.activePlan.slots, ['new']);
 });
 
-test('plan mutations and export refuse a mismatch between displayed and selected data', async () => {
+test('plan save and shopping export refuse a mismatch between displayed and selected data', async () => {
   const calls = [];
-  const app = createApp(Object.fromEntries(['putSlot', 'deleteSlot', 'deletePlan', 'downloadShoppingList']
+  const app = createApp(Object.fromEntries(['updatePlan', 'createPlan', 'deletePlan', 'downloadShoppingList']
     .map((key) => [key, async (...args) => calls.push({key, args})])));
-  app.state.activePlanStatus = 'ready';
+  editSavedPlan(app, savedPlan(1));
   app.state.activePlanId = 2;
-  app.state.activePlan = {id: 1};
   app.state.shoppingStatus = 'ready';
   app.state.shoppingPlanId = 2;
   app.state.shopping = {plan_id: 1, items: []};
-  await app.saveSlot(0, 'lunch', {recipe_id: 2, servings: 1});
-  await app.deleteSlot(0, 'lunch');
-  await app.deletePlan();
+  await app.savePlan();
+  await app.deletePlan(2);
   await app.exportShopping('csv');
   assert.deepEqual(calls, []);
 });
 
-test('slot mutation keeps its captured plan ID and selection is locked while saving', async () => {
+test('plan save is bound to the open editor and blocks duplicate saves or navigation', async () => {
   const save = deferred();
   const calls = [];
   const app = createApp({
-    putSlot: (id) => { calls.push(id); return save.promise; },
-    getPlan: async (id) => ({id, slots: []}),
+    updatePlan: (id) => { calls.push(id); return save.promise; },
+    getPlan: () => assert.fail('Changed editor before the save finished'),
   });
-  app.state.activePlanId = 1;
-  app.state.activePlan = {id: 1};
-  app.state.activePlanStatus = 'ready';
-  const saving = app.saveSlot(0, 'lunch', {recipe_id: 2, servings: 1});
-  await app.onChange({target: {dataset: {change: 'active-plan'}, value: '2'}});
+  editSavedPlan(app, savedPlan(1));
+  const saving = app.savePlan();
+  await app.savePlan();
+  await app.openPlanEditor('edit', 2);
   assert.equal(app.state.activePlanId, 1);
-  save.resolve();
+  save.resolve({...savedPlan(1), version: 2});
   await saving;
   assert.deepEqual(calls, [1]);
+  assert.equal(app.state.planDraft.plan.version, 2);
 });
 
 for (const outcome of ['success', 'error']) {
@@ -246,51 +256,31 @@ test('shopping invalidation also discards an already pending response for the sa
   assert.equal(app.state.shoppingStatus, 'idle');
 });
 
-for (const {label, method, invoke, plansAfter, selected} of [
-  {label: 'save slot', method: 'putSlot', invoke: (app) => app.saveSlot(0, 'lunch', {}), plansAfter: [1, 2], selected: 1},
-  {label: 'delete slot', method: 'deleteSlot', invoke: (app) => app.deleteSlot(0, 'lunch'), plansAfter: [1, 2], selected: 1},
-  {label: 'create plan', method: 'createPlan', invoke: (app) => app.createPlan({}), plansAfter: [3, 1, 2], selected: 3},
-  {label: 'delete plan', method: 'deletePlan', invoke: (app) => app.deletePlan(), plansAfter: [2], selected: 2},
-  {label: 'delete last plan', method: 'deletePlan', invoke: (app) => app.deletePlan(), plansAfter: [], selected: null},
-]) {
-  test(`shopping refreshes after ${label} when navigation started a stale read`, async (t) => {
-    if (method === 'deletePlan') {
-      const originalConfirm = globalThis.confirm;
-      globalThis.confirm = () => true;
-      t.after(() => {
-        if (originalConfirm === undefined) delete globalThis.confirm;
-        else globalThis.confirm = originalConfirm;
-      });
-    }
+for (const plansAfter of [[savedPlan(2)], []]) {
+  test(`deleting a plan invalidates an in-flight shopping read with ${plansAfter.length} plans remaining`, async () => {
     const mutation = deferred();
     const stale = deferred();
     const reads = [];
-    const plan = (id) => ({id, start_date: '2026-10-16', duration_days: 1, enabled_meals: ['lunch'], slots: []});
+    const selected = plansAfter[0]?.id ?? null;
     const fresh = {plan_id: selected, items: [{name: 'Свежий список', quantity: '2', unit: 'pcs'}]};
     const app = createApp({
-      [method]: () => mutation.promise,
-      getPlans: async () => plansAfter.map(plan),
-      getPlan: async (id) => plan(id),
+      deletePlan: () => mutation.promise,
+      getPlans: async () => plansAfter,
       getShoppingList: (id) => {
         reads.push(id);
         return reads.length === 1 ? stale.promise : Promise.resolve(fresh);
       },
     });
+    app.confirm = () => true;
     Object.assign(app.state, {
-      initialLoading: false,
-      view: 'plans',
-      plans: plansAfter.length ? [plan(1), plan(2)] : [plan(1)],
-      plansStatus: 'ready',
-      activePlan: plan(1),
-      activePlanId: 1,
-      activePlanStatus: 'ready',
-      shoppingPlanId: 1,
+      initialLoading: false, view: 'plans', plans: [savedPlan(1), ...plansAfter],
+      plansStatus: 'ready', shoppingPlanId: 1,
     });
-    const updating = invoke(app);
+    const deleting = app.deletePlan(1);
     const navigating = app.navigate('shopping');
     assert.deepEqual(reads, [1]);
-    mutation.resolve({id: 3});
-    await updating;
+    mutation.resolve();
+    await deleting;
     stale.resolve({plan_id: 1, items: [{name: 'Старый список', quantity: '1', unit: 'pcs'}]});
     await navigating;
     assert.equal(app.state.shoppingPlanId, selected);
@@ -301,7 +291,6 @@ for (const {label, method, invoke, plansAfter, selected} of [
       assert.match(app.root.innerHTML, /Сначала создайте рацион/);
     } else {
       assert.deepEqual(reads, [1, selected]);
-      assert.equal(app.state.shoppingStatus, 'ready');
       assert.deepEqual(app.state.shopping, fresh);
       assert.match(app.root.innerHTML, /Свежий список/);
       assert.doesNotMatch(app.root.innerHTML, /Рассчитываем покупки|Старый список/);
@@ -471,11 +460,8 @@ test('late swipe response from old session cannot create an undo action or reloa
 });
 
 function preparePicker(app, slot) {
-  const plan = {
-    id: 1, start_date: '2026-11-20', duration_days: 3, enabled_meals: ['lunch'],
-    slots: slot ? [slot] : [],
-  };
-  Object.assign(app.state, {view: 'plans', activePlanId: 1, activePlan: plan, activePlanStatus: 'ready', favoritesStatus: 'ready'});
+  editSavedPlan(app, savedPlan(1, slot ? [slot] : []));
+  app.state.favoritesStatus = 'ready';
   const fields = new Map();
   app.dialog.querySelector = (selector) => {
     if (!fields.has(selector)) fields.set(selector, {disabled: false, focus() {}});
@@ -487,12 +473,13 @@ function preparePicker(app, slot) {
   ]);
 }
 
-test('visual picker captures the exact slot, prevents duplicate writes and rejects stale triggers', async () => {
-  const write = deferred();
+test('visual picker stages the exact slot, rejects stale triggers and writes only with a plan save', async () => {
   const calls = [];
   const app = createApp({
-    putSlot: (...args) => { calls.push(args); return write.promise; },
-    getPlan: async (id) => ({id, slots: []}),
+    updatePlan: async (id, payload) => {
+      calls.push([id, payload]);
+      return {...app.state.planDraft.plan, version: 2};
+    },
   });
   preparePicker(app);
   app.openSlotPicker(2, 1, 'lunch');
@@ -509,24 +496,27 @@ test('visual picker captures the exact slot, prevents duplicate writes and rejec
   app.onInput({target: {dataset: {input: 'picker-search'}, value: 'СУП'}});
   await app.onChange({target: {dataset: {change: 'picker-recipe'}, value: '5'}});
   await app.savePickedSlot(21);
-  assert.deepEqual(calls, []);
-  const save = app.savePickedSlot(2);
+  assert.equal(app.state.planDraft.plan.slots.length, 0);
   await app.savePickedSlot(2);
-  assert.deepEqual(calls, [[1, 1, 'lunch', {recipe_id: 5, servings: 2}]]);
-  write.resolve();
-  await save;
+  await app.savePickedSlot(2);
   assert.equal(app.dialog.open, false);
+  assert.equal(app.state.activePlan.slots.length, 0);
+  assert.deepEqual(calls, []);
+  await app.savePlan();
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 1);
+  assert.deepEqual(calls[0][1].slots, [{day_index: 1, meal_type: 'lunch', recipe_id: 5, servings: 2}]);
 });
 
 test('a saved recipe removed from favorites remains editable without becoming a picker choice', async () => {
-  const calls = [];
-  const app = createApp({putSlot: async (...args) => calls.push(args), getPlan: async () => ({id: 1})});
+  const app = createApp();
   preparePicker(app, {day_index: 0, meal_type: 'lunch', recipe_id: 7, recipe_title: 'Щи', servings: 2});
   app.openSlotPicker(1, 0, 'lunch');
   assert.match(app.dialog.innerHTML, /Текущее блюдо можно оставить/);
   assert.doesNotMatch(app.dialog.innerHTML, /value="7"/);
   await app.savePickedSlot(3);
-  assert.deepEqual(calls, [[1, 0, 'lunch', {recipe_id: 7, servings: 3}]]);
+  assert.equal(app.state.planDraft.plan.slots[0].servings, 3);
+  assert.equal(app.state.activePlan.slots[0].servings, 2);
 });
 
 test('purchase mutation is bound to the displayed plan and late results cannot affect another session', async () => {
@@ -566,18 +556,29 @@ test('purchase conflict refreshes amounts before another attempt', async () => {
 function createBrowser(path) {
   const browser = new EventTarget();
   const origin = 'https://foodtinder.test';
-  const entries = [new URL(path, origin)];
+  const entry = (url, data) => ({url: new URL(url, origin), data});
+  const entries = [entry(path)];
   let cursor = 0;
-  Object.defineProperty(browser, 'location', {get: () => entries[cursor]});
+  Object.defineProperty(browser, 'location', {get: () => entries[cursor].url});
   const traverse = (offset) => {
     cursor += offset;
     browser.dispatchEvent(new Event('popstate'));
   };
   browser.history = {
-    pushState(_state, _title, url) { entries.splice(++cursor, entries.length, new URL(url, origin)); },
-    replaceState(_state, _title, url) { entries[cursor] = new URL(url, origin); },
+    get state() { return entries[cursor].data; },
+    pushState(data, _title, url) { entries.splice(++cursor, entries.length, entry(url, data)); },
+    replaceState(data, _title, url) { entries[cursor] = entry(url ?? entries[cursor].url, data); },
     back() { traverse(-1); },
     forward() { traverse(1); },
+    go(offset) { traverse(offset); },
+  };
+  const storage = new Map();
+  browser.sessionStorage = {
+    get length() { return storage.size; },
+    key: (index) => [...storage.keys()][index],
+    getItem: (key) => storage.get(key) ?? null,
+    removeItem: (key) => storage.delete(key),
+    setItem: (key, value) => storage.set(key, value),
   };
   return browser;
 }
@@ -782,4 +783,127 @@ test('favorite filters survive reload and removing a bookmark updates the count 
   assert.doesNotMatch(app.root.innerHTML, /Ёжики с рисом/);
   assert.equal(reads, 1);
   assert.equal(browser.location.searchParams.get('sort'), 'time');
+});
+
+test('new plan stays local until explicit save and survives a failed save with the same creation key', async () => {
+  const browser = createBrowser('/plans');
+  const attempts = [];
+  const app = createApp({
+    getSession: async () => userA,
+    createPlan: async (payload) => {
+      attempts.push(payload);
+      if (attempts.length === 1) throw networkError();
+      return {...payload, id: 9, version: 1};
+    },
+  }, browser);
+  await app.start();
+  await app.openPlanEditor('new');
+  app.onInput({target: {dataset: {input: 'plan-title'}, value: 'План на праздник'}});
+  await app.onChange({target: {dataset: {change: 'plan-date'}, value: '2027-04-05'}});
+  assert.match(app.root.innerHTML, /Есть несохранённые изменения/);
+  assert.deepEqual(attempts, []);
+  await app.savePlan();
+  assert.equal(browser.location.search, '?draft=new');
+  assert.equal(app.state.planDraft.dirty, true);
+  assert.equal(app.state.error.type, 'network');
+  assert.equal(app.planDrafts.get(userA.id, null).plan.title, 'План на праздник');
+  await app.savePlan();
+  assert.equal(browser.location.search, '?plan_id=9');
+  assert.deepEqual(attempts[0], attempts[1]);
+  assert.equal(app.planDrafts.get(userA.id, null), null);
+  assert.match(app.root.innerHTML, /Сохранено/);
+});
+
+test('unsaved navigation can be canceled and an accepted Back keeps the draft for Forward', async () => {
+  const browser = createBrowser('/plans');
+  const api = {getSession: async () => userA, getPlan: async () => savedPlan()};
+  const app = createApp(api, browser);
+  await app.start();
+  await app.openPlanEditor('edit', 1);
+  app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Мой черновик'}});
+  const reload = new Event('beforeunload', {cancelable: true});
+  assert.equal(browser.dispatchEvent(reload), false);
+  browser.confirm = () => false;
+  browser.history.back();
+  assert.equal(browser.location.search, '?plan_id=1');
+  assert.equal(app.state.planDraft.plan.title, 'Мой черновик');
+  browser.confirm = () => true;
+  browser.history.back();
+  assert.equal(browser.location.search, '');
+  browser.history.forward();
+  await new Promise(setImmediate);
+  assert.equal(browser.location.search, '?plan_id=1');
+  assert.equal(app.state.planDraft.plan.title, 'Мой черновик');
+});
+
+test('duplicate uses eligible source slots only, writes no plan and clears private drafts on account change', async () => {
+  const source = savedPlan(1, [
+    {day_index: 0, meal_type: 'lunch', recipe_id: 2, recipe_title: 'Суп', servings: 3},
+    {day_index: 1, meal_type: 'lunch', recipe_id: 3, recipe_title: 'Личный рецепт', servings: 1},
+  ]);
+  const browser = createBrowser('/plans');
+  const app = createApp({
+    getSession: async () => userA, getPlans: async () => [source], getPlan: async () => source,
+    getFavorites: async () => [{id: 2, meal_types: ['lunch']}],
+    createPlan: () => assert.fail('Duplication created a plan before Save'),
+  }, browser);
+  await app.start();
+  await app.duplicatePlan(1);
+  assert.equal(browser.location.search, '?draft=new');
+  assert.deepEqual(app.state.planDraft.plan.slots, source.slots.slice(0, 1));
+  assert.match(app.root.innerHTML, /Пропущено блюд · 1/);
+  assert.match(app.root.innerHTML, /1 из 3 приёмов пищи заполнено/);
+  assert.equal(browser.sessionStorage.length, 1);
+  app.setSession(userB);
+  app.render();
+  assert.equal(browser.sessionStorage.length, 0);
+  assert.equal(app.state.planDraft, null);
+  assert.doesNotMatch(app.root.innerHTML, /Личный рецепт/);
+});
+
+test('shopping from a dirty plan offers save or discard and opens the selected plan', async () => {
+  const original = savedPlan(2);
+  const browser = createBrowser('/plans?plan_id=2');
+  const shoppingReads = [];
+  const app = createApp({
+    getSession: async () => userA, getPlan: async () => original,
+    getPlans: async () => [savedPlan(9), original],
+    updatePlan: () => assert.fail('Discard sent an editor write'),
+    getShoppingList: async (id) => { shoppingReads.push(id); return {plan_id: id, items: []}; },
+  }, browser);
+  await app.start();
+  app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Будет отменено'}});
+  await app.openPlanShopping(2);
+  assert.equal(app.state.view, 'plans');
+  assert.match(app.dialog.innerHTML, /Сохранить и открыть покупки/);
+  assert.deepEqual(shoppingReads, []);
+  await app.resolveShoppingDecision('discard-and-shop');
+  assert.equal(browser.location.pathname + browser.location.search, '/shopping?plan_id=2');
+  assert.deepEqual(shoppingReads, [2]);
+  browser.history.back();
+  await new Promise(setImmediate);
+  assert.equal(app.state.planDraft.plan.title, '');
+});
+
+test('shortening a draft asks before dropping occupied days and keeps saved slots untouched', async () => {
+  const original = savedPlan(1, [
+    {day_index: 0, meal_type: 'lunch', recipe_id: 5, servings: 1},
+    {day_index: 2, meal_type: 'lunch', recipe_id: 6, servings: 2},
+  ]);
+  const app = createApp({updatePlan: () => assert.fail('Changing duration sent a write')});
+  app.state.initialLoading = false;
+  editSavedPlan(app, original);
+  const duration = {dataset: {change: 'plan-duration'}, value: '1'};
+  app.confirm = () => false;
+  await app.onChange({target: duration});
+  assert.equal(app.state.planDraft.plan.duration_days, 3);
+  app.confirm = (warning) => {
+    assert.match(warning, /удалены блюда · 1/);
+    return true;
+  };
+  await app.onChange({target: duration});
+  assert.equal(app.state.planDraft.plan.duration_days, 1);
+  assert.deepEqual(app.state.planDraft.plan.slots, original.slots.slice(0, 1));
+  assert.equal(app.state.activePlan.slots.length, 2);
+  assert.match(app.root.innerHTML, /1 из 1 приёмов пищи заполнено/);
 });

@@ -85,6 +85,10 @@ export class RealApi {
     return this.client.request('meal-plans/', {method: 'POST', body: payload});
   }
 
+  updatePlan(planId, payload) {
+    return this.client.request(`meal-plans/${planId}/`, {method: 'PUT', body: payload});
+  }
+
   getPlan(planId) {
     return this.client.request(`meal-plans/${planId}/`);
   }

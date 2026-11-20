@@ -38,10 +38,15 @@ export function readRoute({pathname, search}) {
     };
   }
   const next = params.get('next');
-  return {view, next: view === 'auth' && isPrivateView(next) ? next : null};
+  const rawPlanId = params.get('plan_id') ?? '';
+  const planId = /^\d+$/.test(rawPlanId) && Number.isSafeInteger(Number(rawPlanId))
+    ? Number(rawPlanId) || null : null;
+  if (view === 'plans') return {view, planId, planMode: planId ? 'edit' : params.get('draft') === 'new' ? 'new' : 'list'};
+  if (view === 'shopping') return {view, planId};
+  return {view, next: view === 'auth' && isPrivateView(next) ? next : null, planId};
 }
 
-export function routeUrl(view, state, next) {
+export function routeUrl(view, state, next, nextPlanId) {
   const params = new URLSearchParams();
   if (view === 'recipes') {
     if (state.catalogQuery) params.set('q', state.catalogQuery);
@@ -56,6 +61,12 @@ export function routeUrl(view, state, next) {
     if (maxTime) params.set('time', maxTime);
     if (sort !== 'added') params.set('sort', sort);
   }
-  if (view === 'auth' && isPrivateView(next)) params.set('next', next);
+  if (view === 'plans' && state.planMode === 'new') params.set('draft', 'new');
+  if (view === 'plans' && state.planMode === 'edit') params.set('plan_id', state.activePlanId);
+  if (view === 'shopping' && state.shoppingPlanId) params.set('plan_id', state.shoppingPlanId);
+  if (view === 'auth' && isPrivateView(next)) {
+    params.set('next', next);
+    if (nextPlanId) params.set('plan_id', nextPlanId);
+  }
   return (VIEW_PATHS[view] ?? '/') + (params.size ? `?${params}` : '');
 }

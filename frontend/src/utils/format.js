@@ -1,10 +1,9 @@
 import {MEAL_LABELS} from '../constants.js';
 
-const DATE_FORMAT = new Intl.DateTimeFormat('ru-RU', {day: 'numeric', month: 'short', year: 'numeric'});
-
-export function formatDate(dateString) {
-  const date = new Date(`${dateString}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? dateString : DATE_FORMAT.format(date);
+export function calendarDay(dateString, offset = 0) {
+  const day = new Date(`${dateString}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() + offset);
+  return day;
 }
 
 export function formatMealTypes(types = []) {

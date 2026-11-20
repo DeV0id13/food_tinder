@@ -1,15 +1,20 @@
 import {ApiError, apiErrorMessage} from './api/errors.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {MEAL_LABELS} from './constants.js';
+import {PlanDrafts} from './state/plan-drafts.js';
 import {clearPrivateState, createInitialState, defaultFavoriteFilters, setFavorites} from './state/state.js';
 import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
-import {compatibleFavorites, invalidateShopping, slotFor} from './utils/plans.js';
+import {
+  compatibleFavorites, duplicatePlanDraft, hasValidPlanDates, includedSlots, invalidateShopping,
+  makePlanDraft, planDraftPayload, slotFor,
+} from './utils/plans.js';
 import {isPrivateView, readRoute, routeUrl} from './utils/routes.js';
 import {UNDO_WINDOW_MS} from './utils/swipe-notice.js';
 import {renderShell} from './views/shell.js';
 import {favoriteSearchCount, renderFavoriteResults} from './views/favorites-view.js';
 import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
+import {draftStatus, renderShoppingDecision} from './views/plans-view.js';
 import {pickedRecipeTitle, renderPickerResults, renderSlotPicker} from './views/slot-picker.js';
 
 export class FoodTinderApp {
@@ -24,7 +29,16 @@ export class FoodTinderApp {
     this.browser?.document?.addEventListener('visibilitychange', () => this.updateSwipeNotice());
     this.initializingSession = false;
     this.authReturnView = null;
+    this.authReturnPlanId = null;
     this.state = createInitialState();
+    this.planDrafts = new PlanDrafts(browser);
+    this.historyIndex = browser?.history.state?.foodTinderIndex ?? 0;
+    this.restoringHistory = false;
+    this.confirmUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = true;
+    };
+    this.shoppingDecision = null;
     this.sessionGeneration = 0;
     this.requestVersions = new Map();
     this.toastTimer = null;
@@ -54,6 +68,7 @@ export class FoodTinderApp {
       if (this.dialog.open) return;
       this.beginRequest('recipe-detail');
       const picker = this.slotPicker;
+      this.shoppingDecision = null;
       this.slotPicker = null;
       if (picker) this.focusSlot(picker);
     });
@@ -61,6 +76,7 @@ export class FoodTinderApp {
 
   render() {
     this.expireSwipeNotice();
+    this.watchUnsavedChanges();
     this.root.innerHTML = renderShell(this.state);
     this.updateSwipeNotice();
   }
@@ -121,7 +137,7 @@ export class FoodTinderApp {
     if (reset || session.id !== this.state.session.id
       || session.authenticated !== this.state.session.authenticated) {
       this.sessionGeneration += 1;
-      if (this.slotPicker) this.dialog.close();
+      if (this.slotPicker || this.shoppingDecision) this.dialog.close();
       this.slotPicker = null;
       if (this.state.busy !== 'auth') {
         this.mutation = null;
@@ -133,6 +149,7 @@ export class FoodTinderApp {
       this.state.feedStatus = 'idle';
       this.state.guestHidden = new Set();
     }
+    this.planDrafts.keepOnly(session.authenticated ? session.id : null);
     this.state.session = session;
     this.state.sessionKnown = true;
     if (previous.authenticated && previous.id !== session.id && this.state.view === 'recipes') {
@@ -156,22 +173,12 @@ export class FoodTinderApp {
     invalidateShopping(this.state);
   }
 
-  async reloadVisibleShopping() {
-    if (this.state.view === 'shopping') await this.loadShopping();
-  }
-
-  async refreshAfterSlotChange(planId) {
-    this.invalidateShopping();
-    await Promise.all([
-      Number(this.state.activePlanId) === planId ? this.loadActivePlan(false) : undefined,
-      this.reloadVisibleShopping(),
-    ]);
-  }
-
   editablePlanId() {
-    return this.state.session.authenticated && this.state.activePlanStatus === 'ready'
-      && this.state.activePlan?.id === Number(this.state.activePlanId)
-      ? this.state.activePlan.id : null;
+    if (!this.state.session.authenticated || this.state.activePlanStatus !== 'ready') return null;
+    const {planDraft, planMode, activePlanId} = this.state;
+    if (!planDraft) return null;
+    if (planMode === 'new' && !planDraft.plan.id) return 0;
+    return planMode === 'edit' && planDraft.plan.id === activePlanId ? activePlanId : null;
   }
 
   toast(message) {
@@ -182,7 +189,12 @@ export class FoodTinderApp {
   }
 
   async start() {
-    if (this.browser) this.applyRoute(readRoute(this.browser.location));
+    if (this.browser) {
+      this.applyRoute(readRoute(this.browser.location));
+      this.browser.history.replaceState({
+        ...this.browser.history.state, foodTinderIndex: this.historyIndex,
+      }, '', this.browser.location.href);
+    }
     this.initializingSession = true;
     this.render();
     const context = this.sessionContext();
@@ -315,18 +327,7 @@ export class FoodTinderApp {
       if (!current()) return;
       this.state.plans = plans;
       this.state.plansStatus = 'ready';
-      if (!this.state.plans.length) {
-        this.state.activePlanId = null;
-        this.state.activePlan = null;
-        this.state.activePlanStatus = 'idle';
-        this.state.shoppingPlanId = null;
-        this.invalidateShopping();
-      } else {
-        const ids = new Set(this.state.plans.map(({id}) => id));
-        if (!ids.has(Number(this.state.activePlanId))) this.state.activePlanId = this.state.plans[0].id;
-        if (!ids.has(Number(this.state.shoppingPlanId))) this.state.shoppingPlanId = this.state.activePlanId;
-        await this.loadActivePlan(false);
-      }
+      if (!this.state.shoppingPlanId) this.state.shoppingPlanId = this.state.activePlanId ?? plans[0]?.id ?? null;
     } catch (error) {
       if (!current()) return;
       this.state.plansStatus = 'error';
@@ -342,6 +343,7 @@ export class FoodTinderApp {
     const request = this.beginRequest('active-plan');
     const current = () => this.isCurrentRequest('active-plan', request)
       && Number(this.state.activePlanId) === planId;
+    if (this.state.planMode === 'edit') this.state.planDraft = null;
     this.state.activePlan = null;
     this.state.activePlanStatus = 'loading';
     if (shouldRender) this.render();
@@ -349,6 +351,10 @@ export class FoodTinderApp {
       const plan = await this.api.getPlan(planId);
       if (!current()) return;
       this.state.activePlan = plan;
+      if (this.state.view === 'plans' && this.state.planMode === 'edit') {
+        const draft = this.planDrafts.get(this.state.session.id, planId);
+        this.state.planDraft = draft || makePlanDraft(plan);
+      }
       this.state.activePlanStatus = 'ready';
     } catch (error) {
       if (!current()) return;
@@ -383,12 +389,19 @@ export class FoodTinderApp {
   showAuth(message) {
     this.state.authTab = 'login';
     this.state.authNotice = message || 'Войдите, чтобы сохранить это действие.';
-    return this.navigate('auth', {next: isPrivateView(this.state.view) ? this.state.view : null});
+    const {view, activePlanId, shoppingPlanId} = this.state;
+    return this.navigate('auth', {
+      next: isPrivateView(view) ? view : null,
+      nextPlanId: view === 'plans' ? activePlanId : view === 'shopping' ? shoppingPlanId : null,
+    });
   }
 
-  applyRoute({view, filters, favoriteFilters, next}) {
+  applyRoute({view, filters, favoriteFilters, next, planId, planMode}) {
     this.state.view = view;
     this.authReturnView = next ?? null;
+    this.authReturnPlanId = next ? planId : null;
+    if (view === 'plans') this.selectPlanRoute(planMode, planId);
+    if (view === 'shopping') this.state.shoppingPlanId = planId;
     if (favoriteFilters) this.state.favoriteFilters = favoriteFilters;
     if (filters) {
       Object.assign(this.state, filters, {
@@ -400,25 +413,100 @@ export class FoodTinderApp {
   writeRoute(replace = false) {
     if (!this.browser) return;
     const {pathname, search} = this.browser.location;
-    const url = routeUrl(this.state.view, this.state, this.authReturnView);
-    if (url !== pathname + search) {
-      if (replace) this.browser.history.replaceState(null, '', url);
-      else this.browser.history.pushState(null, '', url);
+    const url = routeUrl(this.state.view, this.state, this.authReturnView, this.authReturnPlanId);
+    if (url === pathname + search) return;
+    if (!replace) this.historyIndex++;
+    const data = {...this.browser.history.state, foodTinderIndex: this.historyIndex};
+    if (replace) this.browser.history.replaceState(data, '', url);
+    else this.browser.history.pushState(data, '', url);
+  }
+
+  selectPlanRoute(mode, planId = null) {
+    if (this.state.planMode === mode && this.state.activePlanId === planId) return;
+    this.beginRequest('active-plan');
+    Object.assign(this.state, {
+      planMode: mode, activePlanId: planId, activePlan: null, planDraft: null,
+      activePlanStatus: mode === 'edit' ? 'loading' : 'idle',
+    });
+  }
+
+  hasUnsavedChanges() {
+    return this.state.view === 'plans' && Boolean(this.state.planDraft?.dirty);
+  }
+
+  watchUnsavedChanges() {
+    this.browser?.removeEventListener('beforeunload', this.confirmUnload);
+    if (this.hasUnsavedChanges() || this.state.busy === 'save-plan') {
+      this.browser?.addEventListener('beforeunload', this.confirmUnload);
     }
+  }
+
+  confirm(message) {
+    return (this.browser ?? globalThis).confirm?.(message) ?? false;
+  }
+
+  mayNavigate(view, planMode = this.state.planMode, planId = this.state.activePlanId) {
+    if (this.state.busy === 'save-plan') return false;
+    if (!this.hasUnsavedChanges()) return true;
+    if (view === 'plans' && planMode === this.state.planMode && planId === this.state.activePlanId) return true;
+    return this.confirm('Есть несохранённые изменения. Оставить черновик в этой вкладке и уйти?');
   }
 
   restoreRoute() {
     const route = readRoute(this.browser.location);
+    const index = this.browser.history.state?.foodTinderIndex ?? 0;
+    if (this.restoringHistory) {
+      this.restoringHistory = false;
+      return;
+    }
+    const shoppingNeedsDecision = route.view === 'shopping' && this.hasUnsavedChanges();
+    const allowed = !shoppingNeedsDecision && this.mayNavigate(route.view, route.planMode, route.planId ?? null);
+    if (!allowed) {
+      if (shoppingNeedsDecision && !this.state.busy) this.showShoppingDecision(route.planId);
+      const delta = this.historyIndex - index;
+      if (delta && this.browser.history.go) {
+        this.restoringHistory = true;
+        this.browser.history.go(delta);
+      } else {
+        this.writeRoute(true);
+      }
+      return;
+    }
+    this.historyIndex = index;
     this.applyRoute(route);
-    return this.navigate(route.view, {fromHistory: true, next: route.next});
+    return this.navigate(route.view, {fromHistory: true});
   }
 
-  async navigate(view, {replace = false, fromHistory = false, next = null} = {}) {
+  async navigate(view, {
+    replace = false, fromHistory = false, next = null, nextPlanId = null,
+    planMode, planId, shoppingPlanId,
+  } = {}) {
+    if (!fromHistory && view === 'shopping' && this.hasUnsavedChanges() && !this.state.busy) {
+      return this.showShoppingDecision(shoppingPlanId ?? this.state.activePlanId);
+    }
+    if (!fromHistory && !this.mayNavigate(view, planMode, planMode ? planId ?? null : undefined)) return;
     if (this.dialog.open) this.dialog.close();
+    this.beginRequest('view');
+    if (view !== 'plans') {
+      this.beginRequest('active-plan');
+      this.state.activePlan = null;
+      this.state.planDraft = null;
+    }
+    if (planMode) this.selectPlanRoute(planMode, planId);
+    if (shoppingPlanId !== undefined) {
+      this.state.shoppingPlanId = shoppingPlanId;
+      this.invalidateShopping();
+    }
+    if (view === 'plans' && this.state.planMode === 'edit' && !this.state.planDraft) {
+      this.state.activePlanStatus = 'loading';
+    }
     this.state.view = view;
-    this.authReturnView = next ?? null;
+    if (!fromHistory) {
+      this.authReturnView = next;
+      this.authReturnPlanId = nextPlanId;
+      this.writeRoute(replace);
+    }
     this.state.error = null;
-    if (!fromHistory) this.writeRoute(replace);
     this.render();
     if (!this.initializingSession) await this.loadView(view);
   }
@@ -437,15 +525,22 @@ export class FoodTinderApp {
     }
     if (view === 'favorites' && authenticated) await this.loadFavorites();
     if (view === 'plans' && authenticated) {
-      await Promise.all([
-        this.loadFavorites(false),
-        this.loadPlans(),
-      ]);
-      this.render();
+      if (this.state.planMode === 'list') {
+        await this.loadPlans();
+      } else if (this.state.planMode === 'new') {
+        this.state.planDraft = this.planDrafts.get(this.state.session.id, null) ?? makePlanDraft();
+        this.state.activePlanStatus = 'ready';
+        this.render();
+      } else if (!this.state.planDraft) {
+        await this.loadActivePlan();
+      }
     }
     if (view === 'shopping' && authenticated) {
-      if (!this.state.plans) await this.loadPlans(false);
-      if (this.state.view === view && this.state.plans?.length) await this.loadShopping();
+      const request = this.beginRequest('shopping-view');
+      if (!this.state.plans || this.state.plansStatus !== 'ready') await this.loadPlans(false);
+      if (!this.isCurrentRequest('shopping-view', request) || this.state.view !== view) return;
+      this.state.shoppingPlanId ??= this.state.activePlanId ?? this.state.plans?.[0]?.id ?? null;
+      if (this.state.plans?.length) await this.loadShopping();
       this.render();
     }
   }
@@ -497,7 +592,14 @@ export class FoodTinderApp {
     if (action === 'pick-slot') return this.openSlotPicker(Number(control.dataset.planId), Number(control.dataset.dayIndex), control.dataset.mealType);
     if (action === 'retry-picker') return this.loadPickerFavorites(this.slotPicker);
     if (action === 'delete-slot') return this.deleteSlot(Number(control.dataset.dayIndex), control.dataset.mealType, Number(control.dataset.planId));
-    if (action === 'delete-plan') return this.deletePlan();
+    if (action === 'plan-list') return this.navigate('plans', {planMode: 'list'});
+    if (action === 'new-plan') return this.openPlanEditor('new');
+    if (action === 'edit-plan') return this.openPlanEditor('edit', Number(control.dataset.planId));
+    if (action === 'duplicate-plan') return this.duplicatePlan(Number(control.dataset.planId));
+    if (action === 'delete-plan') return this.deletePlan(Number(control.dataset.planId));
+    if (action === 'discard-draft') return this.discardDraft();
+    if (action === 'plan-shopping') return this.openPlanShopping(Number(control.dataset.planId));
+    if (action === 'save-and-shop' || action === 'discard-and-shop') return this.resolveShoppingDecision(action);
     if (action === 'export-shopping') return this.exportShopping(control.dataset.fileType);
     if (action === 'clear-purchases') return this.clearPurchases(Number(control.dataset.planId));
   }
@@ -513,19 +615,18 @@ export class FoodTinderApp {
     if (form.dataset.form === 'register') {
       return this.register({email: data.get('email'), password: data.get('password')});
     }
-    if (form.dataset.form === 'create-plan') {
-      return this.createPlan({
-        start_date: data.get('start_date'),
-        duration_days: Number(data.get('duration_days')),
-        enabled_meals: data.getAll('enabled_meals'),
-      });
-    }
+    if (form.dataset.form === 'plan-editor') return this.savePlan();
     if (form.dataset.form === 'slot-picker' && this.dialog.contains(form)) {
       return this.savePickedSlot(Number(data.get('servings')));
     }
   }
 
   onInput(event) {
+    if (event.target.dataset.input === 'plan-title' && this.state.planDraft && !this.state.busy) {
+      this.state.planDraft.plan.title = event.target.value;
+      this.markDraftChanged();
+      return;
+    }
     if (event.target.dataset.input === 'picker-search' && this.isCurrentPicker(this.slotPicker)) {
       this.slotPicker.query = event.target.value;
       this.updatePickerResults();
@@ -574,15 +675,11 @@ export class FoodTinderApp {
       this.updatePickerSelection();
       return;
     }
-    if (event.target.dataset.change === 'active-plan') {
-      if (this.slotPicker) this.dialog.close();
-      this.state.error = null;
-      this.state.activePlanId = Number(event.target.value);
-      return this.loadActivePlan();
-    }
-    if (event.target.dataset.change === 'shopping-plan') {
+    if (['plan-date', 'plan-duration', 'plan-meal'].includes(change)) return this.changePlanSettings(event.target);
+    if (change === 'shopping-plan') {
       this.state.error = null;
       this.state.shoppingPlanId = Number(event.target.value);
+      this.writeRoute();
       return this.loadShopping();
     }
     if (change === 'purchase') {
@@ -593,10 +690,17 @@ export class FoodTinderApp {
 
   async login(payload) {
     await this.runMutation('auth', async () => {
+      const next = this.authReturnView || 'feed';
+      const planId = this.authReturnPlanId;
       this.setSession(await this.api.login(payload), true);
       this.state.authNotice = null;
-      if (this.state.view === 'auth') await this.navigate(this.authReturnView || 'feed', {replace: true});
-      else await this.loadView(this.state.view);
+      if (this.state.view === 'auth') {
+        await this.navigate(next, {
+          replace: true,
+          ...(planId && next === 'plans' ? {planMode: 'edit', planId} : {}),
+          ...(planId && next === 'shopping' ? {shoppingPlanId: planId} : {}),
+        });
+      } else await this.loadView(this.state.view);
       this.toast('Вход выполнен');
     });
   }
@@ -645,11 +749,11 @@ export class FoodTinderApp {
     }
     let succeeded = false;
     await this.runMutation(`recipe-${recipeId}`, async () => {
-      const started = this.now();
       const result = await this.api.swipe(recipeId, action);
       if (!this.isCurrentSession(context)) return;
       const message = action === 'like' ? 'Добавлено в избранное' : 'Скрыто до завтра';
-      const deadline = Math.min(started + UNDO_WINDOW_MS, this.now() + (result?.undo_remaining_ms ?? UNDO_WINDOW_MS));
+      const remaining = result?.undo_remaining_ms ?? UNDO_WINDOW_MS;
+      const deadline = this.now() + Math.min(UNDO_WINDOW_MS, remaining);
       this.state.lastSwipe = result?.undo_token ? {recipeId, token: result.undo_token, message, deadline} : null;
       if (this.state.feed) {
         this.state.feed = {...this.state.feed, results: this.state.feed.results.filter(({id}) => id !== recipeId)};
@@ -663,11 +767,17 @@ export class FoodTinderApp {
       this.loadFeed(false),
       action === 'like' ? this.loadFavorites(false) : undefined,
     ]);
-    if (this.isCurrentSession(context) && !this.state.busy) this.render();
+    if (this.isCurrentSession(context) && !this.state.busy && this.state.view === 'feed') {
+      const focusedUndo = this.browser?.document?.activeElement?.dataset?.action === 'undo-swipe';
+      this.render();
+      if (focusedUndo) this.focusUndo();
+    }
   }
 
   focusUndo() {
-    if (this.state.view === 'feed') this.root.querySelector?.('[data-action="undo-swipe"]')?.focus();
+    if (this.state.view === 'feed') {
+      this.root.querySelector?.('[data-action="undo-swipe"]')?.focus({preventScroll: true});
+    }
   }
 
   async undoSwipe() {
@@ -749,6 +859,7 @@ export class FoodTinderApp {
   isCurrentPicker(picker) {
     return Boolean(picker && this.slotPicker === picker && this.dialog.open
       && this.state.view === 'plans' && this.editablePlanId() === picker.planId
+      && this.state.planDraft === picker.draft
       && this.isCurrentSession(picker.session));
   }
 
@@ -760,12 +871,13 @@ export class FoodTinderApp {
 
   openSlotPicker(planId, dayIndex, mealType) {
     if (this.state.busy || this.state.view !== 'plans' || planId !== this.editablePlanId()) return;
-    const plan = this.state.activePlan;
-    if (!Object.hasOwn(MEAL_LABELS, mealType) || !plan.enabled_meals.includes(mealType)
+    const draft = this.state.planDraft;
+    const plan = draft.plan;
+    if (!hasValidPlanDates(plan) || !Object.hasOwn(MEAL_LABELS, mealType) || !plan.enabled_meals.includes(mealType)
       || !Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= plan.duration_days) return;
     const slot = slotFor(plan, dayIndex, mealType);
     const picker = {
-      planId, dayIndex, mealType, slot, startDate: plan.start_date, query: '',
+      draft, planId, dayIndex, mealType, slot, startDate: plan.start_date, query: '',
       recipes: compatibleFavorites(this.state.favorites, mealType),
       recipeId: slot?.recipe_id ?? null,
       session: this.sessionContext(),
@@ -807,82 +919,195 @@ export class FoodTinderApp {
     const picker = this.slotPicker;
     if (this.state.busy || !this.isCurrentPicker(picker) || !picker.recipeId
       || !Number.isInteger(servings) || servings < 1 || servings > 20) return;
-    const {dayIndex, mealType, planId, recipeId} = picker;
-    if (recipeId !== picker.slot?.recipe_id && !picker.recipes.some(({id}) => id === recipeId)) return;
-    const fields = this.dialog.querySelector('.picker-fields');
-    const message = this.dialog.querySelector('[data-picker-error]');
-    fields.disabled = true;
-    message.hidden = true;
-    const saved = await this.saveSlot(dayIndex, mealType, {recipe_id: recipeId, servings}, planId);
-    fields.disabled = false;
-    if (saved) {
-      this.focusSlot(picker);
-    } else if (this.isCurrentPicker(picker) && this.state.error) {
-      message.textContent = apiErrorMessage(this.state.error);
-      message.hidden = false;
-      this.dialog.querySelector('button[type="submit"]').focus();
+    const {draft, dayIndex, mealType, recipeId} = picker;
+    const recipe = picker.recipes.find(({id}) => id === recipeId);
+    if (recipeId !== picker.slot?.recipe_id && !recipe) return;
+    draft.plan.slots = draft.plan.slots.filter((slot) => slot.day_index !== dayIndex || slot.meal_type !== mealType);
+    draft.plan.slots.push({
+      day_index: dayIndex, meal_type: mealType, recipe_id: recipeId, servings,
+      recipe_title: recipe?.title ?? picker.slot.recipe_title,
+      recipe_image_url: recipe?.image_url ?? picker.slot?.recipe_image_url ?? '',
+    });
+    this.markDraftChanged();
+    this.dialog.close();
+    this.render();
+    this.focusSlot(picker);
+  }
+
+  markDraftChanged() {
+    const {planDraft, session} = this.state;
+    planDraft.dirty = true;
+    this.planDrafts.put(session.id, planDraft.plan.id, planDraft);
+    this.watchUnsavedChanges();
+    const status = this.root.querySelector?.('[data-draft-status]');
+    if (status) status.textContent = draftStatus(this.state);
+    const discard = this.root.querySelector?.('[data-action="discard-draft"]');
+    if (discard) discard.hidden = false;
+  }
+
+  changePlanSettings(control) {
+    const draft = this.state.planDraft;
+    if (this.state.view !== 'plans' || !draft || this.state.busy) return;
+    const {change} = control.dataset;
+    const next = {...draft.plan};
+    if (change === 'plan-date') next.start_date = control.value;
+    if (change === 'plan-duration') next.duration_days = Number(control.value);
+    if (change === 'plan-meal') {
+      const meals = new Set(next.enabled_meals);
+      if (control.checked) meals.add(control.value);
+      else meals.delete(control.value);
+      next.enabled_meals = [...meals];
+    }
+    const remaining = includedSlots(next);
+    const removed = draft.plan.slots.length - remaining.length;
+    const focus = change === 'plan-date'
+      ? '[data-change="plan-date"]' : `[data-change="${change}"][value="${control.value}"]`;
+    if (!removed || this.confirm(`После сохранения из рациона будут удалены блюда · ${removed}. Продолжить?`)) {
+      draft.plan = {...next, slots: remaining};
+      this.markDraftChanged();
+    }
+    this.render();
+    this.root.querySelector?.(focus)?.focus({preventScroll: true});
+  }
+
+  async openPlanEditor(mode, id = null) {
+    const context = this.sessionContext();
+    await this.navigate('plans', {planMode: mode, planId: id});
+    if (this.isCurrentSession(context) && this.state.view === 'plans'
+      && this.state.planMode === mode && this.state.activePlanId === id) {
+      this.root.querySelector?.('#plan-editor-title')?.focus();
     }
   }
 
-  async createPlan(payload) {
+  async duplicatePlan(planId) {
+    if (!this.state.session.authenticated || this.state.planMode !== 'list'
+      || !this.state.plans?.some(({id}) => id === planId) || this.state.busy) return;
+    const userId = this.state.session.id;
+    if (this.planDrafts.get(userId, null)?.dirty
+      && !this.confirm('Заменить текущий новый черновик копией рациона?')) return;
+    const request = this.beginRequest('duplicate');
+    const viewVersion = this.requestVersions.get('view');
+    let draft;
+    await this.runMutation('duplicate-plan', async () => {
+      const [source, favorites] = await Promise.all([this.api.getPlan(planId), this.api.getFavorites()]);
+      if (!this.isCurrentRequest('duplicate', request) || this.requestVersions.get('view') !== viewVersion) return;
+      draft = duplicatePlanDraft(source, favorites);
+      this.planDrafts.put(userId, null, draft);
+    });
+    if (draft && this.isCurrentRequest('duplicate', request)) await this.openPlanEditor('new');
+  }
+
+  async discardDraft() {
+    const {planDraft, session} = this.state;
+    if (!planDraft || this.state.busy) return;
+    if (planDraft.dirty && !this.confirm('Отменить несохранённые изменения?')) return;
+    this.planDrafts.remove(session.id, planDraft.plan.id);
+    this.state.error = null;
+    this.state.planDraft = null;
+    if (planDraft.plan.id) await this.loadActivePlan();
+    else await this.navigate('plans', {planMode: 'list', replace: true});
+  }
+
+  async savePlan({openShopping = false, shoppingPlanId = null} = {}) {
+    const {planDraft, session} = this.state;
+    if (this.state.view !== 'plans' || !session.authenticated || !planDraft
+      || this.editablePlanId() === null || this.state.busy) return;
+    const {plan} = planDraft;
     const context = this.sessionContext();
-    await this.runMutation('create-plan', async () => {
-      const plan = await this.api.createPlan(payload);
-      if (!this.isCurrentSession(context)) return;
-      this.state.activePlanId = plan.id;
-      this.state.shoppingPlanId = plan.id;
+    const form = this.root.querySelector?.('[data-form="plan-editor"]');
+    if (form && !form.reportValidity()) return;
+    if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) {
+      this.state.error = new ApiError({
+        type: 'validation', message: 'Выберите корректную дату и хотя бы один приём пищи.',
+      });
+      this.render();
+      return;
+    }
+    let savedId;
+    await this.runMutation('save-plan', async () => {
+      const payload = planDraftPayload(planDraft);
+      let saved;
+      try {
+        saved = plan.id ? await this.api.updatePlan(plan.id, payload) : await this.api.createPlan(payload);
+      } catch (error) {
+        if (error.status !== 409) throw error;
+        throw new ApiError({
+          status: 409,
+          message: plan.id
+            ? 'Рацион изменился в другой вкладке. Отмените изменения, чтобы загрузить сохранённую версию.'
+            : 'Этот черновик уже был сохранён с другими данными. Проверьте список рационов.',
+        });
+      }
+      if (!this.isCurrentSession(context) || this.state.planDraft !== planDraft) return;
+      this.planDrafts.remove(session.id, plan.id);
+      this.beginRequest('plans');
+      this.beginRequest('active-plan');
       this.invalidateShopping();
-      await this.loadPlans(false);
-      if (!this.isCurrentSession(context)) return;
-      if (this.state.plansStatus === 'ready') await this.reloadVisibleShopping();
-      this.toast('Рацион создан');
+      this.state.plans = null;
+      this.state.plansStatus = 'idle';
+      Object.assign(this.state, {
+        activePlanId: saved.id, activePlan: saved, activePlanStatus: 'ready',
+        planMode: 'edit', planDraft: makePlanDraft(saved),
+      });
+      this.writeRoute(true);
+      this.toast('Рацион сохранён');
+      savedId = saved.id;
     });
+    if (savedId && this.isCurrentSession(context)) {
+      if (openShopping) await this.navigate('shopping', {shoppingPlanId: shoppingPlanId ?? savedId});
+      else this.root.querySelector?.('[data-draft-status]')?.focus();
+    }
   }
 
-  async saveSlot(dayIndex, mealType, payload, targetPlanId = this.editablePlanId()) {
-    const planId = this.editablePlanId();
-    if (!planId || planId !== targetPlanId) return false;
-    const context = this.sessionContext();
-    const picker = this.slotPicker;
-    let saved = false;
-    await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
-      await this.api.putSlot(planId, dayIndex, mealType, payload);
-      if (!this.isCurrentSession(context)) return;
-      if (this.isCurrentPicker(picker)) this.dialog.close();
-      saved = true;
-      await this.refreshAfterSlotChange(planId);
-      if (this.isCurrentSession(context)) this.toast('Блюдо сохранено');
-    });
-    return saved;
+  deleteSlot(dayIndex, mealType, planId) {
+    const draft = this.state.planDraft;
+    if (!draft || this.state.busy || this.editablePlanId() !== planId || !slotFor(draft.plan, dayIndex, mealType)) return;
+    draft.plan.slots = draft.plan.slots.filter((slot) => slot.day_index !== dayIndex || slot.meal_type !== mealType);
+    this.markDraftChanged();
+    this.render();
+    this.root.querySelector?.(`#pick-meal-${dayIndex}-${mealType}`)?.focus();
   }
 
-  async deleteSlot(dayIndex, mealType, targetPlanId = this.editablePlanId()) {
-    const planId = this.editablePlanId();
-    if (!planId || planId !== targetPlanId) return;
+  async deletePlan(planId) {
+    if (!this.state.session.authenticated || !this.state.plans?.some(({id}) => id === planId) || this.state.busy) return;
     const context = this.sessionContext();
-    await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
-      await this.api.deleteSlot(planId, dayIndex, mealType);
-      if (!this.isCurrentSession(context)) return;
-      await this.refreshAfterSlotChange(planId);
-      this.toast('Блюдо удалено из рациона');
-    });
-  }
-
-  async deletePlan() {
-    const planId = this.editablePlanId();
-    if (!planId || this.state.busy) return;
-    const context = this.sessionContext();
-    if (!globalThis.confirm('Удалить рацион и все блюда в нём?')) return;
+    if (!this.confirm('Удалить рацион и все блюда в нём?')) return;
     await this.runMutation('delete-plan', async () => {
       await this.api.deletePlan(planId);
       if (!this.isCurrentSession(context)) return;
-      this.state.activePlanId = null;
+      this.planDrafts.remove(this.state.session.id, planId);
+      if (this.state.shoppingPlanId === planId) this.state.shoppingPlanId = null;
       this.invalidateShopping();
       await this.loadPlans(false);
       if (!this.isCurrentSession(context)) return;
-      if (this.state.plansStatus === 'ready') await this.reloadVisibleShopping();
-      this.toast('Рацион удалён');
+      if (this.state.view === 'shopping') await this.loadView('shopping');
+      if (this.isCurrentSession(context)) this.toast('Рацион удалён');
     });
+  }
+
+  openPlanShopping(planId) {
+    if (!this.state.session.authenticated || !planId || this.state.busy) return;
+    return this.navigate('shopping', {shoppingPlanId: planId});
+  }
+
+  showShoppingDecision(planId) {
+    this.shoppingDecision = {planId, draft: this.state.planDraft};
+    this.dialog.innerHTML = renderShoppingDecision();
+    if (!this.dialog.open) this.dialog.showModal();
+  }
+
+  async resolveShoppingDecision(action) {
+    const decision = this.shoppingDecision;
+    if (this.state.busy || !decision || decision.draft !== this.state.planDraft) return;
+    this.dialog.close();
+    this.shoppingDecision = null;
+    if (action === 'save-and-shop') {
+      return this.savePlan({openShopping: true, shoppingPlanId: decision.planId});
+    }
+    this.planDrafts.remove(this.state.session.id, decision.draft.plan.id);
+    this.state.planDraft = null;
+    if (this.state.planMode === 'new') this.selectPlanRoute('list');
+    return this.navigate('shopping', {shoppingPlanId: decision.planId ?? this.state.shoppingPlanId});
   }
 
   editableShoppingPlanId() {
