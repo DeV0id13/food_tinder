@@ -1,5 +1,5 @@
 import {renderRecipeTile} from '../components/recipe-card.js';
-import {MEALS} from '../constants.js';
+import {COOKING_TIMES, MEALS} from '../constants.js';
 import {escapeAttr, renderStatus} from '../utils/dom.js';
 import {filterRecipes} from '../utils/search.js';
 
@@ -61,7 +61,7 @@ export function renderRecipesView(state) {
         </select></label>
         <label>Время готовки<select data-change="catalog-time" aria-controls="recipe-results">
           <option value="">Любое</option>
-          ${[15, 30, 60].map((time) => `<option value="${time}" ${state.catalogMaxTime === time ? 'selected' : ''}>До ${time} мин</option>`).join('')}
+          ${COOKING_TIMES.map((time) => `<option value="${time}" ${state.catalogMaxTime === time ? 'selected' : ''}>До ${time} мин</option>`).join('')}
         </select></label>
         <label class="catalog-favorites"><input type="checkbox" data-change="catalog-favorites" aria-controls="recipe-results"
           ${signedIn && state.catalogFavoritesOnly ? 'checked' : ''}

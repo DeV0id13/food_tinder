@@ -17,7 +17,7 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
-function createApp(overrides = {}) {
+function createApp(overrides = {}, browser) {
   const element = () => ({addEventListener() {}, innerHTML: ''});
   const dialog = Object.assign(new EventTarget(), {
     innerHTML: '',
@@ -34,7 +34,7 @@ function createApp(overrides = {}) {
     login: async () => userB,
     ...overrides,
   };
-  const app = new FoodTinderApp({root: element(), dialog, toast: element(), api});
+  const app = new FoodTinderApp({root: element(), dialog, toast: element(), api, browser});
   app.setSession(userA);
   app.messages = [];
   app.toast = (message) => app.messages.push(message);
@@ -561,4 +561,126 @@ test('purchase conflict refreshes amounts before another attempt', async () => {
   assert.deepEqual(app.state.shopping, updated);
   assert.equal(app.state.error, null);
   assert.match(app.messages[0], /Список покупок изменился/);
+});
+
+function createBrowser(path) {
+  const browser = new EventTarget();
+  const origin = 'https://foodtinder.test';
+  const entries = [new URL(path, origin)];
+  let cursor = 0;
+  Object.defineProperty(browser, 'location', {get: () => entries[cursor]});
+  const traverse = (offset) => {
+    cursor += offset;
+    browser.dispatchEvent(new Event('popstate'));
+  };
+  browser.history = {
+    pushState(_state, _title, url) { entries.splice(++cursor, entries.length, new URL(url, origin)); },
+    replaceState(_state, _title, url) { entries[cursor] = new URL(url, origin); },
+    back() { traverse(-1); },
+    forward() { traverse(1); },
+  };
+  return browser;
+}
+
+test('private direct links and reload wait for the session before loading the requested data', async () => {
+  const browser = createBrowser('/shopping');
+  const session = deferred();
+  const calls = [];
+  const plan = {id: 2, start_date: '2026-11-20', duration_days: 1, enabled_meals: ['lunch'], slots: []};
+  const app = createApp({
+    getSession: () => { calls.push('session'); return session.promise; },
+    getPlans: async () => { calls.push('plans'); return [plan]; },
+    getPlan: async () => plan,
+    getShoppingList: async (id) => { calls.push('shopping'); return {plan_id: id, items: []}; },
+    getFeed: () => assert.fail('Requested shopping, not feed'),
+  }, browser);
+  app.setSession(guest);
+  const starting = app.start();
+  assert.deepEqual(calls, ['session']);
+  assert.equal(app.state.view, 'shopping');
+  session.resolve(userA);
+  await starting;
+  assert.deepEqual(calls, ['session', 'plans', 'shopping']);
+  assert.equal(app.state.shopping.plan_id, 2);
+  assert.equal(browser.location.pathname, '/shopping');
+});
+
+test('anonymous direct links stay on the private view and sign-in returns to it', async () => {
+  const browser = createBrowser('/favorites');
+  const favorites = [{id: 42, title: 'Сырники'}];
+  let reads = 0;
+  const app = createApp({getSession: async () => guest, getFavorites: async () => {
+    reads += 1;
+    return favorites;
+  }}, browser);
+  await app.start();
+  assert.equal(reads, 0);
+  assert.equal(browser.location.pathname, '/favorites');
+  assert.match(app.root.innerHTML, /Избранное доступно после входа/i);
+  await app.showAuth();
+  assert.equal(browser.location.pathname + browser.location.search, '/account?next=favorites');
+  await app.login({});
+  assert.equal(reads, 1);
+  assert.equal(browser.location.pathname, '/favorites');
+  assert.equal(app.state.view, 'favorites');
+  assert.deepEqual(app.state.favorites, favorites);
+});
+
+test('catalog URL restores filters across reload and browser history without an entry per edit', async () => {
+  const browser = createBrowser('/');
+  const catalog = [
+    {id: 1, title: 'Суп с копчёностями', meal_types: ['lunch'], cooking_time_minutes: 45},
+    {id: 2, title: 'Суп с грибами', meal_types: ['lunch'], cooking_time_minutes: 25},
+  ];
+  const api = {getSession: async () => userA, getRecipes: async () => catalog, getFavorites: async () => catalog.slice(0, 1)};
+  const app = createApp(api, browser);
+  app.root.querySelector = () => null;
+  await app.start();
+  await app.navigate('recipes');
+  app.onInput({target: {dataset: {input: 'recipe-search'}, value: 'копчен'}});
+  await app.onChange({target: {dataset: {change: 'catalog-meal'}, value: 'lunch'}});
+  await app.onChange({target: {dataset: {change: 'catalog-time'}, value: '60'}});
+  await app.onChange({target: {dataset: {change: 'catalog-favorites'}, checked: true}});
+  const filteredUrl = browser.location.pathname + browser.location.search;
+  assert.equal(browser.location.searchParams.get('favorites'), '1');
+  const reloaded = createApp(api, createBrowser(filteredUrl));
+  await reloaded.start();
+  assert.equal(reloaded.state.view, 'recipes');
+  assert.equal(reloaded.state.catalogQuery, 'копчен');
+  assert.equal(reloaded.state.catalogMeal, 'lunch');
+  assert.equal(reloaded.state.catalogMaxTime, 60);
+  assert.equal(reloaded.state.catalogFavoritesOnly, true);
+  assert.match(reloaded.root.innerHTML, /Найдено: 1 из 2/);
+  await app.navigate('plans');
+  browser.history.back();
+  assert.equal(app.state.view, 'recipes');
+  assert.equal(app.state.catalogQuery, 'копчен');
+  browser.history.back();
+  assert.equal(app.state.view, 'feed');
+  browser.history.forward();
+  browser.history.forward();
+  assert.equal(app.state.view, 'plans');
+  await new Promise(setImmediate);
+});
+
+test('logout removes private data and back navigation shows sign-in without private API calls', async () => {
+  const browser = createBrowser('/favorites');
+  let authenticated = true;
+  let reads = 0;
+  const app = createApp({
+    getSession: async () => authenticated ? userA : guest,
+    getFavorites: async () => { reads += 1; return [{id: 10, title: 'Личный рецепт'}]; },
+    logout: async () => { authenticated = false; return guest; },
+  }, browser);
+  await app.start();
+  assert.match(app.root.innerHTML, /Личный рецепт/);
+  await app.navigate('auth');
+  await app.logout();
+  assert.equal(browser.location.pathname, '/');
+  browser.history.back();
+  assert.equal(browser.location.pathname, '/favorites');
+  assert.equal(reads, 1);
+  assert.match(app.root.innerHTML, /Избранное доступно после входа/i);
+  assert.doesNotMatch(app.root.innerHTML, /Личный рецепт/);
+  assert.equal(app.state.favoriteIds.size, 0);
 });

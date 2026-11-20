@@ -7,6 +7,7 @@ export const MEALS = [
 
 export const MEAL_LABELS = Object.fromEntries(MEALS.map(({id, label}) => [id, label]));
 export const DURATIONS = [1, 3, 7];
+export const COOKING_TIMES = [15, 30, 60];
 export const API_BASE = '/api/v1/';
 
 export const VIEW_TITLES = {

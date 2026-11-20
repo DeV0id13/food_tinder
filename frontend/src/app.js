@@ -5,22 +5,27 @@ import {clearPrivateState, createInitialState, setFavorites} from './state/state
 import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
 import {compatibleFavorites, invalidateShopping, slotFor} from './utils/plans.js';
+import {isPrivateView, readRoute, routeUrl} from './utils/routes.js';
 import {renderShell} from './views/shell.js';
 import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
 import {pickedRecipeTitle, renderPickerResults, renderSlotPicker} from './views/slot-picker.js';
 
 export class FoodTinderApp {
-  constructor({root, dialog, toast, api}) {
+  constructor({root, dialog, toast, api, browser = globalThis.window}) {
     this.root = root;
     this.dialog = dialog;
     this.toastElement = toast;
     this.api = api;
+    this.browser = browser;
+    this.initializingSession = false;
+    this.authReturnView = null;
     this.state = createInitialState();
     this.sessionGeneration = 0;
     this.requestVersions = new Map();
     this.toastTimer = null;
     this.slotPicker = null;
     this.mutation = null;
+    this.browser?.addEventListener('popstate', () => this.restoreRoute());
     this.root.addEventListener('click', (event) => this.onClick(event));
     this.root.addEventListener('submit', (event) => this.onSubmit(event));
     this.root.addEventListener('change', (event) => this.onChange(event));
@@ -31,6 +36,10 @@ export class FoodTinderApp {
     this.dialog.addEventListener('change', (event) => this.onChange(event));
     this.dialog.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && event.target.dataset.input === 'picker-search') event.preventDefault();
+      if (event.key === 'Escape' && this.slotPicker) {
+        event.preventDefault();
+        this.dialog.close();
+      }
     });
     this.dialog.addEventListener('click', (event) => {
       if (event.target === this.dialog) this.dialog.close();
@@ -64,6 +73,7 @@ export class FoodTinderApp {
   }
 
   setSession(session, reset = false) {
+    const previous = this.state.session;
     if (reset || session.id !== this.state.session.id
       || session.authenticated !== this.state.session.authenticated) {
       this.sessionGeneration += 1;
@@ -80,6 +90,9 @@ export class FoodTinderApp {
     }
     this.state.session = session;
     this.state.sessionKnown = true;
+    if (previous.authenticated && previous.id !== session.id && this.state.view === 'recipes') {
+      this.writeRoute(true);
+    }
   }
 
   beginRequest(key) {
@@ -124,6 +137,8 @@ export class FoodTinderApp {
   }
 
   async start() {
+    if (this.browser) this.applyRoute(readRoute(this.browser.location));
+    this.initializingSession = true;
     this.render();
     const context = this.sessionContext();
     try {
@@ -132,13 +147,11 @@ export class FoodTinderApp {
         if (this.isCurrentSession(context)) this.setSession(session);
       } catch (error) {
         await this.handleError(error, () => this.isCurrentSession(context));
+      } finally {
+        this.initializingSession = false;
       }
-
-      // Feed is public and must get its own state even when session initialization fails.
-      await this.loadFeed(false);
-      if (this.state.sessionKnown && this.state.session.authenticated) {
-        await this.loadFavorites(false);
-      }
+      if (this.browser) this.applyRoute(readRoute(this.browser.location));
+      await this.loadView(this.state.view);
     } catch (error) {
       await this.handleError(error);
     } finally {
@@ -323,34 +336,70 @@ export class FoodTinderApp {
   }
 
   showAuth(message) {
-    this.state.view = 'auth';
     this.state.authTab = 'login';
     this.state.authNotice = message || 'Войдите, чтобы сохранить это действие.';
-    this.render();
+    return this.navigate('auth', {next: isPrivateView(this.state.view) ? this.state.view : null});
   }
 
-  async navigate(view) {
+  applyRoute({view, filters, next}) {
+    this.state.view = view;
+    this.authReturnView = next ?? null;
+    if (filters) {
+      Object.assign(this.state, filters, {
+        catalogFavoritesOnly: this.state.session.authenticated && filters.catalogFavoritesOnly,
+      });
+    }
+  }
+
+  writeRoute(replace = false) {
+    if (!this.browser) return;
+    const {pathname, search} = this.browser.location;
+    const url = routeUrl(this.state.view, this.state, this.authReturnView);
+    if (url !== pathname + search) {
+      if (replace) this.browser.history.replaceState(null, '', url);
+      else this.browser.history.pushState(null, '', url);
+    }
+  }
+
+  restoreRoute() {
+    const route = readRoute(this.browser.location);
+    this.applyRoute(route);
+    return this.navigate(route.view, {fromHistory: true, next: route.next});
+  }
+
+  async navigate(view, {replace = false, fromHistory = false, next = null} = {}) {
     if (this.dialog.open) this.dialog.close();
     this.state.view = view;
+    this.authReturnView = next ?? null;
     this.state.error = null;
+    if (!fromHistory) this.writeRoute(replace);
     this.render();
-    if (view === 'feed') await this.loadFeed();
-    if (view === 'recipes' && !this.state.catalog) await this.loadCatalog();
-    if (view === 'recipes' && this.state.session.authenticated
-      && this.state.favoritesStatus !== 'ready' && this.state.favoritesStatus !== 'loading') {
-      await this.loadFavorites();
+    if (!this.initializingSession) await this.loadView(view);
+  }
+
+  async loadView(view) {
+    const {authenticated} = this.state.session;
+    const needsFavorites = authenticated && !['ready', 'loading'].includes(this.state.favoritesStatus);
+    if (view === 'feed') {
+      await Promise.all([this.loadFeed(), needsFavorites ? this.loadFavorites() : undefined]);
     }
-    if (view === 'favorites' && this.state.session.authenticated) await this.loadFavorites();
-    if (view === 'plans' && this.state.session.authenticated) {
+    if (view === 'recipes') {
+      await Promise.all([
+        this.state.catalog ? undefined : this.loadCatalog(),
+        needsFavorites ? this.loadFavorites() : undefined,
+      ]);
+    }
+    if (view === 'favorites' && authenticated) await this.loadFavorites();
+    if (view === 'plans' && authenticated) {
       await Promise.all([
         this.loadFavorites(false),
         this.loadPlans(false),
       ]);
       this.render();
     }
-    if (view === 'shopping' && this.state.session.authenticated) {
+    if (view === 'shopping' && authenticated) {
       if (!this.state.plans) await this.loadPlans(false);
-      if (this.state.plans?.length) await this.loadShopping(false);
+      if (this.state.view === view && this.state.plans?.length) await this.loadShopping(false);
       this.render();
     }
   }
@@ -377,6 +426,7 @@ export class FoodTinderApp {
     if (action === 'retry-recipes') return this.loadCatalog();
     if (action === 'reset-catalog') {
       Object.assign(this.state, {catalogQuery: '', catalogMeal: '', catalogMaxTime: 0, catalogFavoritesOnly: false});
+      this.writeRoute(true);
       this.render();
       this.root.querySelector?.('#recipe-search')?.focus();
       return;
@@ -434,6 +484,7 @@ export class FoodTinderApp {
   }
 
   updateCatalogResults() {
+    if (this.state.view === 'recipes') this.writeRoute(true);
     const results = this.root.querySelector('[data-catalog-results]');
     if (results) results.innerHTML = renderCatalogResults(this.state);
     const count = this.root.querySelector('[data-catalog-count]');
@@ -478,8 +529,8 @@ export class FoodTinderApp {
     await this.runMutation('auth', async () => {
       this.setSession(await this.api.login(payload), true);
       this.state.authNotice = null;
-      await Promise.all([this.loadFavorites(false), this.loadFeed(false)]);
-      this.state.view = 'feed';
+      if (this.state.view === 'auth') await this.navigate(this.authReturnView || 'feed', {replace: true});
+      else await this.loadView(this.state.view);
       this.toast('Вход выполнен');
     });
   }
@@ -499,6 +550,8 @@ export class FoodTinderApp {
       await this.api.logout();
       this.setSession({authenticated: false, id: null, email: null}, true);
       this.state.view = 'feed';
+      this.authReturnView = null;
+      this.writeRoute(true);
       this.render();
       // The POST confirmed logout. A failed CSRF/session refresh cannot undo it.
       this.toast('Вы вышли из аккаунта');
