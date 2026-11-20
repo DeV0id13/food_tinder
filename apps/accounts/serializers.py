@@ -29,7 +29,7 @@ class RegisterSerializer(StrictFieldsSerializer):
         return get_user_model().objects.normalize_email(value)
 
     def validate(self, attrs):
-        user = get_user_model()(email=attrs["email"])
+        user = get_user_model()(email=attrs["email"], first_name=attrs["first_name"])
         try:
             validate_password(attrs["password"], user=user)
         except ValidationError as exc:
