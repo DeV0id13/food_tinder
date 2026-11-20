@@ -1,4 +1,5 @@
 import {ApiError, apiErrorMessage} from './api/errors.js';
+import {generatePlanSlots} from './utils/auto-plan.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {MEAL_LABELS} from './constants.js';
 import {PlanDrafts} from './state/plan-drafts.js';
@@ -594,6 +595,8 @@ export class FoodTinderApp {
     if (action === 'delete-slot') return this.deleteSlot(Number(control.dataset.dayIndex), control.dataset.mealType, Number(control.dataset.planId));
     if (action === 'plan-list') return this.navigate('plans', {planMode: 'list'});
     if (action === 'new-plan') return this.openPlanEditor('new');
+    if (action === 'auto-fill-plan') return this.autoFillPlan();
+    if (action === 'regenerate-plan') return this.autoFillPlan({replace: true});
     if (action === 'edit-plan') return this.openPlanEditor('edit', Number(control.dataset.planId));
     if (action === 'duplicate-plan') return this.duplicatePlan(Number(control.dataset.planId));
     if (action === 'delete-plan') return this.deletePlan(Number(control.dataset.planId));
@@ -673,6 +676,12 @@ export class FoodTinderApp {
     if (event.target.dataset.change === 'picker-recipe' && this.isCurrentPicker(this.slotPicker)) {
       this.slotPicker.recipeId = Number(event.target.value);
       this.updatePickerSelection();
+      return;
+    }
+    if (change === 'plan-auto-servings') {
+      if (!this.state.planDraft || this.state.busy) return;
+      this.state.planDraft.generationServings = Number(event.target.value);
+      this.planDrafts.put(this.state.session.id, this.state.planDraft.plan.id, this.state.planDraft);
       return;
     }
     if (['plan-date', 'plan-duration', 'plan-meal'].includes(change)) return this.changePlanSettings(event.target);
@@ -934,6 +943,43 @@ export class FoodTinderApp {
     this.focusSlot(picker);
   }
 
+  async autoFillPlan({replace = false} = {}) {
+    const draft = this.state.planDraft;
+    if (!draft || this.state.busy || this.state.view !== 'plans' || this.editablePlanId() === null) return;
+    const {plan} = draft;
+    if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) {
+      this.toast('Укажите корректную дату и хотя бы один приём пищи.');
+      return;
+    }
+    const servings = Number(draft.generationServings ?? 1);
+    if (!Number.isInteger(servings) || servings < 1 || servings > 20) {
+      this.toast('Укажите количество человек от 1 до 20.');
+      return;
+    }
+    if (replace && plan.slots.length
+      && !this.confirm('Пересобрать меню? Все выбранные вручную блюда в черновике будут заменены.')) return;
+
+    const request = this.beginRequest('auto-fill-plan');
+    if (this.state.favoritesStatus !== 'ready') await this.loadFavorites(false);
+    if (!this.isCurrentRequest('auto-fill-plan', request) || this.state.planDraft !== draft
+      || this.state.view !== 'plans' || this.editablePlanId() === null
+      || this.state.favoritesStatus !== 'ready') return;
+
+    const rotation = (draft.generationRotation ?? 0) + (replace ? 1 : 0);
+    const result = generatePlanSlots(plan, this.state.favorites, {servings, replace, rotation});
+    if (!result.generated) {
+      this.toast(result.missing ? 'В избранном нет блюд для выбранных приёмов пищи.'
+        : 'Все приёмы пищи уже заполнены. Для нового варианта нажмите «Пересобрать меню».');
+      return;
+    }
+    plan.slots = result.slots;
+    draft.generationRotation = rotation;
+    draft.generationNotice = `Подобрано блюд: ${result.generated}.${result.repeated ? ` Повторов: ${result.repeated}.` : ''}${result.missing ? ` Пустых слотов: ${result.missing} — нет подходящих блюд в избранном.` : ''} Проверьте меню и нажмите «Сохранить рацион».`;
+    this.markDraftChanged();
+    this.render();
+    this.root.querySelector?.('[data-action="auto-fill-plan"]')?.focus();
+  }
+
   markDraftChanged() {
     const {planDraft, session} = this.state;
     planDraft.dirty = true;
@@ -964,6 +1010,7 @@ export class FoodTinderApp {
       ? '[data-change="plan-date"]' : `[data-change="${change}"][value="${control.value}"]`;
     if (!removed || this.confirm(`После сохранения из рациона будут удалены блюда · ${removed}. Продолжить?`)) {
       draft.plan = {...next, slots: remaining};
+      draft.generationNotice = '';
       this.markDraftChanged();
     }
     this.render();
