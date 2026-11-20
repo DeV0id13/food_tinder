@@ -18,8 +18,9 @@
 - Vite и vanilla JavaScript; Caddy раздаёт frontend, static и media в production.
 - pytest, pytest-django, Ruff, mypy и встроенный Node test runner.
 
-Прямые Python-зависимости закреплены точными версиями в `[dependency-groups]`
-файла `pyproject.toml`: группы `base`, `dev` и `prod`.
+Прямые Python-зависимости закреплены в `pyproject.toml`, а все транзитивные
+версии и хеши — в коммитируемом `uv.lock`. Используется **uv 0.13.9**
+с группами `base`, `dev`, `prod`, `security`. Frontend остаётся на pnpm.
 Окружение development не устанавливает Gunicorn; production не устанавливает инструменты тестирования.
 
 ## Architecture
@@ -55,7 +56,9 @@
 ├── Dockerfile
 ├── compose.yaml
 ├── .env.example
-├── pyproject.toml       # Python dependencies, pytest, Ruff
+├── pyproject.toml       # uv project, dependency groups, pytest, Ruff
+├── uv.lock              # locked versions + artifact hashes
+├── .python-version      # Python 3.12
 └── README.md
 ```
 
@@ -110,39 +113,47 @@ Session response запрещён для кеширования. После ре
 - Свободный локальный порт 8000.
 - Python на хосте не обязателен: все команды ниже выполняются в контейнерах.
 
-## Python dependencies
+## Python dependencies (uv)
 
-Все прямые Python-зависимости объявлены в `pyproject.toml` стандартными
-[группами PEP 735](https://packaging.python.org/en/latest/specifications/dependency-groups/).
-Настройки pytest и Ruff находятся в том же файле.
+Для всех Python-зависимостей используется [uv](https://docs.astral.sh/uv/)
+версии **0.13.9**. `pyproject.toml` описывает проект как непакетируемое Django-
+приложение (`[tool.uv] package = false`), стандартные группы PEP 735 и
+настройки pytest, Ruff и mypy. `uv.lock` **обязательно коммитится**; в CI
+и Docker используется `--locked`, чтобы исключить незаметное изменение версий.
 
 | Группа | Состав |
 | --- | --- |
 | `base` | Django, DRF, psycopg и Pillow |
-| `dev` | `base` + pytest, pytest-django и Ruff |
+| `dev` | `base` + pytest, pytest-django, Ruff, pre-commit, mypy/stubs |
 | `prod` | `base` + Gunicorn |
+| `security` | Semgrep CE и требуемые build tools — только для SAST |
 
-Для установки групп нужен **pip >= 25.1**. Dockerfile обеспечивает эту версию
-и устанавливает нужную группу автоматически. Приложение запускается из исходников;
-сборка собственного Python-пакета для установки зависимостей не требуется.
-
-При работе в активированном virtualenv или CI выполняйте из корня репозитория:
+Установите uv по [официальной инструкции](https://docs.astral.sh/uv/getting-started/installation/)
+и выполните в корне репозитория:
 
 ```sh
-python -m pip install "pip>=25.1"
-python -m pip install --group dev
+uv sync --locked --only-group dev
+uv run --locked --only-group dev python manage.py check
 ```
 
-Для отдельного production-окружения вместо `--group dev` используйте `--group prod`.
-При необходимости установить только общие библиотеки — `--group base`.
-Группы `dev` и `prod` включают `base`, перечислять общие библиотеки повторно не нужно.
-Установка группы добавляет зависимости, но не удаляет ранее установленные пакеты:
-development и production должны использовать отдельные окружения.
+`uv sync` создаст `.venv`, установит Python 3.12 при необходимости и
+синхронизирует точный набор зависимостей. При работе над зависимостями:
+`uv add --group dev <package>` / `uv remove --group dev <package>`
+или редактирование `pyproject.toml` с последующим `uv lock`; коммитьте
+**оба файла**. `uv lock --check` проверяет актуальность lock-файла.
+После изменения зависимостей пересоберите Docker-образы.
 
-После изменения зависимостей пересоберите соответствующий Docker target.
-Прямые версии закреплены; отдельный lock-файл транзитивных зависимостей пока не используется.
-Переменные окружения и PostgreSQL для запуска Django настраиваются как обычно:
-установка группы сама по себе не загружает `.env` и не запускает БД.
+Для отдельного production-окружения используйте `uv sync --locked
+--only-group prod` (не устанавливайте вместе с dev); для SAST —
+`uv sync --locked --only-group security`.
+
+В Docker зависимости расположены в `/opt/venv`, вне примонтированного
+`/app`; локальная разработка использует обычную `.venv`.
+В production сам uv и системный pip/setuptools/wheel после сборки не остаются.
+Frontend управляется **pnpm**, Python-пакеты не устанавливают Node.js-зависимости.
+
+Переменные окружения и PostgreSQL для запуска Django настраиваются отдельно:
+`uv sync` не загружает `.env` и не запускает БД.
 
 ## Local Development
 

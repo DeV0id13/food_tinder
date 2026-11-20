@@ -76,14 +76,16 @@ docker compose run --rm web python manage.py migrate
 docker compose up -d web
 ```
 
-Если Django запускается на хосте, нужны Python 3.12+, PostgreSQL 16+, виртуальное окружение
-с `pip >= 25.1` и зависимости `python -m pip install --group dev`. Передайте переменные
-из `.env` в окружение процесса; Django сам этот файл не читает. Укажите `POSTGRES_HOST=127.0.0.1`
-и реальный порт локальной БД (вместо Compose hostname `postgres`), затем выполните:
+Если Django запускается на хосте, нужны Python 3.12+, PostgreSQL 16+ и
+[uv](https://docs.astral.sh/uv/). В корне репозитория выполните
+`uv sync --locked --only-group dev`. Передайте переменные из `.env` в
+окружение процесса; Django сам этот файл не читает. Укажите
+`POSTGRES_HOST=127.0.0.1` и реальный порт локальной БД (вместо Compose
+hostname `postgres`), затем выполните:
 
 ```sh
-python manage.py migrate
-python manage.py runserver 127.0.0.1:8000
+uv run --locked --only-group dev python manage.py migrate
+uv run --locked --only-group dev python manage.py runserver 127.0.0.1:8000
 ```
 
 Порядок ручной проверки после заполнения каталога:

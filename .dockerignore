@@ -19,3 +19,6 @@ staticfiles
 *.tmp
 
 catalog-import
+**/node_modules
+**/dist
+**/.pnpm-store

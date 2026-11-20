@@ -19,14 +19,15 @@ without review of the actual pipeline results.
 
 | Component | Version / provenance |
 | --- | --- |
-| Python | 3.12 (GitHub Actions and pre-commit) |
+| Python | 3.12 (`.python-version`, GitHub Actions and pre-commit) |
+| uv | 0.13.9 (GitHub Actions and Docker build; `uv.lock` tracks dependencies) |
 | pre-commit | 3.8.0 in `pyproject.toml` |
 | Ruff | 0.16.8 in both `pyproject.toml` and hook v0.16.8 |
 | mypy | 1.18.2 |
 | django-stubs | 6.1.2 (supports Django 5.2 partially; matched to DRF stubs 3.18.2) |
 | djangorestframework-stubs | 3.18.2 (DRF 3.18) |
 | Gitleaks | v8.21.2 (Go module github.com/zricethezav/gitleaks/v8 + local hook) |
-| Semgrep CE | 1.122.0 and setuptools 80.9.0 installed only in the sast job |
+| Semgrep CE | 1.122.0 and setuptools 80.9.0 from uv's isolated `security` group |
 | Trivy CLI | v0.76.2, through trivy-action pinned at 0.35.0 |
 | Actions | Full 40-char commit SHAs in both workflow files, release annotated inline |
 | Node.js | 22 for frontend job |
@@ -36,39 +37,34 @@ Go module packages are checked through the standard Go checksum database.
 Trivy uses an exact release version, not `latest`. The release SHAs of GitHub
 Actions are fixed in `ci.yml` and `security.yml`. Review these pins before
 bumping tools, and keep the Ruff hook aligned with `pyproject.toml`.
-Transitive Python dev dependencies are not currently locked by a lockfile;
-the direct pins do **not** claim a byte-for-byte reproducible entire environment.
+From PR #34 onward, `uv.lock` pins transitive Python dependencies and hashes.
+The `dev`, `prod`, `base` and `security` groups are resolved together.
+CI and Docker use `uv sync --locked`; the lockfile must be updated intentionally.
 
 ## Windows (PowerShell)
 
-From the repository root, with Python 3.12 on PATH:
+From the repository root after installing uv 0.13.9:
 
 ```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install "pip>=25.1"
-python -m pip install --group dev
-pre-commit validate-config
-pre-commit install
-pre-commit run --all-files
-python .github/scripts/run_mypy.py
+uv sync --locked --only-group dev
+uv run --locked --only-group dev pre-commit validate-config
+uv run --locked --only-group dev pre-commit install
+uv run --locked --only-group dev pre-commit run --all-files
+uv run --locked --only-group dev python .github/scripts/run_mypy.py
 ```
 
 ## Linux / macOS
 
 ```sh
-python3.12 -m venv .venv
-. .venv/bin/activate
-python -m pip install "pip>=25.1"
-python -m pip install --group dev
-pre-commit validate-config
-pre-commit install
-pre-commit run --all-files
-python .github/scripts/run_mypy.py
+uv sync --locked --only-group dev
+uv run --locked --only-group dev pre-commit validate-config
+uv run --locked --only-group dev pre-commit install
+uv run --locked --only-group dev pre-commit run --all-files
+uv run --locked --only-group dev python .github/scripts/run_mypy.py
 ```
 
 Clone does not install hooks automatically: every developer must run
-`pre-commit install`. Hooks may fix whitespace, formatting or safe Ruff findings;
+`uv run --locked --only-group dev pre-commit install`. Hooks may fix whitespace, formatting or safe Ruff findings;
 review those changes and run `git add` plus `git commit` again. In PyCharm,
 choose the same `.venv` as the Python interpreter and enable Git hooks.
 `pre-commit run --all-files` is an optional full check; individual commits use
@@ -92,7 +88,8 @@ must be fixed by the module owner, not hidden in FT-07.
   intermediate commits where a secret was subsequently removed. The CLI uses
   `.github/security/gitleaks.toml` and redacts values in verbose diagnostics; local staged hook uses
   the **same** config and Gitleaks version. The complete history must be fetched.
-- `sast`: pinned Semgrep CE and in-repository Python/Django/JavaScript rules.
+- `sast`: pinned Semgrep CE from uv's isolated `security` group
+  and in-repository Python/Django/JavaScript rules.
   Scopes: `apps/`, `common/`, `config/`, `manage.py`, `frontend/`.
   Generated migrations, node_modules and dist are excluded. The reviewed rules
   cover code execution, shell commands, interpolated SQL, explicit CSRF bypass,
@@ -100,8 +97,9 @@ must be fixed by the module owner, not hidden in FT-07.
   configuration errors fail the job.
 - `backend`: healthy isolated PostgreSQL 16, Django check, missing migration
   detection, apply migrations on clean DB, complete pytest suite.
-- `frontend`: Node.js 22, pnpm 11.28.13, `pnpm install --frozen-lockfile`, `pnpm test`,
-  `pnpm run build` and a check for `frontend/dist/index.html`.
+- `frontend`: Node.js 22, pnpm 11.28.13, `pnpm install --frozen-lockfile`,
+  `pnpm test`, `pnpm run build`, artifact validation and a Caddy frontend image.
+  Frontend Docker caching is deliberately off: cache export previously took 29 s.
 - `docker`: builds both Docker targets and scans **the just-built production
   image**, packages from OS and Python including transitives. Trivy gets a full
   table report (all severities); its separate HIGH/CRITICAL gate fails the job,
@@ -194,8 +192,8 @@ separately before closing issue #9.
 
 ## Troubleshooting
 
-- Hooks not firing: `pre-commit install` must be run per clone, and the
-  configured interpreter must have `--group dev` installed.
+- Hooks not firing: run `uv run --locked --only-group dev pre-commit install`
+  per clone, and ensure `uv sync --locked --only-group dev` succeeded.
 - Django-stubs settings errors: use the shared mypy helper, not bare
   `python -m mypy` without a disposable environment.
 - Missing schema/table in backend CI: inspect PostgreSQL health, `migrate`,
@@ -208,8 +206,10 @@ separately before closing issue #9.
   dependencies via their respective owners. Scanner database/network failures
   are not silently skipped.
 
-CI is quality assurance only: no image publishing, CD, server provisioning,
-hosting, DNS, TLS or deployment is introduced here.
+Historical FT-07 used CI for quality gates only. Since the deployment workflow
+was added later, successful `master` checks publish immutable SHA-tagged images
+and gate `deploy production` behind the `production` Environment reviewer.
+PR builds never publish images or deploy.
 
 ## CI remediation after rebase
 
