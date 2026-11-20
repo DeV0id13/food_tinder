@@ -4,7 +4,7 @@ import {compatibleFavorites, buildPlanDays, slotFor} from '../src/utils/plans.js
 import {validationMessages} from '../src/api/errors.js';
 import {renderFeedView, visibleFeedRecipes} from '../src/views/feed-view.js';
 import {renderRecipeDetail} from '../src/components/recipe-card.js';
-import {renderRecipesView} from '../src/views/recipes-view.js';
+import {filterRecipes, renderRecipesView} from '../src/views/recipes-view.js';
 import {renderAuthView} from '../src/views/auth-view.js';
 import {renderShell} from '../src/views/shell.js';
 import {createInitialState, clearPrivateState} from '../src/state/state.js';
@@ -119,4 +119,31 @@ test('DRF validation mappings become readable messages', () => {
     'email: Already used.',
     'Try again.',
   ]);
+});
+
+test('recipe search filters by title without case or ё differences and escapes input', () => {
+  const recipes = [
+    {id: 1, title: 'Борщ с говядиной', meal_types: ['lunch'], cooking_time_minutes: 50, difficulty: 2},
+    {id: 2, title: 'Творожная запеканка', meal_types: ['breakfast'], cooking_time_minutes: 40, difficulty: 1},
+    {id: 3, title: 'Ёжики с рисом', meal_types: ['dinner'], cooking_time_minutes: 45, difficulty: 2},
+  ];
+  assert.deepEqual(filterRecipes(recipes, '  БОРЩ ').map(({id}) => id), [1]);
+  assert.deepEqual(filterRecipes(recipes, 'ежики').map(({id}) => id), [3]);
+  assert.equal(filterRecipes(recipes, '').length, 3);
+
+  const state = createInitialState();
+  state.catalog = recipes;
+  state.catalogStatus = 'ready';
+  state.catalogQuery = 'борщ';
+  const html = renderRecipesView(state);
+  assert.match(html, /Поиск по названию/);
+  assert.match(html, /Борщ с говядиной/);
+  assert.doesNotMatch(html, /Творожная запеканка/);
+  assert.match(html, /Найдено: 1 из 3/);
+
+  state.catalogQuery = '<img src=x onerror=alert(1)>';
+  const safe = renderRecipesView(state);
+  assert.doesNotMatch(safe, /value="<img/);
+  assert.match(safe, /value="&lt;img/);
+  assert.match(safe, /Ничего не найдено/);
 });
