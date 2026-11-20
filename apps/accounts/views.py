@@ -11,7 +11,14 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .models import UserProfile
-from .serializers import LoginSerializer, LogoutSerializer, ProfileSerializer, RegisterSerializer
+from .serializers import (
+    AccountNamesSerializer,
+    ChangeEmailSerializer,
+    LoginSerializer,
+    LogoutSerializer,
+    ProfileSerializer,
+    RegisterSerializer,
+)
 
 
 def _require_csrf(request):
@@ -47,7 +54,9 @@ def register(request):
     try:
         with transaction.atomic():
             user = get_user_model().objects.create_user(
-                email=email, password=serializer.validated_data["password"]
+                email=email,
+                password=serializer.validated_data["password"],
+                first_name=serializer.validated_data["first_name"],
             )
             UserProfile.objects.create(user=user)
     except IntegrityError as exc:
@@ -56,7 +65,10 @@ def register(request):
                 {"email": ["This email is already registered."]}
             ) from exc
         raise
-    return Response({"id": user.pk, "email": user.email}, status=status.HTTP_201_CREATED)
+    return Response(
+        {"id": user.pk, "email": user.email, "first_name": user.first_name},
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @never_cache
@@ -103,3 +115,52 @@ def profile(request):
             setattr(current_profile, field, value)
         current_profile.save()
     return Response(ProfileSerializer(current_profile).data)
+
+
+def _account_data(user):
+    return {"first_name": user.first_name, "last_name": user.last_name, "email": user.email}
+
+
+@never_cache
+@api_view(["GET", "PATCH"])
+def account(request):
+    if request.method == "GET":
+        return Response(_account_data(request.user))
+
+    serializer = AccountNamesSerializer(data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    with transaction.atomic():
+        user = get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        for field, value in serializer.validated_data.items():
+            setattr(user, field, value)
+        if serializer.validated_data:
+            user.save(update_fields=list(serializer.validated_data))
+    return Response(_account_data(user))
+
+
+@never_cache
+@api_view(["POST"])
+def change_email(request):
+    serializer = ChangeEmailSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    user_model = get_user_model()
+    new_email = serializer.validated_data["email"]
+    with transaction.atomic():
+        user = user_model.objects.select_for_update().get(pk=request.user.pk)
+        if not user.check_password(serializer.validated_data["current_password"]):
+            raise serializers.ValidationError(
+                {"current_password": ["Incorrect current password."]}
+            )
+        if user_model.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError({"email": ["This email is already registered."]})
+        user.email = new_email
+        try:
+            # Savepoint lets us map a concurrent unique-email conflict to a 400.
+            with transaction.atomic():
+                user.save(update_fields=["email"])
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {"email": ["This email is already registered."]}
+            ) from exc
+    request.user.email = user.email
+    return Response(_account_data(user))
