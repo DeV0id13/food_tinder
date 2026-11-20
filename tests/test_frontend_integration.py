@@ -59,9 +59,7 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
     account = {"email": "integration@example.com", "password": "ReadyFlow_7259"}
     registration = {**account, "first_name": "Иван"}
     assert (
-        client.post(
-            "/api/v1/auth/register/", registration, format="json", **origin
-        ).status_code
+        client.post("/api/v1/auth/register/", registration, format="json", **origin).status_code
         == 403
     )
 
