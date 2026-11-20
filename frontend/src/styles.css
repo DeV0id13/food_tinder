@@ -884,10 +884,128 @@ dialog:has(.slot-picker) { width: min(54rem, calc(100% - 2rem)); }
 .plan-auto-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem 1rem; }
 .active-plan-header .plan-progress { margin-top: 0.65rem; }
 .draft-status { color: var(--muted); font-size: 0.875rem; }
-.plan-editor-actions { align-items: stretch; }
-.plan-editor-actions > * { width: 100%; }
 .plan-confirmation { display: grid; gap: 1rem; }
 
 @media (max-width: 767px) {
   .saved-plan-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The toolbar stays inside the editor and above its scrolling drop targets. */
+.editor-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.25rem 1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.55rem 0.75rem;
+  border-block: 1px solid var(--line);
+  background: var(--paper);
+}
+.editor-toolbar .plan-editor-actions > * { width: auto; min-height: 2.75rem; }
+.editor-transfer-status { display: flex; align-items: center; gap: 0.3rem 0.8rem; flex-wrap: wrap; flex-basis: 100%; }
+.editor-transfer-status:has(> p:empty):not(:has(> button:not([hidden]))) { position: absolute; }
+.editor-transfer-status p { font-size: 0.875rem; }
+.editor-transfer-status .text-button { min-height: 2.75rem; }
+.editor-toolbar [hidden], .slot-actions [hidden] { display: none; }
+
+.plan-workspace {
+  grid-template-areas: 'settings library' 'settings calendar';
+  grid-template-rows: auto 1fr;
+  gap: 1.2rem clamp(1.25rem, 3vw, 2.5rem);
+}
+.plan-settings { grid-area: settings; }
+.active-plan { grid-area: calendar; min-width: 0; }
+.plan-library {
+  grid-area: library;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--paper-deep);
+}
+.plan-library summary { min-height: 2.75rem; padding: 0.65rem 0.75rem; cursor: pointer; font-weight: 600; }
+.plan-library-content { display: grid; gap: 0.45rem; padding: 0 0.75rem 0.75rem; }
+.plan-library-content label { font-size: 0.875rem; }
+.plan-library-content input { min-width: 0; }
+.plan-library-content > p { font-size: 0.8rem; }
+.plan-library-results {
+  display: flex;
+  gap: 0.45rem;
+  overflow: auto;
+  padding: 0.25rem;
+}
+.plan-library-card {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 min(16rem, 95%);
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+.plan-library-photo { width: 3rem; height: 3rem; }
+.plan-library-photo .recipe-photo-placeholder { font-size: 0; }
+.plan-drag-handle {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--control-line);
+  background: var(--paper);
+  color: var(--accent);
+  cursor: grab;
+  font-size: 1.45rem;
+  line-height: 1;
+  touch-action: none;
+  touch-action: pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+  scroll-margin-top: 10rem;
+}
+.plan-drag-handle[aria-pressed="true"] { background: var(--paper-deep); cursor: grabbing; }
+.plan-workspace .slot-recipe { grid-template-columns: 4rem minmax(0, 1fr) auto; }
+.slot-empty-instruction { font-size: 0.8rem; }
+.slot-card[data-transfer-target] { min-height: 44px; scroll-margin-top: 10rem; }
+.slot-card[data-transfer-state="ready"] { box-shadow: inset 3px 0 #406044; }
+.slot-card[data-transfer-state="ready"][data-transfer-hover] { background: #e0eadb; outline: 2px solid #406044; }
+.slot-card[data-transfer-state="blocked"][data-transfer-hover] { background: #f1dbd5; outline: 2px dashed var(--accent); }
+.slot-card[data-transfer-state="same"][data-transfer-hover] { outline: 2px dashed var(--control-line); }
+.slot-card[data-transfer-state="blocked"] [data-transfer-place] { border-style: dashed; color: var(--accent); }
+.slot-card [data-transfer-place] { min-height: 44px; scroll-margin-top: 10rem; touch-action: manipulation; }
+.plan-drag-preview {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 5;
+  max-width: min(18rem, 75vw);
+  padding: 0.45rem 0.65rem;
+  color: var(--paper);
+  background: var(--ink);
+  box-shadow: 0 0.2rem 0.6rem #19171333;
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
+.plan-drag-hint { display: block; font-size: 0.8rem; }
+
+@media (min-width: 76rem) {
+  .plan-workspace {
+    grid-template-areas: 'settings library calendar';
+    grid-template-columns: minmax(13rem, 0.8fr) minmax(13.5rem, 0.85fr) minmax(0, 2.1fr);
+    grid-template-rows: auto;
+  }
+  .plan-library { position: sticky; top: 8rem; }
+  .plan-library-results { flex-direction: column; max-height: min(52dvh, 31rem); }
+  .plan-library-card { flex-basis: auto; }
+}
+
+@media (max-width: 48rem) {
+  .plan-workspace { grid-template-areas: 'settings' 'library' 'calendar'; grid-template-rows: auto; }
+  .editor-toolbar { padding-inline: 0.45rem; }
+  .editor-toolbar .button { padding-inline: 0.6rem; }
+  .plan-workspace .slot-recipe { grid-column: 1 / -1; }
 }

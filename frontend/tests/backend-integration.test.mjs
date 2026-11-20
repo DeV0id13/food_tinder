@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {FoodTinderApp} from '../src/app.js';
 import {ApiClient} from '../src/api/api-client.js';
 import {RealApi} from '../src/api/real-api.js';
 
@@ -126,4 +127,61 @@ test('real proxy persists favorites and plans across independent sessions and ex
   }
   assert.equal((await api.getSession()).authenticated, false);
   await assert.rejects(api.getPlans(), {status: 403});
+});
+
+test('the editor keeps drops local on leave and only saves the accepted draft to PostgreSQL', async () => {
+  const api = browserApi();
+  const otherBrowser = browserApi();
+  const account = {email: `ft12-smoke-${randomUUID()}@example.test`, password: `LocalCheck_9${randomUUID().replaceAll('-', '')}`};
+  await api.register({...account, first_name: 'Редактор'});
+  await api.login(account);
+  await otherBrowser.login(account);
+  let id;
+  try {
+    const [recipe] = await api.getRecipes();
+    const meal = recipe.meal_types[0];
+    await api.setFavorite(recipe.id, true);
+    ({id} = await api.createPlan({
+      start_date: '2027-04-05', duration_days: 3, enabled_meals: [meal],
+    }));
+    const element = () => ({addEventListener() {}, innerHTML: ''});
+    const app = new FoodTinderApp({
+      root: element(), toast: element(), api, dialog: {
+        ...element(), open: false,
+        showModal() { this.open = true; },
+        close() { this.open = false; },
+      },
+    });
+    app.toast = () => {};
+    await app.start();
+    await app.openPlanEditor('edit', id);
+    const favorite = {type: 'favorite', recipe_id: recipe.id};
+    const day = (day_index) => ({day_index, meal_type: meal});
+    app.state.planDraft.generationServings = 4;
+    assert.equal(app.applyTransfer(app.transferSource(favorite), day(0)).result, 'added');
+    const source = {type: 'slot', recipe_id: recipe.id, ...day(0)};
+    assert.equal(app.applyTransfer(app.transferSource(source), day(1)).result, 'moved');
+    await app.navigate('shopping');
+    assert.equal(app.dialog.open, true);
+    await app.resolveNavigationDecision(false);
+    assert.equal(app.state.shoppingPlanId, id);
+    assert.deepEqual((await otherBrowser.getPlan(id)).slots, []);
+    assert.deepEqual((await otherBrowser.getShoppingList(id)).items, []);
+    await app.openPlanEditor('edit', id);
+    assert.equal(app.state.restoredDraft, true);
+    assert.equal(app.state.planDraft.plan.slots[0].servings, 4);
+    await app.navigate('shopping');
+    await app.resolveNavigationDecision(true);
+    assert.equal(app.state.view, 'shopping');
+    assert.equal(app.state.shoppingPlanId, id);
+    const record = (await otherBrowser.getPlan(id)).slots[0];
+    assert.equal(record.recipe_id, recipe.id);
+    assert.equal(record.day_index, 1);
+    assert.equal(record.servings, 4);
+    assert.ok(app.state.shopping.items.length);
+  } finally {
+    if (id) await api.deletePlan(id);
+    await api.logout();
+    await otherBrowser.logout();
+  }
 });

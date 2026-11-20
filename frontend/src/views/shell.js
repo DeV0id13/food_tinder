@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   ['shopping', 'Покупки'],
 ];
 
-function viewContent(state) {
+function viewContent(state, library) {
   if (state.initialLoading) {
     return renderStatus({kind: 'loading', title: 'Загружаем FoodTinder'});
   }
@@ -29,7 +29,7 @@ function viewContent(state) {
     shopping: renderShoppingView,
     auth: renderAuthView,
   };
-  return (renderers[state.view] || renderFeedView)(state);
+  return (renderers[state.view] || renderFeedView)(state, library);
 }
 
 function errorBanner(state) {
@@ -40,23 +40,23 @@ function errorBanner(state) {
   const login = state.error.type === 'auth'
     ? '<button class="banner-link" data-action="show-auth">Войти снова</button>'
     : '';
-  return `<div class="error-banner" role="alert"><span>${escapeHtml(apiErrorMessage(state.error))}</span>${login}<button class="banner-close" data-action="dismiss-error" aria-label="Закрыть">×</button></div>`;
+  return `<div class="error-banner" role="alert" tabindex="-1"><span>${escapeHtml(apiErrorMessage(state.error))}</span>${login}<button class="banner-close" data-action="dismiss-error" aria-label="Закрыть">×</button></div>`;
 }
 
-export function renderShell(state) {
+export function renderShell(state, library) {
   return `<a class="skip-link" href="#main-content">К содержимому</a>
     <div class="app-shell">
       <header class="site-header">
-        <button class="brand" data-action="open-feed" aria-label="FoodTinder, на главную">FoodTinder</button>
+        <button class="brand" data-action="open-feed"${state.busy === 'save-plan' ? ' disabled' : ''} aria-label="FoodTinder, на главную">FoodTinder</button>
         <nav class="site-nav" aria-label="Основная навигация">
-          ${NAV_ITEMS.map(([view, label]) => `<button class="nav-item" data-action="navigate" data-view="${view}"${state.view === view ? ' aria-current="page"' : ''}>${label}</button>`).join('')}
+          ${NAV_ITEMS.map(([view, label]) => `<button class="nav-item" data-action="navigate" data-view="${view}"${state.busy === 'save-plan' ? ' disabled' : ''}${state.view === view ? ' aria-current="page"' : ''}>${label}</button>`).join('')}
         </nav>
-        <button class="account-button" data-action="navigate" data-view="auth"${state.view === 'auth' ? ' aria-current="page"' : ''}>
+        <button class="account-button" data-action="navigate" data-view="auth"${state.busy === 'save-plan' ? ' disabled' : ''}${state.view === 'auth' ? ' aria-current="page"' : ''}>
           ${state.session.authenticated ? 'Аккаунт' : 'Войти'}
         </button>
       </header>
       ${errorBanner(state)}
-      <main id="main-content" tabindex="-1">${renderSwipeNotice(state.lastSwipe, state.busy)}${viewContent(state)}</main>
+      <main id="main-content" tabindex="-1">${renderSwipeNotice(state.lastSwipe, state.busy)}${viewContent(state, library)}</main>
       <footer class="site-footer"><span>FoodTinder</span><a href="/assets/editorial/photo-credits.html">Авторы фотографий</a></footer>
     </div>`;
 }

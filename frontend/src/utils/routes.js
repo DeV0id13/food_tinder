@@ -10,6 +10,10 @@ const VIEW_PATHS = {
 };
 const PATH_VIEWS = new Map(Object.entries(VIEW_PATHS).map(([view, path]) => [path, view]));
 
+export function isAppPath(pathname) {
+  return PATH_VIEWS.has(pathname.replace(/\/$/, '') || '/');
+}
+
 export function isPrivateView(view) {
   return ['favorites', 'plans', 'shopping'].includes(view);
 }

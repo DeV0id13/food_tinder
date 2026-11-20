@@ -1,5 +1,6 @@
 import {ApiError, apiErrorMessage} from './api/errors.js';
 import {generatePlanSlots} from './utils/auto-plan.js';
+import {PlanTransfer, slotAddress} from './components/plan-transfer.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {MEAL_LABELS} from './constants.js';
 import {PlanDrafts} from './state/plan-drafts.js';
@@ -8,14 +9,17 @@ import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
 import {
   compatibleFavorites, duplicatePlanDraft, hasValidPlanDates, includedSlots, invalidateShopping,
-  makePlanDraft, planDraftPayload, slotFor,
+  makePlanDraft, planContentKey, planDraftPayload, slotFor,
 } from './utils/plans.js';
-import {isPrivateView, readRoute, routeUrl} from './utils/routes.js';
+import {planDrop, unavailableDraftSlot} from './utils/plan-drop.js';
+import {isAppPath, isPrivateView, readRoute, routeUrl} from './utils/routes.js';
 import {UNDO_WINDOW_MS} from './utils/swipe-notice.js';
 import {renderShell} from './views/shell.js';
 import {favoriteSearchCount, renderFavoriteResults} from './views/favorites-view.js';
 import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
-import {draftStatus, renderShoppingDecision} from './views/plans-view.js';
+import {renderConfirmation} from './views/confirmation.js';
+import {renderLibraryResults} from './views/plan-library.js';
+import {draftStatus, renderNavigationDecision} from './views/plans-view.js';
 import {pickedRecipeTitle, renderPickerResults, renderSlotPicker} from './views/slot-picker.js';
 
 export class FoodTinderApp {
@@ -34,12 +38,23 @@ export class FoodTinderApp {
     this.state = createInitialState();
     this.planDrafts = new PlanDrafts(browser);
     this.historyIndex = browser?.history.state?.foodTinderIndex ?? 0;
-    this.restoringHistory = false;
+    this.historyReturn = null;
+    this.historyReplay = null;
     this.confirmUnload = (event) => {
       event.preventDefault();
       event.returnValue = true;
     };
-    this.shoppingDecision = null;
+    this.confirmation = null;
+    this.navigationDecision = null;
+    this.editorDraft = null;
+    this.libraryQuery = '';
+    this.editRevision = 0;
+    this.transferUndo = null;
+    this.transfer = new PlanTransfer(root, browser, {
+      getSource: (source, handle) => this.transferSource(source, handle),
+      inspect: (context, target) => this.inspectTransfer(context, target),
+      drop: (context, target) => this.applyTransfer(context, target),
+    });
     this.sessionGeneration = 0;
     this.requestVersions = new Map();
     this.toastTimer = null;
@@ -58,18 +73,23 @@ export class FoodTinderApp {
       if (event.key === 'Enter' && event.target.dataset.input === 'picker-search') event.preventDefault();
       if (event.key === 'Escape' && this.slotPicker) {
         event.preventDefault();
-        this.dialog.close();
+        this.dismissDialog();
       }
     });
     this.dialog.addEventListener('click', (event) => {
-      if (event.target === this.dialog) this.dialog.close();
+      if (event.target === this.dialog) this.dismissDialog();
+    });
+    this.dialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      this.dismissDialog();
     });
     this.dialog.addEventListener('close', () => {
       // A queued close event can arrive after another recipe has been opened.
       if (this.dialog.open) return;
       this.beginRequest('recipe-detail');
       const picker = this.slotPicker;
-      this.shoppingDecision = null;
+      this.navigationDecision = null;
+      this.settleConfirmation(false);
       this.slotPicker = null;
       if (picker) this.focusSlot(picker);
     });
@@ -78,7 +98,25 @@ export class FoodTinderApp {
   render() {
     this.expireSwipeNotice();
     this.watchUnsavedChanges();
-    this.root.innerHTML = renderShell(this.state);
+    const sameDraft = this.editorDraft && this.editorDraft === this.state.planDraft;
+    const library = this.root.querySelector?.('[data-plan-library]');
+    const results = library?.querySelector('[data-library-results]');
+    const left = sameDraft ? results?.scrollLeft : 0;
+    const top = sameDraft ? results?.scrollTop : 0;
+    const open = sameDraft && library ? library.open : true;
+    if (!sameDraft) {
+      this.libraryQuery = '';
+      this.clearTransferUndo();
+    }
+    this.editorDraft = this.state.planDraft;
+    this.transfer.cancel();
+    this.root.innerHTML = renderShell(this.state, {open, query: this.libraryQuery});
+    const nextResults = this.root.querySelector?.('[data-library-results]');
+    if (nextResults) {
+      nextResults.scrollLeft = left ?? 0;
+      nextResults.scrollTop = top ?? 0;
+    }
+    this.updateTransferUndo();
     this.updateSwipeNotice();
   }
 
@@ -138,7 +176,12 @@ export class FoodTinderApp {
     if (reset || session.id !== this.state.session.id
       || session.authenticated !== this.state.session.authenticated) {
       this.sessionGeneration += 1;
-      if (this.slotPicker || this.shoppingDecision) this.dialog.close();
+      this.transfer.cancel();
+      this.clearTransferUndo();
+      this.historyReplay = null;
+      if (this.historyReturn) this.historyReturn.destination = null;
+      this.navigationDecision = null;
+      if (this.dialog.open) this.dismissDialog();
       this.slotPicker = null;
       if (this.state.busy !== 'auth') {
         this.mutation = null;
@@ -150,9 +193,10 @@ export class FoodTinderApp {
       this.state.feedStatus = 'idle';
       this.state.guestHidden = new Set();
     }
-    this.planDrafts.keepOnly(session.authenticated ? session.id : null);
+    if (session.authenticated || reset) this.planDrafts.keepOnly(session.authenticated ? session.id : null);
     this.state.session = session;
     this.state.sessionKnown = true;
+    this.watchUnsavedChanges();
     if (previous.authenticated && previous.id !== session.id && this.state.view === 'recipes') {
       this.writeRoute(true);
     }
@@ -390,6 +434,7 @@ export class FoodTinderApp {
 
   async loadActivePlan(shouldRender = true) {
     if (!this.state.session.authenticated || !this.state.activePlanId) return;
+    this.transfer.cancel();
     const planId = Number(this.state.activePlanId);
     const request = this.beginRequest('active-plan');
     const current = () => this.isCurrentRequest('active-plan', request)
@@ -405,6 +450,8 @@ export class FoodTinderApp {
       if (this.state.view === 'plans' && this.state.planMode === 'edit') {
         const draft = this.planDrafts.get(this.state.session.id, planId);
         this.state.planDraft = draft || makePlanDraft(plan);
+        this.state.restoredDraft = Boolean(draft?.dirty);
+        this.state.draftStorageUnavailable = Boolean(draft?.storageUnavailable);
       }
       this.state.activePlanStatus = 'ready';
     } catch (error) {
@@ -441,9 +488,11 @@ export class FoodTinderApp {
     this.state.authTab = 'login';
     this.state.authNotice = message || 'Войдите, чтобы сохранить это действие.';
     const {view, activePlanId, shoppingPlanId} = this.state;
+    const requestedRoute = this.browser ? readRoute(this.browser.location) : null;
+    const routePlanId = requestedRoute?.view === view ? requestedRoute.planId : null;
     return this.navigate('auth', {
       next: isPrivateView(view) ? view : null,
-      nextPlanId: view === 'plans' ? activePlanId : view === 'shopping' ? shoppingPlanId : null,
+      nextPlanId: view === 'plans' ? activePlanId ?? routePlanId : view === 'shopping' ? shoppingPlanId ?? routePlanId : null,
     });
   }
 
@@ -477,6 +526,7 @@ export class FoodTinderApp {
     this.beginRequest('active-plan');
     Object.assign(this.state, {
       planMode: mode, activePlanId: planId, activePlan: null, planDraft: null,
+      restoredDraft: false, draftStorageUnavailable: false,
       activePlanStatus: mode === 'edit' ? 'loading' : 'idle',
     });
   }
@@ -486,66 +536,128 @@ export class FoodTinderApp {
   }
 
   watchUnsavedChanges() {
-    this.browser?.removeEventListener('beforeunload', this.confirmUnload);
-    if (this.hasUnsavedChanges() || this.state.busy === 'save-plan') {
-      this.browser?.addEventListener('beforeunload', this.confirmUnload);
-    }
+    if (this.hasUnsavedChanges()) this.browser?.addEventListener('beforeunload', this.confirmUnload);
+    else this.browser?.removeEventListener('beforeunload', this.confirmUnload);
   }
 
-  confirm(message) {
-    return (this.browser ?? globalThis).confirm?.(message) ?? false;
+  settleConfirmation(accepted) {
+    const confirmation = this.confirmation;
+    this.confirmation = null;
+    confirmation?.(accepted);
   }
 
-  mayNavigate(view, planMode = this.state.planMode, planId = this.state.activePlanId) {
-    if (this.state.busy === 'save-plan') return false;
-    if (!this.hasUnsavedChanges()) return true;
-    if (view === 'plans' && planMode === this.state.planMode && planId === this.state.activePlanId) return true;
-    return this.confirm('Есть несохранённые изменения. Оставить черновик в этой вкладке и уйти?');
+  dismissDialog() {
+    this.beginRequest('recipe-detail');
+    this.navigationDecision = null;
+    this.settleConfirmation(false);
+    if (this.dialog.open) this.dialog.close();
+  }
+
+  async askConfirmation(message, actionLabel) {
+    if (this.dialog.open || this.state.busy) return false;
+    this.transfer.cancel();
+    this.beginRequest('recipe-detail');
+    const session = this.sessionContext();
+    const viewVersion = this.requestVersions.get('view');
+    const accepted = await new Promise((resolve) => {
+      this.confirmation = resolve;
+      this.dialog.innerHTML = renderConfirmation(message, actionLabel);
+      this.dialog.showModal();
+    });
+    return accepted && this.isCurrentSession(session) && viewVersion === this.requestVersions.get('view');
+  }
+
+  navigationNeeded({view, planMode, planId}) {
+    return view !== 'plans' || this.state.view !== view
+      || planMode !== this.state.planMode || (planId ?? null) !== this.state.activePlanId;
+  }
+
+  shoppingNeedsSave({view, shoppingPlanId}) {
+    return view === 'shopping' && !shoppingPlanId && this.state.planMode === 'new'
+      && this.state.view === 'plans' && Boolean(this.state.planDraft);
   }
 
   restoreRoute() {
     const route = readRoute(this.browser.location);
-    const index = this.browser.history.state?.foodTinderIndex ?? 0;
-    if (this.restoringHistory) {
-      this.restoringHistory = false;
-      return;
-    }
-    const shoppingNeedsDecision = route.view === 'shopping' && this.hasUnsavedChanges();
-    const allowed = !shoppingNeedsDecision && this.mayNavigate(route.view, route.planMode, route.planId ?? null);
-    if (!allowed) {
-      if (shoppingNeedsDecision && !this.state.busy) this.showShoppingDecision(route.planId);
-      const delta = this.historyIndex - index;
-      if (delta && this.browser.history.go) {
-        this.restoringHistory = true;
-        this.browser.history.go(delta);
+    const index = this.browser.history.state?.foodTinderIndex ?? this.historyIndex;
+    const restoring = this.historyReturn;
+    if (restoring) {
+      if (index === this.historyIndex) {
+        this.historyReturn = null;
+        restoring.resolve();
+        if (restoring.destination && this.isCurrentSession(restoring.session) && !this.state.busy) {
+          this.showNavigationDecision(restoring.destination);
+        }
       } else {
-        this.writeRoute(true);
+        this.browser.history.go(this.historyIndex - index);
       }
       return;
     }
-    this.historyIndex = index;
-    this.applyRoute(route);
-    return this.navigate(route.view, {fromHistory: true});
+    const replay = this.historyReplay;
+    this.historyReplay = null;
+    if (replay?.index === index && this.isCurrentSession(replay.session)) {
+      return this.commitHistoryRoute(route, index, replay.shoppingPlanId);
+    }
+    const destination = {
+      ...route, historyIndex: index,
+      shoppingPlanId: route.view === 'shopping' ? route.planId ?? this.state.activePlanId : undefined,
+    };
+    if (this.state.busy === 'save-plan' || (this.navigationNeeded(destination)
+      && (this.hasUnsavedChanges() || this.shoppingNeedsSave(destination)))) {
+      if (index === this.historyIndex) return;
+      const returning = {
+        destination: this.state.busy === 'save-plan' ? null : destination, session: this.sessionContext(),
+      };
+      returning.done = new Promise((resolve) => { returning.resolve = resolve; });
+      this.historyReturn = returning;
+      this.browser.history.go(this.historyIndex - index);
+      return;
+    }
+    return this.commitHistoryRoute(route, index, destination.shoppingPlanId);
   }
 
-  async navigate(view, {
-    replace = false, fromHistory = false, next = null, nextPlanId = null,
-    planMode, planId, shoppingPlanId,
-  } = {}) {
-    if (!fromHistory && view === 'shopping' && this.hasUnsavedChanges() && !this.state.busy) {
-      return this.showShoppingDecision(shoppingPlanId ?? this.state.activePlanId);
+  commitHistoryRoute(route, index, shoppingPlanId) {
+    this.historyIndex = index;
+    // Apply filters and editor selection only once an actual traversal has been accepted.
+    this.applyRoute(route);
+    if (route.view === 'shopping' && shoppingPlanId && !route.planId) {
+      this.state.shoppingPlanId = shoppingPlanId;
+      this.writeRoute(true);
     }
-    if (!fromHistory && !this.mayNavigate(view, planMode, planMode ? planId ?? null : undefined)) return;
-    if (this.dialog.open) this.dialog.close();
-    this.beginRequest('view');
+    return this.commitNavigation(route.view, {fromHistory: true, shoppingPlanId});
+  }
+
+  async navigate(view, options = {}) {
+    const destination = {...options, view};
+    if (view === 'plans') destination.planMode ??= 'list';
+    if (view === 'shopping') destination.shoppingPlanId ??= this.state.activePlanId ?? undefined;
+    if (this.state.busy === 'save-plan' || this.historyReturn || this.historyReplay) return;
+    if (!this.navigationNeeded(destination)) return;
+    if (this.hasUnsavedChanges() || this.shoppingNeedsSave(destination)) {
+      this.showNavigationDecision(destination);
+      return;
+    }
+    return this.commitNavigation(view, destination);
+  }
+
+  async commitNavigation(view, {
+    replace = false, fromHistory = false, next = null, nextPlanId = null,
+    planMode, planId, shoppingPlanId, filters, favoriteFilters,
+  } = {}) {
+    this.navigationDecision = null;
+    this.transfer.cancel();
+    this.clearTransferUndo();
+    if (this.dialog.open) this.dismissDialog();
+    const request = this.beginRequest('view');
     if (view !== 'plans') {
       this.beginRequest('active-plan');
       this.state.activePlan = null;
       this.state.planDraft = null;
+      this.state.restoredDraft = false;
     }
     if (planMode) this.selectPlanRoute(planMode, planId);
-    if (shoppingPlanId !== undefined) {
-      this.state.shoppingPlanId = shoppingPlanId;
+    if (view === 'shopping') {
+      this.state.shoppingPlanId = shoppingPlanId ?? this.state.shoppingPlanId;
       this.invalidateShopping();
     }
     if (view === 'plans' && this.state.planMode === 'edit' && !this.state.planDraft) {
@@ -553,6 +665,10 @@ export class FoodTinderApp {
     }
     this.state.view = view;
     if (!fromHistory) {
+      if (favoriteFilters) this.state.favoriteFilters = favoriteFilters;
+      if (filters) Object.assign(this.state, filters, {
+        catalogFavoritesOnly: this.state.session.authenticated && filters.catalogFavoritesOnly,
+      });
       this.authReturnView = next;
       this.authReturnPlanId = nextPlanId;
       this.writeRoute(replace);
@@ -560,6 +676,9 @@ export class FoodTinderApp {
     this.state.error = null;
     this.render();
     if (!this.initializingSession) await this.loadView(view);
+    if (this.isCurrentRequest('view', request)) {
+      this.root.querySelector?.('#main-content')?.focus({preventScroll: fromHistory});
+    }
   }
 
   async loadView(view) {
@@ -579,12 +698,19 @@ export class FoodTinderApp {
     if (view === 'plans' && authenticated) {
       if (this.state.planMode === 'list') {
         await this.loadPlans();
-      } else if (this.state.planMode === 'new') {
-        this.state.planDraft = this.planDrafts.get(this.state.session.id, null) ?? makePlanDraft();
-        this.state.activePlanStatus = 'ready';
-        this.render();
-      } else if (!this.state.planDraft) {
-        await this.loadActivePlan();
+      } else {
+        if (this.state.planMode === 'new' && !this.state.planDraft) {
+          const draft = this.planDrafts.get(this.state.session.id, null);
+          this.state.planDraft = draft ?? makePlanDraft();
+          this.state.restoredDraft = Boolean(draft?.dirty);
+          this.state.draftStorageUnavailable = Boolean(draft?.storageUnavailable);
+          this.state.activePlanStatus = 'ready';
+          this.render();
+        }
+        await Promise.all([
+          this.state.planDraft ? undefined : this.loadActivePlan(),
+          this.loadFavorites(),
+        ]);
       }
     }
     if (view === 'shopping' && authenticated) {
@@ -599,7 +725,11 @@ export class FoodTinderApp {
 
   async onClick(event) {
     const control = event.target.closest('[data-action]');
-    if (!control) return;
+    if (!control) {
+      const handle = event.target.closest('[data-transfer-source]');
+      if (handle) return this.transfer.choose(handle);
+      return this.followInternalLink(event);
+    }
     const {action} = control.dataset;
     if (action === 'navigate') return this.navigate(control.dataset.view);
     if (action === 'open-feed') return this.navigate('feed');
@@ -636,7 +766,11 @@ export class FoodTinderApp {
     if (action === 'retry-plans') return this.loadPlans();
     if (action === 'retry-active-plan') return this.loadActivePlan();
     if ((action === 'retry-shopping' || action === 'refresh-shopping') && !this.state.busy) return this.loadShopping();
-    if (action === 'close-dialog') return this.dialog.close();
+    if (action === 'close-dialog') return this.dismissDialog();
+    if (action === 'accept-confirmation' && this.confirmation) {
+      this.settleConfirmation(true);
+      return this.dialog.close();
+    }
     if (action === 'recipe-detail') return this.openRecipeDetail(Number(control.dataset.recipeId));
     if (action === 'toggle-favorite') return this.toggleFavorite(Number(control.dataset.recipeId));
     if (action === 'swipe') return this.swipe(Number(control.dataset.recipeId), control.dataset.swipe);
@@ -654,9 +788,32 @@ export class FoodTinderApp {
     if (action === 'delete-plan') return this.deletePlan(Number(control.dataset.planId));
     if (action === 'discard-draft') return this.discardDraft();
     if (action === 'plan-shopping') return this.openPlanShopping(Number(control.dataset.planId));
-    if (action === 'save-and-shop' || action === 'discard-and-shop') return this.resolveShoppingDecision(action);
+    if (action === 'save-and-navigate' || action === 'keep-draft-and-navigate') {
+      return this.resolveNavigationDecision(action === 'save-and-navigate');
+    }
+    if (action === 'place-transfer') return this.transfer.place(control.closest('[data-transfer-target]'));
+    if (action === 'cancel-transfer') return this.transfer.cancel(true);
+    if (action === 'undo-transfer') return this.undoTransfer();
     if (action === 'export-shopping') return this.exportShopping(control.dataset.fileType);
     if (action === 'clear-purchases') return this.clearPurchases(Number(control.dataset.planId));
+  }
+
+  followInternalLink(event) {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey
+      || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+    const url = new URL(link.href);
+    if (url.origin !== this.browser?.location.origin || !isAppPath(url.pathname)) return;
+    if (link.classList.contains('skip-link')) {
+      event.preventDefault();
+      return this.root.querySelector('#main-content')?.focus();
+    }
+    if (url.hash) return;
+    event.preventDefault();
+    const route = readRoute(url);
+    const options = route.view === 'shopping' ? {...route, shoppingPlanId: route.planId}
+      : route.view === 'auth' ? {...route, nextPlanId: route.planId} : route;
+    return this.navigate(route.view, options);
   }
 
   async onSubmit(event) {
@@ -689,7 +846,14 @@ export class FoodTinderApp {
   }
 
   onInput(event) {
+    if (Object.hasOwn(event.target.dataset, 'librarySearch')) {
+      this.transfer.cancel();
+      this.libraryQuery = event.target.value;
+      this.root.querySelector('[data-library-results]').innerHTML = renderLibraryResults(this.state, this.libraryQuery);
+      return;
+    }
     if (event.target.dataset.input === 'plan-title' && this.state.planDraft && !this.state.busy) {
+      if (this.state.planDraft.plan.title === event.target.value) return;
       this.state.planDraft.plan.title = event.target.value;
       this.markDraftChanged();
       return;
@@ -744,8 +908,13 @@ export class FoodTinderApp {
     }
     if (change === 'plan-auto-servings') {
       if (!this.state.planDraft || this.state.busy) return;
-      this.state.planDraft.generationServings = Number(event.target.value);
-      this.planDrafts.put(this.state.session.id, this.state.planDraft.plan.id, this.state.planDraft);
+      const servings = Number(event.target.value);
+      if (servings === this.state.planDraft.generationServings) return;
+      this.editRevision += 1;
+      this.clearTransferUndo();
+      this.transfer.cancel();
+      this.state.planDraft.generationServings = servings;
+      this.persistDraft();
       return;
     }
     if (['plan-date', 'plan-duration', 'plan-meal'].includes(change)) return this.changePlanSettings(event.target);
@@ -943,7 +1112,7 @@ export class FoodTinderApp {
   }
 
   openSlotPicker(planId, dayIndex, mealType) {
-    if (this.state.busy || this.state.view !== 'plans' || planId !== this.editablePlanId()) return;
+    if (this.dialog.open || this.state.busy || this.state.view !== 'plans' || planId !== this.editablePlanId()) return;
     const draft = this.state.planDraft;
     const plan = draft.plan;
     if (!hasValidPlanDates(plan) || !Object.hasOwn(MEAL_LABELS, mealType) || !plan.enabled_meals.includes(mealType)
@@ -955,6 +1124,7 @@ export class FoodTinderApp {
       recipeId: slot?.recipe_id ?? null,
       session: this.sessionContext(),
     };
+    this.transfer.cancel();
     this.beginRequest('recipe-detail');
     this.slotPicker = picker;
     this.dialog.innerHTML = renderSlotPicker(picker, this.state.favoritesStatus);
@@ -995,6 +1165,11 @@ export class FoodTinderApp {
     const {draft, dayIndex, mealType, recipeId} = picker;
     const recipe = picker.recipes.find(({id}) => id === recipeId);
     if (recipeId !== picker.slot?.recipe_id && !recipe) return;
+    if (recipeId === picker.slot?.recipe_id && servings === picker.slot.servings) {
+      this.dialog.close();
+      this.focusSlot(picker);
+      return;
+    }
     draft.plan.slots = draft.plan.slots.filter((slot) => slot.day_index !== dayIndex || slot.meal_type !== mealType);
     draft.plan.slots.push({
       day_index: dayIndex, meal_type: mealType, recipe_id: recipeId, servings,
@@ -1011,6 +1186,7 @@ export class FoodTinderApp {
     const draft = this.state.planDraft;
     if (!draft || this.state.busy || this.state.view !== 'plans' || this.editablePlanId() === null) return;
     const {plan} = draft;
+    const revision = this.editRevision;
     if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) {
       this.toast('Укажите корректную дату и хотя бы один приём пищи.');
       return;
@@ -1021,11 +1197,13 @@ export class FoodTinderApp {
       return;
     }
     if (replace && plan.slots.length
-      && !this.confirm('Пересобрать меню? Все выбранные вручную блюда в черновике будут заменены.')) return;
+      && !await this.askConfirmation('Пересобрать меню? Все выбранные вручную блюда в черновике будут заменены.', 'Пересобрать меню')) return;
+    if (this.state.planDraft !== draft) return;
 
     const request = this.beginRequest('auto-fill-plan');
     if (this.state.favoritesStatus !== 'ready') await this.loadFavorites(false);
     if (!this.isCurrentRequest('auto-fill-plan', request) || this.state.planDraft !== draft
+      || revision !== this.editRevision || this.state.busy || this.dialog.open
       || this.state.view !== 'plans' || this.editablePlanId() === null
       || this.state.favoritesStatus !== 'ready') return;
 
@@ -1044,18 +1222,125 @@ export class FoodTinderApp {
     this.root.querySelector?.('[data-action="auto-fill-plan"]')?.focus();
   }
 
-  markDraftChanged() {
-    const {planDraft, session} = this.state;
-    planDraft.dirty = true;
-    this.planDrafts.put(session.id, planDraft.plan.id, planDraft);
+  transferSource(source, handle) {
+    const context = {source, handle, draft: this.state.planDraft,
+      session: this.sessionContext(), revision: this.editRevision};
+    const reason = this.transferBlockReason(context);
+    if (reason) {
+      this.transfer.announce(reason);
+      return null;
+    }
+    const {plan} = context.draft;
+    const recipe = this.state.favorites.find(({id}) => id === source.recipe_id);
+    const slot = source.type === 'slot' ? slotFor(plan, source.day_index, source.meal_type) : null;
+    if (!recipe || recipe.is_active === false || (source.type === 'slot' && slot?.recipe_id !== source.recipe_id)) {
+      this.transfer.announce('Для переноса доступны только активные рецепты из избранного.');
+      return null;
+    }
+    return {...context, title: slot?.recipe_title ?? recipe.title};
+  }
+
+  transferBlockReason(context) {
+    if (this.state.view !== 'plans' || this.editablePlanId() === null || this.state.busy || this.dialog.open
+      || this.historyReturn || this.historyReplay
+      || context.draft !== this.state.planDraft || context.revision !== this.editRevision
+      || !this.isCurrentSession(context.session)) return 'Черновик изменился или сейчас недоступен.';
+    const {plan} = context.draft;
+    if (plan.id && this.state.activePlan?.version !== plan.version) {
+      return 'Версия рациона изменилась. Проверьте сохранённый рацион перед переносом блюд.';
+    }
+    if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) return 'Укажите корректную дату и приёмы пищи.';
+    if (this.state.favoritesStatus !== 'ready') return 'Дождитесь загрузки избранного.';
+    return '';
+  }
+
+  inspectTransfer(context, target) {
+    const reason = context ? this.transferBlockReason(context) : 'Исходное блюдо недоступно.';
+    return reason ? {result: 'blocked', reason}
+      : planDrop(context.source, target, context.draft, this.state.favorites);
+  }
+
+  applyTransfer(context, target) {
+    const outcome = this.inspectTransfer(context, target);
+    const messages = {added: 'Блюдо добавлено.', replaced: 'Блюдо в слоте заменено.',
+      moved: 'Блюдо перенесено вместе с порциями.', swapped: 'Блюда и порции поменялись местами.'};
+    const message = messages[outcome.result];
+    if (!message) return outcome;
+    const {draft, source} = context;
+    const {scrollX, scrollY} = this.browser ?? {};
+    const previous = {slots: draft.plan.slots, dirty: draft.dirty};
+    draft.plan.slots = outcome.nextSlots;
+    this.markDraftChanged();
+    this.transferUndo = {draft, previous, source, target, message, revision: this.editRevision,
+      session: context.session};
+    this.transferUndo.timer = setTimeout(() => this.clearTransferUndo(), 8000);
+    this.transferUndo.timer.unref?.();
+    this.render();
+    this.browser?.scrollTo?.(scrollX, scrollY);
+    this.transfer.announce(message);
+    this.focusTransferSlot(target);
+    return outcome;
+  }
+
+  focusTransferSlot({day_index, meal_type}) {
+    this.root.querySelector?.(`#pick-meal-${day_index}-${meal_type}`)?.focus({preventScroll: true});
+  }
+
+  updateTransferUndo() {
+    const button = this.root.querySelector?.('[data-action="undo-transfer"]');
+    if (button) {
+      button.hidden = !this.transferUndo;
+      button.disabled = Boolean(this.state.busy);
+    }
+  }
+
+  clearTransferUndo() {
+    clearTimeout(this.transferUndo?.timer);
+    this.transferUndo = null;
+    this.updateTransferUndo();
+  }
+
+  undoTransfer() {
+    const operation = this.transferUndo;
+    if (!operation || operation.draft !== this.state.planDraft || operation.revision !== this.editRevision
+      || !this.isCurrentSession(operation.session) || this.editablePlanId() === null
+      || this.state.busy || this.dialog.open) return;
+    operation.draft.plan.slots = operation.previous.slots;
+    this.markDraftChanged(operation.previous.dirty);
+    this.render();
+    this.transfer.announce('Перестановка отменена.');
+    this.focusTransferSlot(operation.source.type === 'slot' ? operation.source : operation.target);
+  }
+
+  markDraftChanged(previousDirty) {
+    this.editRevision += 1;
+    this.clearTransferUndo();
+    this.transfer.cancel();
+    const {planDraft, activePlan} = this.state;
+    const {plan} = planDraft;
+    const baseline = plan.id && activePlan?.version === plan.version
+      ? planContentKey(activePlan) : planDraft.initialContent;
+    planDraft.dirty = previousDirty ?? (baseline === undefined || planContentKey(plan) !== baseline);
+    if (!planDraft.dirty) this.state.restoredDraft = false;
+    this.persistDraft();
     this.watchUnsavedChanges();
     const status = this.root.querySelector?.('[data-draft-status]');
     if (status) status.textContent = draftStatus(this.state);
     const discard = this.root.querySelector?.('[data-action="discard-draft"]');
-    if (discard) discard.hidden = false;
+    if (discard) discard.hidden = Boolean(planDraft.plan.id && !planDraft.dirty);
   }
 
-  changePlanSettings(control) {
+  persistDraft() {
+    const {planDraft, session} = this.state;
+    planDraft.storageUnavailable = false;
+    const stored = this.planDrafts.put(session.id, planDraft.plan.id, planDraft);
+    planDraft.storageUnavailable = !stored;
+    this.state.draftStorageUnavailable = !stored;
+    const warning = this.root.querySelector?.('[data-draft-storage-warning]');
+    if (warning) warning.hidden = stored;
+  }
+
+  async changePlanSettings(control) {
     const draft = this.state.planDraft;
     if (this.state.view !== 'plans' || !draft || this.state.busy) return;
     const {change} = control.dataset;
@@ -1068,11 +1353,18 @@ export class FoodTinderApp {
       else meals.delete(control.value);
       next.enabled_meals = [...meals];
     }
+    if (next.start_date === draft.plan.start_date && next.duration_days === draft.plan.duration_days
+      && next.enabled_meals.length === draft.plan.enabled_meals.length
+      && next.enabled_meals.every((meal) => draft.plan.enabled_meals.includes(meal))) return;
     const remaining = includedSlots(next);
     const removed = draft.plan.slots.length - remaining.length;
     const focus = change === 'plan-date'
       ? '[data-change="plan-date"]' : `[data-change="${change}"][value="${control.value}"]`;
-    if (!removed || this.confirm(`После сохранения из рациона будут удалены блюда · ${removed}. Продолжить?`)) {
+    const accepted = !removed || await this.askConfirmation(
+      `После сохранения из рациона будут удалены блюда · ${removed}. Продолжить?`, 'Применить настройки',
+    );
+    if (this.state.planDraft !== draft || this.state.view !== 'plans') return;
+    if (accepted) {
       draft.plan = {...next, slots: remaining};
       draft.generationNotice = '';
       this.markDraftChanged();
@@ -1095,7 +1387,7 @@ export class FoodTinderApp {
       || !this.state.plans?.some(({id}) => id === planId) || this.state.busy) return;
     const userId = this.state.session.id;
     if (this.planDrafts.get(userId, null)?.dirty
-      && !this.confirm('Заменить текущий новый черновик копией рациона?')) return;
+      && !await this.askConfirmation('Заменить текущий новый черновик копией рациона?', 'Заменить черновик')) return;
     const request = this.beginRequest('duplicate');
     const viewVersion = this.requestVersions.get('view');
     let draft;
@@ -1111,25 +1403,35 @@ export class FoodTinderApp {
   async discardDraft() {
     const {planDraft, session} = this.state;
     if (!planDraft || this.state.busy) return;
-    if (planDraft.dirty && !this.confirm('Отменить несохранённые изменения?')) return;
+    if (planDraft.dirty && !await this.askConfirmation('Удалить несохранённые изменения в этом черновике?', 'Отменить изменения')) return;
+    if (this.state.planDraft !== planDraft) return;
     this.planDrafts.remove(session.id, planDraft.plan.id);
     this.state.error = null;
     this.state.planDraft = null;
+    this.watchUnsavedChanges();
     if (planDraft.plan.id) await this.loadActivePlan();
     else await this.navigate('plans', {planMode: 'list', replace: true});
   }
 
-  async savePlan({openShopping = false, shoppingPlanId = null} = {}) {
+  async savePlan({focus = true} = {}) {
     const {planDraft, session} = this.state;
-    if (this.state.view !== 'plans' || !session.authenticated || !planDraft
+    if (this.dialog.open || this.state.view !== 'plans' || !session.authenticated || !planDraft
       || this.editablePlanId() === null || this.state.busy) return;
     const {plan} = planDraft;
     const context = this.sessionContext();
-    const form = this.root.querySelector?.('[data-form="plan-editor"]');
-    if (form && !form.reportValidity()) return;
+
     if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) {
       this.state.error = new ApiError({
         type: 'validation', message: 'Выберите корректную дату и хотя бы один приём пищи.',
+      });
+      this.render();
+      return;
+    }
+    const unavailable = this.state.favoritesStatus === 'ready'
+      && unavailableDraftSlot(plan, this.state.activePlan, this.state.favorites);
+    if (unavailable) {
+      this.state.error = new ApiError({type: 'validation',
+        message: `День ${unavailable.day_index + 1}, ${MEAL_LABELS[unavailable.meal_type]}: выберите подходящий активный рецепт из избранного.`,
       });
       this.render();
       return;
@@ -1149,6 +1451,7 @@ export class FoodTinderApp {
             : 'Этот черновик уже был сохранён с другими данными. Проверьте список рационов.',
         });
       }
+      if (this.historyReturn) await this.historyReturn.done;
       if (!this.isCurrentSession(context) || this.state.planDraft !== planDraft) return;
       this.planDrafts.remove(session.id, plan.id);
       this.beginRequest('plans');
@@ -1158,21 +1461,26 @@ export class FoodTinderApp {
       this.state.plansStatus = 'idle';
       Object.assign(this.state, {
         activePlanId: saved.id, activePlan: saved, activePlanStatus: 'ready',
-        planMode: 'edit', planDraft: makePlanDraft(saved),
+        planMode: 'edit', planDraft: makePlanDraft(saved), restoredDraft: false, draftStorageUnavailable: false,
       });
+      this.watchUnsavedChanges();
       this.writeRoute(true);
       this.toast('Рацион сохранён');
       savedId = saved.id;
     });
     if (savedId && this.isCurrentSession(context)) {
-      if (openShopping) await this.navigate('shopping', {shoppingPlanId: shoppingPlanId ?? savedId});
-      else this.root.querySelector?.('[data-draft-status]')?.focus();
+      if (focus) this.root.querySelector?.('[data-draft-status]')?.focus({preventScroll: true});
+      return savedId;
     }
+    if (focus) this.root.querySelector?.('.error-banner')?.focus();
   }
 
-  deleteSlot(dayIndex, mealType, planId) {
+  async deleteSlot(dayIndex, mealType, planId) {
     const draft = this.state.planDraft;
-    if (!draft || this.state.busy || this.editablePlanId() !== planId || !slotFor(draft.plan, dayIndex, mealType)) return;
+    const slot = slotFor(draft?.plan, dayIndex, mealType);
+    if (!slot || this.state.busy || this.editablePlanId() !== planId) return;
+    if (!await this.askConfirmation(`Убрать блюдо «${slot.recipe_title}» из этого слота?`, 'Удалить блюдо')
+      || this.state.planDraft !== draft || slotFor(draft.plan, dayIndex, mealType) !== slot) return;
     draft.plan.slots = draft.plan.slots.filter((slot) => slot.day_index !== dayIndex || slot.meal_type !== mealType);
     this.markDraftChanged();
     this.render();
@@ -1182,7 +1490,7 @@ export class FoodTinderApp {
   async deletePlan(planId) {
     if (!this.state.session.authenticated || !this.state.plans?.some(({id}) => id === planId) || this.state.busy) return;
     const context = this.sessionContext();
-    if (!this.confirm('Удалить рацион и все блюда в нём?')) return;
+    if (!await this.askConfirmation('Удалить рацион и все блюда в нём?', 'Удалить рацион')) return;
     await this.runMutation('delete-plan', async () => {
       await this.api.deletePlan(planId);
       if (!this.isCurrentSession(context)) return;
@@ -1197,28 +1505,48 @@ export class FoodTinderApp {
   }
 
   openPlanShopping(planId) {
-    if (!this.state.session.authenticated || !planId || this.state.busy) return;
+    if (!this.state.session.authenticated || !planId) return;
     return this.navigate('shopping', {shoppingPlanId: planId});
   }
 
-  showShoppingDecision(planId) {
-    this.shoppingDecision = {planId, draft: this.state.planDraft};
-    this.dialog.innerHTML = renderShoppingDecision();
+  showNavigationDecision(destination) {
+    if (this.navigationDecision && this.dialog.open) return;
+    this.transfer.cancel();
+    this.settleConfirmation(false);
+    this.beginRequest('recipe-detail');
+    this.slotPicker = null;
+    const needsSavedPlan = this.shoppingNeedsSave(destination);
+    this.navigationDecision = {
+      destination, needsSavedPlan, draft: this.state.planDraft, session: this.sessionContext(),
+    };
+    this.dialog.innerHTML = renderNavigationDecision(needsSavedPlan);
     if (!this.dialog.open) this.dialog.showModal();
+    else this.dialog.querySelector?.('[autofocus]')?.focus();
   }
 
-  async resolveShoppingDecision(action) {
-    const decision = this.shoppingDecision;
-    if (this.state.busy || !decision || decision.draft !== this.state.planDraft) return;
+  async resolveNavigationDecision(save) {
+    const decision = this.navigationDecision;
+    if (this.state.busy || this.historyReturn || !this.dialog.open || !decision || decision.draft !== this.state.planDraft
+      || !this.isCurrentSession(decision.session) || (!save && decision.needsSavedPlan)) return;
+    this.navigationDecision = null;
     this.dialog.close();
-    this.shoppingDecision = null;
-    if (action === 'save-and-shop') {
-      return this.savePlan({openShopping: true, shoppingPlanId: decision.planId});
+    const destination = decision.destination;
+    if (save) {
+      const savedId = await this.savePlan({focus: false});
+      if (!this.isCurrentSession(decision.session)) return;
+      if (!savedId) {
+        this.root.querySelector?.('.error-banner')?.focus();
+        return;
+      }
+      if (destination.view === 'shopping') destination.shoppingPlanId ??= savedId;
     }
-    this.planDrafts.remove(this.state.session.id, decision.draft.plan.id);
-    this.state.planDraft = null;
-    if (this.state.planMode === 'new') this.selectPlanRoute('list');
-    return this.navigate('shopping', {shoppingPlanId: decision.planId ?? this.state.shoppingPlanId});
+    if (destination.historyIndex !== undefined) {
+      this.historyReplay = {index: destination.historyIndex, session: decision.session,
+        shoppingPlanId: destination.shoppingPlanId};
+      this.browser.history.go(destination.historyIndex - this.historyIndex);
+      return;
+    }
+    return this.commitNavigation(destination.view, destination);
   }
 
   editableShoppingPlanId() {
@@ -1239,7 +1567,8 @@ export class FoodTinderApp {
   async clearPurchases(planId) {
     if (this.state.busy || planId !== this.editableShoppingPlanId()
       || !this.state.shopping.items.some((item) => item.purchased)) return;
-    if (!globalThis.confirm('Снять все отметки о покупках в выбранном рационе?')) return;
+    if (!await this.askConfirmation('Снять все отметки о покупках в выбранном рационе?', 'Снять отметки')
+      || this.state.view !== 'shopping' || planId !== this.editableShoppingPlanId()) return;
     await this.changePurchases(planId, () => this.api.clearPurchases(planId), '[data-action="refresh-shopping"]');
   }
 

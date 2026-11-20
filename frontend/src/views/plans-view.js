@@ -2,6 +2,7 @@ import {picture} from '../components/recipe-card.js';
 import {DURATIONS, MEALS} from '../constants.js';
 import {buildPlanDays, planProgress, planRange, planTitle} from '../utils/plans.js';
 import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
+import {renderPlanLibrary, transferHandle} from './plan-library.js';
 import {renderPlansError} from '../components/plans-error.js';
 
 const DAY_FORMAT = new Intl.DateTimeFormat('ru-RU', {weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC'});
@@ -12,17 +13,20 @@ function slotCard(state, dayIndex, meal) {
   const mealId = `meal-${dayIndex}-${escapeAttr(meal.id)}`;
   const target = `data-plan-id="${state.planDraft.plan.id ?? 0}" data-day-index="${dayIndex}" data-meal-type="${escapeAttr(meal.id)}"`;
   const disabled = state.busy ? 'disabled' : '';
-  return `<section class="slot-card ${slot ? 'slot-filled' : ''}" aria-labelledby="${mealId} plan-day-${dayIndex}">
+  return `<section class="slot-card ${slot ? 'slot-filled' : ''}" aria-labelledby="${mealId} plan-day-${dayIndex}" data-transfer-target ${target}>
     <h4 class="slot-heading" id="${mealId}">${escapeHtml(meal.label)}</h4>
     ${slot ? `<div class="slot-recipe">
       <div class="slot-photo-wrap">${picture({image_url: slot.recipe_image_url}, 'slot-photo', true, '')}</div>
       <div><strong>${escapeHtml(slot.recipe_title)}</strong><p>Порций: ${slot.servings}</p></div>
-    </div>` : ''}
+      ${transferHandle(`${target} data-recipe-id="${slot.recipe_id}"`, slot.recipe_title, 'Переместить или обменять', state.busy)}
+    </div>` : '<p class="slot-empty-instruction muted">Перетащите блюдо сюда или нажмите «Выбрать блюдо».</p>'}
     <div class="slot-actions">
       <button id="pick-${mealId}" class="button button-small button-secondary" data-action="pick-slot" ${target} ${disabled}
         aria-haspopup="dialog" aria-describedby="${mealId} plan-day-${dayIndex}">${slot ? 'Изменить блюдо' : 'Выбрать блюдо'}</button>
       ${slot ? `<button class="button button-small button-ghost" data-action="delete-slot" ${target} ${disabled}
         aria-describedby="${mealId} plan-day-${dayIndex}">Удалить</button>` : ''}
+      <button type="button" class="button button-small button-secondary" data-action="place-transfer" data-transfer-place
+        aria-describedby="${mealId} plan-day-${dayIndex}" hidden>Выбрать слот</button>
     </div>
   </section>`;
 }
@@ -60,22 +64,38 @@ function savedPlans(state) {
 }
 
 export function draftStatus(state) {
-  return state.busy === 'save-plan' ? 'Сохраняем…'
+  return state.busy === 'save-plan' ? 'Сохраняем рацион…'
     : state.planDraft.dirty ? 'Есть несохранённые изменения'
       : state.planDraft.plan.id ? 'Сохранено' : 'Новый черновик';
 }
 
-function planEditor(state) {
+function planEditor(state, library) {
   const {plan, duplicate, omitted, dirty} = state.planDraft;
   const disabled = state.busy ? 'disabled' : '';
   const dates = buildPlanDays(plan);
   return `<header class="page-heading editor-heading">
-      <button class="text-button" data-action="plan-list">← Мои рационы</button>
+      <button class="text-button" data-action="plan-list" ${disabled}>← Мои рационы</button>
       <h1 tabindex="-1" id="plan-editor-title">${plan.id ? 'Редактировать рацион' : duplicate ? 'Копия рациона' : 'Новый рацион'}</h1>
     </header>
+    ${state.restoredDraft ? '<p class="inline-notice" role="status">Восстановлен несохранённый черновик.</p>' : ''}
+    <p class="inline-notice" data-draft-storage-warning role="status" ${state.draftStorageUnavailable ? '' : 'hidden'}>Хранилище вкладки недоступно. Сохраните рацион перед обновлением страницы.</p>
+    <div class="editor-toolbar" data-editor-toolbar>
+      <p class="draft-status" data-draft-status tabindex="-1" role="status">${draftStatus(state)}</p>
+      <div class="plan-editor-actions">
+        <button class="button button-primary" type="submit" form="plan-editor" ${disabled}>Сохранить рацион</button>
+        <button class="text-button" type="button" data-action="discard-draft" ${disabled}
+          ${plan.id && !dirty ? 'hidden' : ''}>Отменить изменения</button>
+      </div>
+      <p data-transfer-drag-live class="visually-hidden" role="status"></p>
+      <div class="editor-transfer-status">
+        <p data-transfer-live role="status"></p>
+        <button class="text-button" data-action="cancel-transfer" hidden>Отменить выбор</button>
+        <button class="text-button" data-action="undo-transfer" hidden>Отменить перестановку</button>
+      </div>
+    </div>
     <div class="plan-workspace">
       <div class="plan-settings">
-        <form data-form="plan-editor" class="plan-editor-form">
+        <form id="plan-editor" data-form="plan-editor" class="plan-editor-form">
           <fieldset class="plan-configuration" ${disabled}>
             <label>Название (необязательно)<input name="title" data-input="plan-title" maxlength="120"
               value="${escapeAttr(plan.title)}" placeholder="${escapeAttr(planTitle({...plan, title: ''}))}" /></label>
@@ -105,15 +125,10 @@ function planEditor(state) {
             <p class="muted" role="status" aria-live="polite">${escapeHtml(state.planDraft.generationNotice || 'Все изменения останутся черновиком до нажатия «Сохранить рацион».')}</p>
           </section>
           ${omitted ? `<p class="inline-notice">Пропущено блюд · ${omitted}. Для копии доступны опубликованные рецепты из избранного, подходящие для этого приёма пищи.</p>` : ''}
-          <p class="draft-status" data-draft-status tabindex="-1" role="status">${draftStatus(state)}</p>
-          <div class="plan-editor-actions">
-            <button class="button button-primary" type="submit" ${disabled}>Сохранить рацион</button>
-            <button class="text-button" type="button" data-action="discard-draft" ${disabled}
-              ${plan.id && !dirty ? 'hidden' : ''}>Отменить изменения</button>
-            ${plan.id ? `<button class="button button-secondary" type="button" data-action="plan-shopping" data-plan-id="${plan.id}" ${disabled}>Список покупок</button>` : ''}
-          </div>
+          ${plan.id ? `<button class="button button-secondary" type="button" data-action="plan-shopping" data-plan-id="${plan.id}" ${disabled}>Список покупок</button>` : ''}
         </form>
       </div>
+      ${renderPlanLibrary(state, library)}
       <section class="active-plan" aria-labelledby="plan-menu-title">
         <header class="active-plan-header">
           <h2 id="plan-menu-title">Меню</h2>
@@ -127,7 +142,7 @@ function planEditor(state) {
     </div>`;
 }
 
-export function renderPlansView(state) {
+export function renderPlansView(state, library = {query: '', open: true}) {
   if (!state.session.authenticated) {
     return renderStatus({title: 'Рационы доступны после входа', text: 'Для рациона можно выбрать блюда из избранного.', action: 'show-auth', actionLabel: 'Войти'});
   }
@@ -142,16 +157,17 @@ export function renderPlansView(state) {
     return `<button class="text-button" data-action="plan-list">← Мои рационы</button>
       ${renderStatus({kind: 'error', title: 'Рацион не загрузился', action: 'retry-active-plan'})}`;
   }
-  return state.planDraft ? planEditor(state) : '';
+  return state.planDraft ? planEditor(state, library) : '';
 }
 
-export function renderShoppingDecision() {
+export function renderNavigationDecision(needsSavedPlan) {
   return `<div class="dialog-content plan-confirmation">
     <h2 id="dialog-title">Есть несохранённые изменения</h2>
-    <p>Перед переходом к покупкам сохраните рацион или отмените изменения.</p>
+    <p>${needsSavedPlan ? 'Покупки доступны после сохранения рациона. Чтобы оставить новый рацион черновиком, вернитесь в «Мои рационы» и выберите покупки сохранённого плана.'
+      : 'Можно сохранить рацион или продолжить переход. Если уйти без сохранения, правки останутся в черновике этой вкладки, а сохранённый рацион не изменится.'}</p>
     <div class="plan-card-actions">
-      <button class="button button-primary" data-action="save-and-shop">Сохранить и открыть покупки</button>
-      <button class="button button-secondary" data-action="discard-and-shop">Отменить изменения</button>
+      <button class="button button-primary" data-action="save-and-navigate">Сохранить и перейти</button>
+      ${needsSavedPlan ? '' : '<button class="button button-secondary" data-action="keep-draft-and-navigate">Перейти без сохранения</button>'}
       <button class="text-button" data-action="close-dialog" autofocus>Остаться</button>
     </div>
   </div>`;
