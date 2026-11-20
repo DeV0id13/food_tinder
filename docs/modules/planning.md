@@ -60,7 +60,8 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
 
 `PlanSummary`: `{id, start_date, duration_days, enabled_meals}`.
 `PlanDetail` добавляет `slots`, отсортированные по `day_index`, затем по порядку
-`breakfast/lunch/snack/dinner`. `Slot`: `{day_index, meal_type, recipe_id, recipe_title, servings}`.
+`breakfast/lunch/snack/dinner`. `Slot` содержит `day_index`, `meal_type`, `recipe_id`, `recipe_title`,
+`servings` и `recipe_image_url` (URL фото, внешнее изображение или пустая строка).
 
 Список использует локальную `LimitOffsetPagination`: `limit=30` по умолчанию, максимум 100, `offset=0`.
 Неизвестные поля записи, включая `user_id`, отклоняются с `400`. Владельцем плана всегда становится
@@ -84,18 +85,22 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
 - Все записи (PUT/DELETE слота, DELETE плана) выполняются в `transaction.atomic()` с блокировкой
   строки плана через `SELECT FOR UPDATE`; порядок блокировок единый — сначала план, затем слоты.
   План, удалённый конкурентным запросом, даёт `404`, а не `500`.
+- После PUT или фактического DELETE слота `planning` отправляет `plan_slots_changed` внутри
+  транзакции. Подписчики получают сохранённый план, строка которого ещё заблокирована.
 - Период, `start_date` и `enabled_meals` после создания не изменяются; несколько планов с одинаковыми
   датами разрешены.
 
 ## Selector для FT-05
 
-Покупки используют только публичную функцию:
+Покупки используют публичную функцию:
 
 ```python
 get_plan_for_user(*, user, plan_id: int) -> MealPlan
 ```
 
 Она возвращает план только его владельцу, иначе возбуждает `rest_framework.exceptions.NotFound`.
+Для операций чек-листа `get_locked_plan_for_user` выполняет ту же проверку владельца с
+`SELECT FOR UPDATE`. Её нужно вызывать внутри транзакции.
 
 ## Проверки
 

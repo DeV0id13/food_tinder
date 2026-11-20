@@ -386,3 +386,179 @@ test('catalog search updates results without rerendering the input', () => {
   assert.equal(count.textContent, 'Найдено: 1 из 2');
   assert.match(app.root.innerHTML, /^$/);
 });
+
+test('catalog combines all filters, preserves them on navigation and drops private filters on user change', async () => {
+  const app = createApp();
+  app.state.catalogStatus = 'ready';
+  app.state.catalog = [
+    {id: 1, title: 'Суп с копчёностями', meal_types: ['lunch', 'dinner'], cooking_time_minutes: 60},
+    {id: 2, title: 'Суп с грибами', meal_types: ['lunch'], cooking_time_minutes: 70},
+    {id: 3, title: 'Суп-пюре', meal_types: ['dinner'], cooking_time_minutes: 25},
+    {id: 4, title: 'Суп с фасолью', meal_types: ['lunch'], cooking_time_minutes: 30},
+  ];
+  app.state.favoritesStatus = 'ready';
+  setFavorites(app.state, app.state.catalog.slice(0, 3));
+  const results = {innerHTML: ''};
+  const count = {textContent: ''};
+  app.root.querySelector = (selector) => ({
+    '[data-catalog-results]': results,
+    '[data-catalog-count]': count,
+  })[selector];
+  app.onInput({target: {dataset: {input: 'recipe-search'}, value: '  СУП  '}});
+  await app.onChange({target: {dataset: {change: 'catalog-meal'}, value: 'lunch'}});
+  await app.onChange({target: {dataset: {change: 'catalog-time'}, value: '60'}});
+  await app.onChange({target: {dataset: {change: 'catalog-favorites'}, checked: true}});
+  assert.match(results.innerHTML, /Суп с копчёностями/);
+  assert.doesNotMatch(results.innerHTML, /Суп с грибами|Суп-пюре|Суп с фасолью/);
+  assert.equal(count.textContent, 'Найдено: 1 из 4');
+  await app.navigate('feed');
+  await app.navigate('recipes');
+  assert.equal(app.state.catalogFavoritesOnly, true);
+  app.setSession(userB);
+  assert.equal(app.state.catalogFavoritesOnly, false);
+  assert.equal(app.state.favoriteIds.size, 0);
+  assert.equal(app.state.catalogMeal, 'lunch');
+  await app.onClick({target: {closest: () => ({dataset: {action: 'reset-catalog'}})}});
+  assert.deepEqual([app.state.catalogQuery, app.state.catalogMeal, app.state.catalogMaxTime], ['', '', 0]);
+});
+
+test('guests can undo the last local hide without restoring earlier hides', async () => {
+  const app = createApp({swipe: () => assert.fail('Guest called the server')});
+  app.setSession(guest);
+  await app.swipe(1, 'dislike');
+  await app.swipe(2, 'dislike');
+  await app.undoSwipe();
+  assert.deepEqual([...app.state.guestHidden], [1]);
+  assert.equal(app.state.lastSwipe, null);
+});
+
+test('successful undo refreshes feed and favorites, and duplicate clicks make one request', async () => {
+  const pending = deferred();
+  const calls = [];
+  const recipe = {id: 3, title: 'Омлет'};
+  let undone = false;
+  const app = createApp({
+    swipe: async () => ({undo_token: 'latest'}),
+    undoSwipe: (token) => { calls.push(token); return pending.promise; },
+    getFavorites: async () => undone ? [] : [recipe],
+    getFeed: async () => ({results: undone ? [recipe] : []}),
+  });
+  await app.swipe(recipe.id, 'like');
+  assert.ok(app.state.favoriteIds.has(recipe.id));
+  const undo = app.undoSwipe();
+  await app.undoSwipe();
+  undone = true;
+  pending.resolve();
+  await undo;
+  assert.deepEqual(calls, ['latest']);
+  assert.deepEqual(app.state.feed.results, [recipe]);
+  assert.equal(app.state.favoriteIds.size, 0);
+  assert.equal(app.state.lastSwipe, null);
+});
+
+test('late swipe response from old session cannot create an undo action or reload private data', async () => {
+  const pending = deferred();
+  const app = createApp({
+    swipe: () => pending.promise,
+    getFavorites: () => assert.fail('Old user triggered a refresh'),
+  });
+  const swipe = app.swipe(11, 'like');
+  app.setSession(userB);
+  const snapshot = structuredClone(app.state);
+  pending.resolve({undo_token: 'old'});
+  await swipe;
+  assert.deepEqual(app.state, snapshot);
+});
+
+function preparePicker(app, slot) {
+  const plan = {
+    id: 1, start_date: '2026-11-20', duration_days: 3, enabled_meals: ['lunch'],
+    slots: slot ? [slot] : [],
+  };
+  Object.assign(app.state, {view: 'plans', activePlanId: 1, activePlan: plan, activePlanStatus: 'ready', favoritesStatus: 'ready'});
+  const fields = new Map();
+  app.dialog.querySelector = (selector) => {
+    if (!fields.has(selector)) fields.set(selector, {disabled: false, focus() {}});
+    return fields.get(selector);
+  };
+  setFavorites(app.state, [
+    {id: 5, title: 'Суп с чечевицей', cooking_time_minutes: 25, image_url: '/media/soup.webp', meal_types: ['lunch']},
+    {id: 6, title: 'Омлет', cooking_time_minutes: 10, meal_types: ['breakfast']},
+  ]);
+}
+
+test('visual picker captures the exact slot, prevents duplicate writes and rejects stale triggers', async () => {
+  const write = deferred();
+  const calls = [];
+  const app = createApp({
+    putSlot: (...args) => { calls.push(args); return write.promise; },
+    getPlan: async (id) => ({id, slots: []}),
+  });
+  preparePicker(app);
+  app.openSlotPicker(2, 1, 'lunch');
+  assert.equal(app.dialog.open, false);
+  app.openSlotPicker(1, 1, 'lunch');
+  assert.match(app.dialog.innerHTML, /Суп с чечевицей/);
+  assert.match(app.dialog.innerHTML, /\/media\/soup.webp/);
+  assert.match(app.dialog.innerHTML, /25 мин/);
+  assert.match(app.dialog.innerHTML, /aria-label="Закрыть выбор блюда"/);
+  assert.match(app.dialog.innerHTML, /min="1" max="20"/);
+  assert.doesNotMatch(app.dialog.innerHTML, /Омлет/);
+  app.onInput({target: {dataset: {input: 'picker-search'}, value: 'омлет'}});
+  assert.match(app.dialog.querySelector('[data-picker-results]').innerHTML, /Ничего не найдено/);
+  app.onInput({target: {dataset: {input: 'picker-search'}, value: 'СУП'}});
+  await app.onChange({target: {dataset: {change: 'picker-recipe'}, value: '5'}});
+  await app.savePickedSlot(21);
+  assert.deepEqual(calls, []);
+  const save = app.savePickedSlot(2);
+  await app.savePickedSlot(2);
+  assert.deepEqual(calls, [[1, 1, 'lunch', {recipe_id: 5, servings: 2}]]);
+  write.resolve();
+  await save;
+  assert.equal(app.dialog.open, false);
+});
+
+test('a saved recipe removed from favorites remains editable without becoming a picker choice', async () => {
+  const calls = [];
+  const app = createApp({putSlot: async (...args) => calls.push(args), getPlan: async () => ({id: 1})});
+  preparePicker(app, {day_index: 0, meal_type: 'lunch', recipe_id: 7, recipe_title: 'Щи', servings: 2});
+  app.openSlotPicker(1, 0, 'lunch');
+  assert.match(app.dialog.innerHTML, /Текущее блюдо можно оставить/);
+  assert.doesNotMatch(app.dialog.innerHTML, /value="7"/);
+  await app.savePickedSlot(3);
+  assert.deepEqual(calls, [[1, 0, 'lunch', {recipe_id: 7, servings: 3}]]);
+});
+
+test('purchase mutation is bound to the displayed plan and late results cannot affect another session', async () => {
+  const pending = deferred();
+  const calls = [];
+  const app = createApp({
+    setPurchased: (...args) => { calls.push(args); return pending.promise; },
+    getShoppingList: () => assert.fail('Old mutation triggered a refresh'),
+  });
+  const item = {ingredient_id: 7, quantity: '10.000', quantity_version: 'v1', unit: 'g', purchased: false};
+  Object.assign(app.state, {shoppingPlanId: 1, shoppingStatus: 'ready', shopping: {plan_id: 1, items: [item]}});
+  await app.setPurchased(2, 7, true);
+  const mutation = app.setPurchased(1, 7, true);
+  await app.setPurchased(1, 7, true);
+  assert.deepEqual(calls, [[1, 7, {purchased: true, quantity_version: 'v1'}]]);
+  app.setSession(userB);
+  const snapshot = structuredClone(app.state);
+  pending.resolve();
+  await mutation;
+  assert.deepEqual(app.state, snapshot);
+});
+
+test('purchase conflict refreshes amounts before another attempt', async () => {
+  const item = {ingredient_id: 7, quantity: '10.000', quantity_version: 'v1', unit: 'g', purchased: false};
+  const updated = {plan_id: 1, items: [{...item, quantity: '20.000', quantity_version: 'v2'}]};
+  const app = createApp({
+    setPurchased: async () => { throw new ApiError({status: 409}); },
+    getShoppingList: async () => updated,
+  });
+  Object.assign(app.state, {shoppingPlanId: 1, shoppingStatus: 'ready', shopping: {plan_id: 1, items: [item]}});
+  await app.setPurchased(1, 7, true);
+  assert.deepEqual(app.state.shopping, updated);
+  assert.equal(app.state.error, null);
+  assert.match(app.messages[0], /Список покупок изменился/);
+});

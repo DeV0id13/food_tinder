@@ -9,10 +9,14 @@ export function createInitialState() {
     catalog: null,
     catalogStatus: 'idle',
     catalogQuery: '',
+    catalogMeal: '',
+    catalogMaxTime: 0,
+    catalogFavoritesOnly: false,
     favorites: null,
     favoritesStatus: 'idle',
     favoriteIds: new Set(),
     guestHidden: new Set(),
+    lastSwipe: null,
     plans: null,
     plansStatus: 'idle',
     plansError: null,
@@ -31,6 +35,8 @@ export function createInitialState() {
 }
 
 export function clearPrivateState(state) {
+  state.catalogFavoritesOnly = false;
+  state.lastSwipe = null;
   state.favorites = null;
   state.favoritesStatus = 'idle';
   state.favoriteIds = new Set();

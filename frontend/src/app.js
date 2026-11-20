@@ -1,11 +1,13 @@
-import {ApiError} from './api/errors.js';
+import {ApiError, apiErrorMessage} from './api/errors.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
+import {MEAL_LABELS} from './constants.js';
 import {clearPrivateState, createInitialState, setFavorites} from './state/state.js';
 import {renderStatus} from './utils/dom.js';
 import {saveBlob} from './utils/download.js';
-import {invalidateShopping} from './utils/plans.js';
+import {compatibleFavorites, invalidateShopping, slotFor} from './utils/plans.js';
 import {renderShell} from './views/shell.js';
 import {catalogSearchCount, renderCatalogResults} from './views/recipes-view.js';
+import {pickedRecipeTitle, renderPickerResults, renderSlotPicker} from './views/slot-picker.js';
 
 export class FoodTinderApp {
   constructor({root, dialog, toast, api}) {
@@ -17,17 +19,29 @@ export class FoodTinderApp {
     this.sessionGeneration = 0;
     this.requestVersions = new Map();
     this.toastTimer = null;
+    this.slotPicker = null;
+    this.mutation = null;
     this.root.addEventListener('click', (event) => this.onClick(event));
     this.root.addEventListener('submit', (event) => this.onSubmit(event));
     this.root.addEventListener('change', (event) => this.onChange(event));
     this.root.addEventListener('input', (event) => this.onInput(event));
     this.dialog.addEventListener('click', (event) => this.onClick(event));
+    this.dialog.addEventListener('submit', (event) => this.onSubmit(event));
+    this.dialog.addEventListener('input', (event) => this.onInput(event));
+    this.dialog.addEventListener('change', (event) => this.onChange(event));
+    this.dialog.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && event.target.dataset.input === 'picker-search') event.preventDefault();
+    });
     this.dialog.addEventListener('click', (event) => {
       if (event.target === this.dialog) this.dialog.close();
     });
     this.dialog.addEventListener('close', () => {
       // A queued close event can arrive after another recipe has been opened.
-      if (!this.dialog.open) this.beginRequest('recipe-detail');
+      if (this.dialog.open) return;
+      this.beginRequest('recipe-detail');
+      const picker = this.slotPicker;
+      this.slotPicker = null;
+      if (picker) this.focusSlot(picker);
     });
   }
 
@@ -53,6 +67,12 @@ export class FoodTinderApp {
     if (reset || session.id !== this.state.session.id
       || session.authenticated !== this.state.session.authenticated) {
       this.sessionGeneration += 1;
+      if (this.slotPicker) this.dialog.close();
+      this.slotPicker = null;
+      if (this.state.busy !== 'auth') {
+        this.mutation = null;
+        this.state.busy = null;
+      }
       clearPrivateState(this.state);
       this.state.feed = null;
       this.state.feedStatus = 'idle';
@@ -151,6 +171,8 @@ export class FoodTinderApp {
   async runMutation(key, operation) {
     if (this.state.busy) return;
     const context = this.sessionContext();
+    const mutation = {};
+    this.mutation = mutation;
     this.state.busy = key;
     this.state.error = null;
     this.render();
@@ -159,8 +181,11 @@ export class FoodTinderApp {
     } catch (error) {
       await this.handleError(error, () => this.isCurrentSession(context));
     } finally {
-      this.state.busy = null;
-      this.render();
+      if (this.mutation === mutation) {
+        this.mutation = null;
+        this.state.busy = null;
+        this.render();
+      }
     }
   }
 
@@ -305,11 +330,16 @@ export class FoodTinderApp {
   }
 
   async navigate(view) {
+    if (this.dialog.open) this.dialog.close();
     this.state.view = view;
     this.state.error = null;
     this.render();
     if (view === 'feed') await this.loadFeed();
     if (view === 'recipes' && !this.state.catalog) await this.loadCatalog();
+    if (view === 'recipes' && this.state.session.authenticated
+      && this.state.favoritesStatus !== 'ready' && this.state.favoritesStatus !== 'loading') {
+      await this.loadFavorites();
+    }
     if (view === 'favorites' && this.state.session.authenticated) await this.loadFavorites();
     if (view === 'plans' && this.state.session.authenticated) {
       await Promise.all([
@@ -345,18 +375,28 @@ export class FoodTinderApp {
     }
     if (action === 'retry-feed') return this.loadFeed();
     if (action === 'retry-recipes') return this.loadCatalog();
+    if (action === 'reset-catalog') {
+      Object.assign(this.state, {catalogQuery: '', catalogMeal: '', catalogMaxTime: 0, catalogFavoritesOnly: false});
+      this.render();
+      this.root.querySelector?.('#recipe-search')?.focus();
+      return;
+    }
     if (action === 'retry-favorites') return this.loadFavorites();
     if (action === 'retry-plans') return this.loadPlans();
     if (action === 'retry-active-plan') return this.loadActivePlan();
-    if (action === 'retry-shopping' || action === 'refresh-shopping') return this.loadShopping();
+    if ((action === 'retry-shopping' || action === 'refresh-shopping') && !this.state.busy) return this.loadShopping();
     if (action === 'close-dialog') return this.dialog.close();
     if (action === 'recipe-detail') return this.openRecipeDetail(Number(control.dataset.recipeId));
     if (action === 'toggle-favorite') return this.toggleFavorite(Number(control.dataset.recipeId));
     if (action === 'swipe') return this.swipe(Number(control.dataset.recipeId), control.dataset.swipe);
+    if (action === 'undo-swipe') return this.undoSwipe();
     if (action === 'logout') return this.logout();
-    if (action === 'delete-slot') return this.deleteSlot(Number(control.dataset.dayIndex), control.dataset.mealType);
+    if (action === 'pick-slot') return this.openSlotPicker(Number(control.dataset.planId), Number(control.dataset.dayIndex), control.dataset.mealType);
+    if (action === 'retry-picker') return this.loadPickerFavorites(this.slotPicker);
+    if (action === 'delete-slot') return this.deleteSlot(Number(control.dataset.dayIndex), control.dataset.mealType, Number(control.dataset.planId));
     if (action === 'delete-plan') return this.deletePlan();
     if (action === 'export-shopping') return this.exportShopping(control.dataset.fileType);
+    if (action === 'clear-purchases') return this.clearPurchases(Number(control.dataset.planId));
   }
 
   async onSubmit(event) {
@@ -377,18 +417,23 @@ export class FoodTinderApp {
         enabled_meals: data.getAll('enabled_meals'),
       });
     }
-    if (form.dataset.form === 'slot') {
-      return this.saveSlot(
-        Number(form.dataset.dayIndex),
-        form.dataset.mealType,
-        {recipe_id: Number(data.get('recipe_id')), servings: Number(data.get('servings'))},
-      );
+    if (form.dataset.form === 'slot-picker' && this.dialog.contains(form)) {
+      return this.savePickedSlot(Number(data.get('servings')));
     }
   }
 
   onInput(event) {
+    if (event.target.dataset.input === 'picker-search' && this.isCurrentPicker(this.slotPicker)) {
+      this.slotPicker.query = event.target.value;
+      this.updatePickerResults();
+      return;
+    }
     if (event.target.dataset.input !== 'recipe-search') return;
     this.state.catalogQuery = event.target.value;
+    this.updateCatalogResults();
+  }
+
+  updateCatalogResults() {
     const results = this.root.querySelector('[data-catalog-results]');
     if (results) results.innerHTML = renderCatalogResults(this.state);
     const count = this.root.querySelector('[data-catalog-count]');
@@ -396,8 +441,24 @@ export class FoodTinderApp {
   }
 
   async onChange(event) {
+    const {change} = event.target.dataset;
+    if (change === 'catalog-meal' || change === 'catalog-time' || change === 'catalog-favorites') {
+      if (change === 'catalog-meal') this.state.catalogMeal = event.target.value;
+      if (change === 'catalog-time') this.state.catalogMaxTime = Number(event.target.value);
+      if (change === 'catalog-favorites' && this.state.session.authenticated) {
+        this.state.catalogFavoritesOnly = event.target.checked;
+      }
+      this.updateCatalogResults();
+      return;
+    }
     if (this.state.busy) return;
+    if (event.target.dataset.change === 'picker-recipe' && this.isCurrentPicker(this.slotPicker)) {
+      this.slotPicker.recipeId = Number(event.target.value);
+      this.updatePickerSelection();
+      return;
+    }
     if (event.target.dataset.change === 'active-plan') {
+      if (this.slotPicker) this.dialog.close();
       this.state.error = null;
       this.state.activePlanId = Number(event.target.value);
       return this.loadActivePlan();
@@ -406,6 +467,10 @@ export class FoodTinderApp {
       this.state.error = null;
       this.state.shoppingPlanId = Number(event.target.value);
       return this.loadShopping();
+    }
+    if (change === 'purchase') {
+      const {planId, ingredientId} = event.target.dataset;
+      return this.setPurchased(Number(planId), Number(ingredientId), event.target.checked);
     }
   }
 
@@ -447,35 +512,89 @@ export class FoodTinderApp {
   }
 
   async swipe(recipeId, action) {
+    if (this.state.busy) return;
+    const context = this.sessionContext();
     if (!this.state.session.authenticated) {
       if (action === 'dislike') {
         this.state.guestHidden.add(recipeId);
-        this.toast('Скрыто только до перезагрузки');
-        return this.render();
+        this.state.lastSwipe = {recipeId, message: 'Скрыто до перезагрузки'};
+        this.render();
+        this.focusUndo();
+        return;
       }
       return this.showAuth('Войдите, чтобы оценивать рецепты.');
     }
+    let completed = false;
     await this.runMutation(`recipe-${recipeId}`, async () => {
-      await this.api.swipe(recipeId, action);
+      const result = await this.api.swipe(recipeId, action);
+      if (!this.isCurrentSession(context)) return;
+      const message = action === 'like' ? 'Добавлено в избранное' : 'Скрыто до завтра';
+      this.state.lastSwipe = result?.undo_token ? {recipeId, token: result.undo_token, message} : null;
       await Promise.all([
         this.loadFeed(false),
         action === 'like' ? this.loadFavorites(false) : undefined,
       ]);
-      this.toast(action === 'like' ? 'Добавлено в избранное' : 'Рецепт скрыт до завтра');
+      if (!this.isCurrentSession(context)) return;
+      completed = true;
+      if (this.state.view !== 'feed' || !this.state.lastSwipe) this.toast(message);
     });
+    if (completed && this.isCurrentSession(context)) this.focusUndo();
+  }
+
+  focusUndo() {
+    if (this.state.view === 'feed') this.root.querySelector?.('[data-action="undo-swipe"]')?.focus();
+  }
+
+  async undoSwipe() {
+    const swipe = this.state.lastSwipe;
+    if (!swipe || this.state.busy) return;
+    const context = this.sessionContext();
+    if (!context.authenticated) {
+      this.state.guestHidden.delete(swipe.recipeId);
+      this.state.lastSwipe = null;
+      this.render();
+      this.toast('Действие отменено');
+      this.focusFeedRecipe();
+      return;
+    }
+    let completed = false;
+    await this.runMutation('undo-swipe', async () => {
+      let message = 'Действие отменено';
+      try {
+        await this.api.undoSwipe(swipe.token);
+      } catch (error) {
+        if (error.status !== 409) throw error;
+        message = 'Это действие уже нельзя отменить';
+      }
+      if (!this.isCurrentSession(context)) return;
+      this.state.lastSwipe = null;
+      await Promise.all([this.loadFeed(false), this.loadFavorites(false)]);
+      if (!this.isCurrentSession(context)) return;
+      this.toast(message);
+      completed = true;
+    });
+    if (completed && this.isCurrentSession(context)) this.focusFeedRecipe();
+  }
+
+  focusFeedRecipe() {
+    if (this.state.view === 'feed') this.root.querySelector?.('.feature-recipe [data-action="recipe-detail"]')?.focus();
   }
 
   async toggleFavorite(recipeId) {
     if (!this.state.session.authenticated) return this.showAuth('Войдите, чтобы сохранять рецепты.');
     const shouldFavorite = !this.state.favoriteIds.has(recipeId);
+    const context = this.sessionContext();
     await this.runMutation(`recipe-${recipeId}`, async () => {
       await this.api.setFavorite(recipeId, shouldFavorite);
+      if (!this.isCurrentSession(context)) return;
+      if (this.state.lastSwipe?.recipeId === recipeId) this.state.lastSwipe = null;
       await this.loadFavorites(false);
-      this.toast(shouldFavorite ? 'Добавлено в избранное' : 'Удалено из избранного');
+      if (this.isCurrentSession(context)) this.toast(shouldFavorite ? 'Добавлено в избранное' : 'Удалено из избранного');
     });
   }
 
   async openRecipeDetail(recipeId) {
+    this.slotPicker = null;
     const request = this.beginRequest('recipe-detail');
     const current = () => this.dialog.open
       && this.requestVersions.get('recipe-detail') === request.version;
@@ -490,6 +609,84 @@ export class FoodTinderApp {
       if (!current()) return;
       this.dialog.innerHTML = `${renderStatus({kind: 'error', title: 'Рецепт не загрузился', text: 'Закройте окно и попробуйте снова.'})}<button class="button button-secondary" data-action="close-dialog">Закрыть</button>`;
       this.render();
+    }
+  }
+
+  isCurrentPicker(picker) {
+    return Boolean(picker && this.slotPicker === picker && this.dialog.open
+      && this.state.view === 'plans' && this.editablePlanId() === picker.planId
+      && this.isCurrentSession(picker.session));
+  }
+
+  focusSlot({planId, dayIndex, mealType, session}) {
+    if (this.state.view === 'plans' && this.editablePlanId() === planId && this.isCurrentSession(session)) {
+      this.root.querySelector?.(`#pick-meal-${dayIndex}-${mealType}`)?.focus();
+    }
+  }
+
+  openSlotPicker(planId, dayIndex, mealType) {
+    if (this.state.busy || this.state.view !== 'plans' || planId !== this.editablePlanId()) return;
+    const plan = this.state.activePlan;
+    if (!Object.hasOwn(MEAL_LABELS, mealType) || !plan.enabled_meals.includes(mealType)
+      || !Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex >= plan.duration_days) return;
+    const slot = slotFor(plan, dayIndex, mealType);
+    const picker = {
+      planId, dayIndex, mealType, slot, startDate: plan.start_date, query: '',
+      recipes: compatibleFavorites(this.state.favorites, mealType),
+      recipeId: slot?.recipe_id ?? null,
+      session: this.sessionContext(),
+    };
+    this.beginRequest('recipe-detail');
+    this.slotPicker = picker;
+    this.dialog.innerHTML = renderSlotPicker(picker, this.state.favoritesStatus);
+    if (!this.dialog.open) this.dialog.showModal();
+    if (this.state.favoritesStatus === 'idle' || this.state.favoritesStatus === 'loading') {
+      return this.loadPickerFavorites(picker);
+    }
+  }
+
+  updatePickerResults() {
+    this.dialog.querySelector('[data-picker-results]').innerHTML =
+      renderPickerResults(this.slotPicker, this.state.favoritesStatus);
+  }
+
+  updatePickerSelection() {
+    this.dialog.querySelector('[data-picker-selection]').textContent = pickedRecipeTitle(this.slotPicker);
+    this.dialog.querySelector('[data-form="slot-picker"] button[type="submit"]').disabled = !this.slotPicker.recipeId;
+  }
+
+  async loadPickerFavorites(picker) {
+    if (!this.isCurrentPicker(picker)) return;
+    const loading = this.loadFavorites(false);
+    this.updatePickerResults();
+    await loading;
+    if (!this.isCurrentPicker(picker)) return;
+    picker.recipes = compatibleFavorites(this.state.favorites, picker.mealType);
+    if (picker.recipeId !== picker.slot?.recipe_id && !picker.recipes.some(({id}) => id === picker.recipeId)) {
+      picker.recipeId = null;
+    }
+    this.updatePickerResults();
+    this.updatePickerSelection();
+  }
+
+  async savePickedSlot(servings) {
+    const picker = this.slotPicker;
+    if (this.state.busy || !this.isCurrentPicker(picker) || !picker.recipeId
+      || !Number.isInteger(servings) || servings < 1 || servings > 20) return;
+    const {dayIndex, mealType, planId, recipeId} = picker;
+    if (recipeId !== picker.slot?.recipe_id && !picker.recipes.some(({id}) => id === recipeId)) return;
+    const fields = this.dialog.querySelector('.picker-fields');
+    const message = this.dialog.querySelector('[data-picker-error]');
+    fields.disabled = true;
+    message.hidden = true;
+    const saved = await this.saveSlot(dayIndex, mealType, {recipe_id: recipeId, servings}, planId);
+    fields.disabled = false;
+    if (saved) {
+      this.focusSlot(picker);
+    } else if (this.isCurrentPicker(picker) && this.state.error) {
+      message.textContent = apiErrorMessage(this.state.error);
+      message.hidden = false;
+      this.dialog.querySelector('button[type="submit"]').focus();
     }
   }
 
@@ -508,21 +705,26 @@ export class FoodTinderApp {
     });
   }
 
-  async saveSlot(dayIndex, mealType, payload) {
+  async saveSlot(dayIndex, mealType, payload, targetPlanId = this.editablePlanId()) {
     const planId = this.editablePlanId();
-    if (!planId) return;
+    if (!planId || planId !== targetPlanId) return false;
     const context = this.sessionContext();
+    const picker = this.slotPicker;
+    let saved = false;
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
       await this.api.putSlot(planId, dayIndex, mealType, payload);
       if (!this.isCurrentSession(context)) return;
+      if (this.isCurrentPicker(picker)) this.dialog.close();
+      saved = true;
       await this.refreshAfterSlotChange(planId);
-      this.toast('Блюдо сохранено');
+      if (this.isCurrentSession(context)) this.toast('Блюдо сохранено');
     });
+    return saved;
   }
 
-  async deleteSlot(dayIndex, mealType) {
+  async deleteSlot(dayIndex, mealType, targetPlanId = this.editablePlanId()) {
     const planId = this.editablePlanId();
-    if (!planId) return;
+    if (!planId || planId !== targetPlanId) return;
     const context = this.sessionContext();
     await this.runMutation(`slot-${dayIndex}-${mealType}`, async () => {
       await this.api.deleteSlot(planId, dayIndex, mealType);
@@ -549,10 +751,54 @@ export class FoodTinderApp {
     });
   }
 
+  editableShoppingPlanId() {
+    return this.state.session.authenticated && this.state.shoppingStatus === 'ready'
+      && this.state.shopping?.plan_id === Number(this.state.shoppingPlanId)
+      ? this.state.shopping.plan_id : null;
+  }
+
+  async setPurchased(planId, ingredientId, purchased) {
+    if (this.state.busy || planId !== this.editableShoppingPlanId()) return;
+    const item = this.state.shopping.items.find((entry) => entry.ingredient_id === ingredientId);
+    if (!item) return;
+    await this.changePurchases(planId, async () => {
+      await this.api.setPurchased(planId, ingredientId, {purchased, quantity_version: item.quantity_version});
+    }, `#purchase-${ingredientId}`);
+  }
+
+  async clearPurchases(planId) {
+    if (this.state.busy || planId !== this.editableShoppingPlanId()
+      || !this.state.shopping.items.some((item) => item.purchased)) return;
+    if (!globalThis.confirm('Снять все отметки о покупках в выбранном рационе?')) return;
+    await this.changePurchases(planId, () => this.api.clearPurchases(planId), '[data-action="refresh-shopping"]');
+  }
+
+  async changePurchases(planId, write, focusSelector) {
+    const context = this.sessionContext();
+    const current = () => this.isCurrentSession(context) && Number(this.state.shoppingPlanId) === planId;
+    await this.runMutation('purchases', async () => {
+      let stale = false;
+      try {
+        await write();
+      } catch (error) {
+        if (![404, 409].includes(error.status)) {
+          if (current()) throw error;
+          return;
+        }
+        stale = true;
+      }
+      if (!current()) return;
+      await this.loadShopping(false);
+      if (stale && current() && this.state.shoppingStatus === 'ready') {
+        this.toast('Список покупок изменился. Проверьте количество и повторите отметку.');
+      }
+    });
+    if (current() && this.state.view === 'shopping') this.root.querySelector?.(focusSelector)?.focus();
+  }
+
   async exportShopping(fileType) {
-    const planId = Number(this.state.shoppingPlanId);
-    if (!this.state.session.authenticated || this.state.shoppingStatus !== 'ready'
-      || this.state.shopping?.plan_id !== planId) return;
+    const planId = this.editableShoppingPlanId();
+    if (!planId) return;
     const context = this.sessionContext();
     await this.runMutation(`export-${fileType}`, async () => {
       const file = await this.api.downloadShoppingList(planId, fileType);

@@ -1,9 +1,9 @@
 import {difficultyLabel, formatMealTypes, formatQuantity, formatUnit, nutritionItems} from '../utils/format.js';
 import {escapeAttr, escapeHtml} from '../utils/dom.js';
-function picture(recipe, className, lazy = false) {
-  const fallback = `<div class="${className} recipe-photo-placeholder">Без фотографии</div>`;
+export function picture(recipe, className, lazy = false, alt = recipe.title) {
+  const fallback = `<span class="${className} recipe-photo-placeholder">Без фотографии</span>`;
   if (!recipe.image_url) return fallback;
-  return `<img class="${className} recipe-image" src="${escapeAttr(recipe.image_url)}" alt="${escapeAttr(recipe.title)}" ${lazy ? 'loading="lazy"' : 'fetchpriority="high"'} />${fallback}`;
+  return `<img class="${className} recipe-image" src="${escapeAttr(recipe.image_url)}" alt="${escapeAttr(alt)}" ${lazy ? 'loading="lazy"' : 'fetchpriority="high"'} />${fallback}`;
 }
 
 function favoriteButton(recipe, isFavorite, busy) {

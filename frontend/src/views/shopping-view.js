@@ -1,6 +1,7 @@
-import {escapeHtml, renderStatus} from '../utils/dom.js';
+import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
 import {formatDate, formatQuantity, formatUnit} from '../utils/format.js';
 import {renderPlansError} from '../components/plans-error.js';
+import {groupShoppingItems} from '../utils/shopping.js';
 
 function planSelect(state) {
   return `<label class="select-label">Рацион
@@ -8,6 +9,22 @@ function planSelect(state) {
       ${state.plans.map((plan) => `<option value="${plan.id}" ${Number(state.shoppingPlanId) === plan.id ? 'selected' : ''}>${escapeHtml(formatDate(plan.start_date))}, ${plan.duration_days} дн. (№ ${plan.id})</option>`).join('')}
     </select>
   </label>`;
+}
+
+function checklist(state, items) {
+  const disabled = state.busy ? 'disabled' : '';
+  return groupShoppingItems(items).map(([label, group]) => `<section class="shopping-group">
+    <h3>${label}</h3>
+    <ul class="shopping-items">${group.map((item) => `<li class="${item.purchased ? 'is-purchased' : ''}">
+      <label class="shopping-item">
+        <input id="purchase-${item.ingredient_id}" type="checkbox" data-change="purchase"
+          data-plan-id="${state.shopping.plan_id}" data-ingredient-id="${item.ingredient_id}"
+          aria-label="Куплено: ${escapeAttr(item.name)}" ${item.purchased ? 'checked' : ''} ${disabled} />
+        <span>${escapeHtml(item.name)}</span>
+        <b>${escapeHtml(formatQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b>
+      </label>
+    </li>`).join('')}</ul>
+  </section>`).join('');
 }
 
 export function renderShoppingView(state) {
@@ -31,20 +48,28 @@ export function renderShoppingView(state) {
     return `${header}${renderStatus({kind: 'error', title: 'Список не загрузился', action: 'retry-shopping'})}`;
   }
   const items = state.shopping?.items || [];
+  const purchased = items.filter((item) => item.purchased).length;
+  const disabled = state.busy ? 'disabled' : '';
   return `${header}
     <div class="shopping-layout">
       <section class="shopping-card" aria-labelledby="shopping-title">
         <header class="shopping-card-header">
-          <h2 id="shopping-title">Продукты</h2>
-          <button class="button button-secondary button-small" data-action="refresh-shopping" ${state.busy === 'shopping' ? 'disabled' : ''}>Обновить</button>
+          <div><h2 id="shopping-title">Продукты</h2>
+            ${items.length ? `<p class="shopping-progress" role="status">Куплено ${purchased} из ${items.length}</p>` : ''}
+          </div>
+          <button class="button button-secondary button-small" data-action="refresh-shopping" ${disabled}>Обновить</button>
         </header>
-        ${items.length ? `<ul class="shopping-items">${items.map((item) => `<li><span>${escapeHtml(item.name)}</span><b>${escapeHtml(formatQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b></li>`).join('')}</ul>` : '<div class="compact-empty"><b>Список покупок пуст</b><span>Добавьте блюда в выбранный рацион.</span></div>'}
+        ${items.length ? checklist(state, items) : `<div class="compact-empty"><b>Список покупок пуст</b>
+          <span>Добавьте блюда в выбранный рацион.</span><button class="text-button" data-action="open-plans">Открыть рационы</button>
+        </div>`}
+        ${purchased ? `<button class="button button-small button-ghost" data-action="clear-purchases"
+          data-plan-id="${state.shopping.plan_id}" ${disabled}>Снять все отметки</button>` : ''}
       </section>
       <aside class="export-card" aria-labelledby="export-title">
         <h2 id="export-title">Скачать список</h2>
         <div class="export-actions">
-          <button class="button button-secondary" data-action="export-shopping" data-file-type="csv" aria-label="Скачать список в CSV">CSV</button>
-          <button class="button button-secondary" data-action="export-shopping" data-file-type="txt" aria-label="Скачать список в TXT">TXT</button>
+          <button class="button button-secondary" data-action="export-shopping" data-file-type="csv" aria-label="Скачать список в CSV" ${disabled}>CSV</button>
+          <button class="button button-secondary" data-action="export-shopping" data-file-type="txt" aria-label="Скачать список в TXT" ${disabled}>TXT</button>
         </div>
       </aside>
     </div>`;

@@ -147,3 +147,22 @@ test('recipe search filters by title without case or ё differences and escapes 
   assert.match(safe, /value="&lt;img/);
   assert.match(safe, /Ничего не найдено/);
 });
+
+test('shopping checklist groups known ingredients, uses a fallback and labels purchased items', () => {
+  const state = createInitialState();
+  const plan = {id: 3, start_date: '2026-11-20', duration_days: 1};
+  Object.assign(state, {
+    view: 'shopping', initialLoading: false, session: {authenticated: true},
+    plans: [plan], plansStatus: 'ready', shoppingStatus: 'ready', shoppingPlanId: plan.id,
+    shopping: {plan_id: plan.id, items: [
+      {ingredient_id: 1, name: 'Рис', unit: 'g', quantity: '200.000', purchased: true},
+      {ingredient_id: 2, name: 'Трюфель', unit: 'g', quantity: '10.000', purchased: false},
+    ]},
+  });
+  const html = renderShell(state);
+  assert.match(html, /Куплено 1 из 2/);
+  assert.match(html, /Бакалея/);
+  assert.match(html, /Прочее/);
+  assert.match(html, /aria-label="Куплено: Рис" checked/);
+  assert.match(html, /data-action="clear-purchases"\s+data-plan-id="3"/);
+});
