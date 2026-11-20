@@ -1,4 +1,5 @@
 import {ApiError, apiErrorMessage} from './api/errors.js';
+import {generatePlanSlots} from './utils/auto-plan.js';
 import {renderRecipeDetail} from './components/recipe-card.js';
 import {MEAL_LABELS} from './constants.js';
 import {PlanDrafts} from './state/plan-drafts.js';
@@ -295,6 +296,56 @@ export class FoodTinderApp {
     if (shouldRender && current()) this.render();
   }
 
+  async loadAccount(shouldRender = true) {
+    if (!this.state.session.authenticated) return;
+    const request = this.beginRequest('account');
+    const current = () => this.isCurrentRequest('account', request);
+    this.state.accountStatus = 'loading';
+    if (shouldRender) this.render();
+    try {
+      const account = await this.api.getAccount();
+      if (!current()) return;
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+    } catch (error) {
+      if (!current()) return;
+      this.state.accountStatus = 'error';
+      await this.handleError(error, current);
+    }
+    if (shouldRender && current()) this.render();
+  }
+
+  async updateAccountNames(payload) {
+    if (!this.state.session.authenticated || this.state.busy) return;
+    const context = this.sessionContext();
+    await this.runMutation('account', async () => {
+      const account = await this.api.updateAccount(payload);
+      if (!this.isCurrentSession(context)) return;
+      this.beginRequest('account');
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+      this.toast('Личные данные сохранены');
+    });
+  }
+
+  async updateAccountEmail(payload) {
+    if (!this.state.session.authenticated || this.state.busy) return;
+    if (payload.email.toLowerCase() === this.state.session.email.toLowerCase()) {
+      this.toast('Новый email совпадает с текущим');
+      return;
+    }
+    const context = this.sessionContext();
+    await this.runMutation('account', async () => {
+      const account = await this.api.changeEmail(payload);
+      if (!this.isCurrentSession(context)) return;
+      this.beginRequest('account');
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+      this.state.session = {...this.state.session, email: account.email};
+      this.toast('Email изменён');
+    });
+  }
+
   async loadFavorites(shouldRender = true) {
     if (!this.state.session.authenticated) return;
     const request = this.beginRequest('favorites');
@@ -524,6 +575,7 @@ export class FoodTinderApp {
       ]);
     }
     if (view === 'favorites' && authenticated) await this.loadFavorites();
+    if (view === 'auth' && authenticated) await this.loadAccount();
     if (view === 'plans' && authenticated) {
       if (this.state.planMode === 'list') {
         await this.loadPlans();
@@ -580,6 +632,7 @@ export class FoodTinderApp {
       return;
     }
     if (action === 'retry-favorites') return this.loadFavorites();
+    if (action === 'retry-account') return this.loadAccount();
     if (action === 'retry-plans') return this.loadPlans();
     if (action === 'retry-active-plan') return this.loadActivePlan();
     if ((action === 'retry-shopping' || action === 'refresh-shopping') && !this.state.busy) return this.loadShopping();
@@ -594,6 +647,8 @@ export class FoodTinderApp {
     if (action === 'delete-slot') return this.deleteSlot(Number(control.dataset.dayIndex), control.dataset.mealType, Number(control.dataset.planId));
     if (action === 'plan-list') return this.navigate('plans', {planMode: 'list'});
     if (action === 'new-plan') return this.openPlanEditor('new');
+    if (action === 'auto-fill-plan') return this.autoFillPlan();
+    if (action === 'regenerate-plan') return this.autoFillPlan({replace: true});
     if (action === 'edit-plan') return this.openPlanEditor('edit', Number(control.dataset.planId));
     if (action === 'duplicate-plan') return this.duplicatePlan(Number(control.dataset.planId));
     if (action === 'delete-plan') return this.deletePlan(Number(control.dataset.planId));
@@ -613,7 +668,19 @@ export class FoodTinderApp {
       return this.login({email: data.get('email'), password: data.get('password')});
     }
     if (form.dataset.form === 'register') {
-      return this.register({email: data.get('email'), password: data.get('password')});
+      return this.register({
+        first_name: data.get('first_name'), email: data.get('email'), password: data.get('password'),
+      });
+    }
+    if (form.dataset.form === 'account-names') {
+      return this.updateAccountNames({
+        first_name: data.get('first_name'), last_name: data.get('last_name'),
+      });
+    }
+    if (form.dataset.form === 'account-email') {
+      return this.updateAccountEmail({
+        email: data.get('email'), current_password: data.get('current_password'),
+      });
     }
     if (form.dataset.form === 'plan-editor') return this.savePlan();
     if (form.dataset.form === 'slot-picker' && this.dialog.contains(form)) {
@@ -673,6 +740,12 @@ export class FoodTinderApp {
     if (event.target.dataset.change === 'picker-recipe' && this.isCurrentPicker(this.slotPicker)) {
       this.slotPicker.recipeId = Number(event.target.value);
       this.updatePickerSelection();
+      return;
+    }
+    if (change === 'plan-auto-servings') {
+      if (!this.state.planDraft || this.state.busy) return;
+      this.state.planDraft.generationServings = Number(event.target.value);
+      this.planDrafts.put(this.state.session.id, this.state.planDraft.plan.id, this.state.planDraft);
       return;
     }
     if (['plan-date', 'plan-duration', 'plan-meal'].includes(change)) return this.changePlanSettings(event.target);
@@ -934,6 +1007,43 @@ export class FoodTinderApp {
     this.focusSlot(picker);
   }
 
+  async autoFillPlan({replace = false} = {}) {
+    const draft = this.state.planDraft;
+    if (!draft || this.state.busy || this.state.view !== 'plans' || this.editablePlanId() === null) return;
+    const {plan} = draft;
+    if (!hasValidPlanDates(plan) || !plan.enabled_meals.length) {
+      this.toast('Укажите корректную дату и хотя бы один приём пищи.');
+      return;
+    }
+    const servings = Number(draft.generationServings ?? 1);
+    if (!Number.isInteger(servings) || servings < 1 || servings > 20) {
+      this.toast('Укажите количество человек от 1 до 20.');
+      return;
+    }
+    if (replace && plan.slots.length
+      && !this.confirm('Пересобрать меню? Все выбранные вручную блюда в черновике будут заменены.')) return;
+
+    const request = this.beginRequest('auto-fill-plan');
+    if (this.state.favoritesStatus !== 'ready') await this.loadFavorites(false);
+    if (!this.isCurrentRequest('auto-fill-plan', request) || this.state.planDraft !== draft
+      || this.state.view !== 'plans' || this.editablePlanId() === null
+      || this.state.favoritesStatus !== 'ready') return;
+
+    const rotation = (draft.generationRotation ?? 0) + (replace ? 1 : 0);
+    const result = generatePlanSlots(plan, this.state.favorites, {servings, replace, rotation});
+    if (!result.generated) {
+      this.toast(result.missing ? 'В избранном нет блюд для выбранных приёмов пищи.'
+        : 'Все приёмы пищи уже заполнены. Для нового варианта нажмите «Пересобрать меню».');
+      return;
+    }
+    plan.slots = result.slots;
+    draft.generationRotation = rotation;
+    draft.generationNotice = `Подобрано блюд: ${result.generated}.${result.repeated ? ` Повторов: ${result.repeated}.` : ''}${result.missing ? ` Пустых слотов: ${result.missing} — нет подходящих блюд в избранном.` : ''} Проверьте меню и нажмите «Сохранить рацион».`;
+    this.markDraftChanged();
+    this.render();
+    this.root.querySelector?.('[data-action="auto-fill-plan"]')?.focus();
+  }
+
   markDraftChanged() {
     const {planDraft, session} = this.state;
     planDraft.dirty = true;
@@ -964,6 +1074,7 @@ export class FoodTinderApp {
       ? '[data-change="plan-date"]' : `[data-change="${change}"][value="${control.value}"]`;
     if (!removed || this.confirm(`После сохранения из рациона будут удалены блюда · ${removed}. Продолжить?`)) {
       draft.plan = {...next, slots: remaining};
+      draft.generationNotice = '';
       this.markDraftChanged();
     }
     this.render();

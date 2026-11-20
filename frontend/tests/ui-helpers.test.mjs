@@ -23,6 +23,7 @@ test('account screens use product language and registration explains the passwor
     assert.doesNotMatch(html, /backend|CSRF|cookie|localStorage|reload|Session/i);
   }
   const register = renderAuthView(state);
+  assert.match(register, /name="first_name"[^>]*required/);
   assert.match(register, /aria-describedby="password-help"/);
   assert.match(register, /id="password-help"[^>]*>[^<]*10\s+символов[^<]*латинск[^<]*цифр[^<]*_/);
   assert.match(register, /После регистрации войдите/);
@@ -195,4 +196,17 @@ test('favorite date and title sorting are deterministic and missing dates come l
   assert.match(renderFavoritesView(state), /Ничего не найдено/);
   state.favorites = [];
   assert.match(renderFavoritesView(state), /В избранном пусто/);
+});
+
+test('account view renders editable first/last names and protected email change form', () => {
+  const state = createInitialState();
+  state.session = {authenticated: true, id: 1, email: 'reader@example.com'};
+  state.accountStatus = 'ready';
+  state.account = {first_name: 'Иван', last_name: 'Иванов', email: 'reader@example.com'};
+  const html = renderAuthView(state);
+  assert.match(html, /data-form="account-names"/);
+  assert.match(html, /data-form="account-email"/);
+  assert.match(html, /name="current_password" type="password"/);
+  assert.match(html, /value="Иванов"/);
+  assert.match(html, /Подтверждение нового адреса пока не настроено/);
 });

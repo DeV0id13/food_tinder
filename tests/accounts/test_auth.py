@@ -40,14 +40,15 @@ def test_register_creates_user_and_profile_without_login():
     client = csrf_client()
     response = client.post(
         f"{BASE}register/",
-        {"email": " Reader@Example.COM ", "password": PASSWORD},
+        {"first_name": "Иван", "email": " Reader@Example.COM ", "password": PASSWORD},
         format="json",
         **csrf_header(client),
     )
 
     assert response.status_code == 201
     user = get_user_model().objects.get(email="reader@example.com")
-    assert response.json() == {"id": user.pk, "email": user.email}
+    assert response.json() == {"id": user.pk, "email": user.email, "first_name": "Иван"}
+    assert user.first_name == "Иван"
     assert user.check_password(PASSWORD)
     assert user.password != PASSWORD
     assert UserProfile.objects.filter(user=user).exists()
@@ -65,7 +66,7 @@ def test_register_rolls_back_user_when_profile_creation_fails():
         with pytest.raises(RuntimeError):
             client.post(
                 f"{BASE}register/",
-                {"email": "reader@example.com", "password": PASSWORD},
+                {"first_name": "Иван", "email": "reader@example.com", "password": PASSWORD},
                 format="json",
                 **csrf_header(client),
             )
@@ -78,7 +79,7 @@ def test_duplicate_email_with_different_case_is_field_error():
     client = csrf_client()
     response = client.post(
         f"{BASE}register/",
-        {"email": "READER@EXAMPLE.COM", "password": PASSWORD},
+        {"first_name": "Иван", "email": "READER@EXAMPLE.COM", "password": PASSWORD},
         format="json",
         **csrf_header(client),
     )
@@ -98,7 +99,7 @@ def test_case_insensitive_db_constraint_error_is_mapped_to_email():
     ) as create:
         response = client.post(
             f"{BASE}register/",
-            {"email": "reader@example.com", "password": PASSWORD},
+            {"first_name": "Иван", "email": "reader@example.com", "password": PASSWORD},
             format="json",
             **csrf_header(client),
         )
@@ -114,7 +115,7 @@ def test_register_rejects_invalid_password(password):
     client = csrf_client()
     response = client.post(
         f"{BASE}register/",
-        {"email": "reader@example.com", "password": password},
+        {"first_name": "Иван", "email": "reader@example.com", "password": password},
         format="json",
         **csrf_header(client),
     )
@@ -125,7 +126,7 @@ def test_register_rejects_invalid_password(password):
 
 def test_anonymous_register_requires_csrf():
     client = csrf_client()
-    payload = {"email": "reader@example.com", "password": PASSWORD}
+    payload = {"first_name": "Иван", "email": "reader@example.com", "password": PASSWORD}
     assert client.post(f"{BASE}register/", payload, format="json").status_code == 403
     assert (
         client.post(
@@ -366,3 +367,119 @@ def test_profile_is_always_scoped_to_current_user():
     assert response.status_code == 200
     assert UserProfile.objects.get(user=alice).height_cm == 160
     assert UserProfile.objects.get(user=bob).height_cm == 185
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_register_requires_nonblank_first_name(name):
+    client = csrf_client()
+    response = client.post(
+        f"{BASE}register/",
+        {"first_name": name, "email": "new@example.com", "password": PASSWORD},
+        format="json",
+        **csrf_header(client),
+    )
+    assert response.status_code == 400
+    assert "first_name" in response.json()
+    assert not get_user_model().objects.exists()
+
+
+def test_account_name_updates_are_private_and_require_csrf():
+    user = create_user()
+    user.first_name = "Старое"
+    user.save(update_fields=["first_name"])
+    other = create_user("other@example.com")
+    client = csrf_client()
+    assert client.get(f"{BASE}account/").status_code == 403
+    client.force_login(user)
+    assert client.get(f"{BASE}account/").json() == {
+        "first_name": "Старое",
+        "last_name": "",
+        "email": user.email,
+    }
+    assert client.patch(f"{BASE}account/", {"first_name": "Иван"}, format="json").status_code == 403
+    response = client.patch(
+        f"{BASE}account/",
+        {"first_name": "Иван", "last_name": "Иванов"},
+        format="json",
+        **csrf_header(client),
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "first_name": "Иван",
+        "last_name": "Иванов",
+        "email": user.email,
+    }
+    user.refresh_from_db()
+    assert (user.first_name, user.last_name) == ("Иван", "Иванов")
+    other.refresh_from_db()
+    assert other.first_name == ""
+
+
+@pytest.mark.parametrize(
+    "payload,field",
+    [
+        ({"first_name": ""}, "first_name"),
+        ({"first_name": " "}, "first_name"),
+        ({"first_name": "a" * 151}, "first_name"),
+        ({"email": "hijack@example.com"}, "email"),
+        ({"is_staff": True}, "is_staff"),
+        ({"unknown": "value"}, "unknown"),
+    ],
+)
+def test_account_name_patch_rejects_invalid_or_forbidden_fields(payload, field):
+    user = create_user()
+    client = csrf_client()
+    client.force_login(user)
+    response = client.patch(f"{BASE}account/", payload, format="json", **csrf_header(client))
+    assert response.status_code == 400
+    assert field in response.json()
+
+
+def test_change_email_requires_correct_password_and_updates_session():
+    user = create_user()
+    client = csrf_client()
+    client.force_login(user)
+    url = f"{BASE}account/email/"
+    payload = {"email": " New@Example.COM ", "current_password": PASSWORD}
+    assert client.post(url, payload, format="json").status_code == 403
+    wrong = client.post(
+        url,
+        {**payload, "current_password": "wrong"},
+        format="json",
+        **csrf_header(client),
+    )
+    assert wrong.status_code == 400
+    assert "current_password" in wrong.json()
+    assert client.get(f"{BASE}session/").json()["email"] == user.email
+    response = client.post(url, payload, format="json", **csrf_header(client))
+    assert response.status_code == 200
+    assert response.json()["email"] == "new@example.com"
+    user.refresh_from_db()
+    assert user.email == "new@example.com"
+    assert client.get(f"{BASE}session/").json()["email"] == "new@example.com"
+    assert client.get(f"{BASE}account/").json()["email"] == "new@example.com"
+    assert "no-store" in response["Cache-Control"]
+
+
+def test_change_email_conflict_and_forbidden_fields_dont_modify_account():
+    user = create_user()
+    create_user("taken@example.com")
+    client = csrf_client()
+    client.force_login(user)
+    url = f"{BASE}account/email/"
+    response = client.post(
+        url,
+        {"email": "TAKEN@EXAMPLE.COM", "current_password": PASSWORD},
+        format="json",
+        **csrf_header(client),
+    )
+    assert response.status_code == 400
+    assert "email" in response.json()
+    for payload in [
+        {"email": "new@example.com", "current_password": PASSWORD, "is_staff": True},
+        {"email": "not-an-email", "current_password": PASSWORD},
+        {"email": "new@example.com"},
+    ]:
+        assert client.post(url, payload, format="json", **csrf_header(client)).status_code == 400
+    user.refresh_from_db()
+    assert user.email == "reader@example.com"

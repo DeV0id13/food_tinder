@@ -50,7 +50,7 @@ test('real proxy persists favorites and plans across independent sessions and ex
     recipe = recipes[0];
     const detail = await api.getRecipe(recipe.id);
     assert.ok(detail.ingredients.length);
-    await api.register(account);
+    await api.register({...account, first_name: 'Тест'});
     assert.equal((await api.getSession()).authenticated, false, 'Registration must not log in.');
     assert.equal((await api.login(account)).authenticated, true);
     authenticated = true;
@@ -95,7 +95,7 @@ test('real proxy persists favorites and plans across independent sessions and ex
     assert.deepEqual(await otherBrowser.getShoppingList(planId), updated);
 
     const unrelatedAccount = {...account, email: `ft06-other-${randomUUID()}@example.test`};
-    await unrelated.register(unrelatedAccount);
+    await unrelated.register({...unrelatedAccount, first_name: 'Другой'});
     await unrelated.login(unrelatedAccount);
     assert.deepEqual(await unrelated.getFavorites(), []);
     assert.deepEqual(await unrelated.getPlans(), []);

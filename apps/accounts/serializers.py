@@ -21,6 +21,7 @@ class StrictFieldsSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(StrictFieldsSerializer):
+    first_name = serializers.CharField(max_length=150, trim_whitespace=True, allow_blank=False)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
@@ -28,7 +29,7 @@ class RegisterSerializer(StrictFieldsSerializer):
         return get_user_model().objects.normalize_email(value)
 
     def validate(self, attrs):
-        user = get_user_model()(email=attrs["email"])
+        user = get_user_model()(email=attrs["email"], first_name=attrs["first_name"])
         try:
             validate_password(attrs["password"], user=user)
         except ValidationError as exc:
@@ -72,3 +73,16 @@ class ProfileSerializer(StrictFieldsSerializer, serializers.ModelSerializer):
         if value is not None and value > timezone.localdate():
             raise serializers.ValidationError("Date of birth cannot be in the future.")
         return value
+
+
+class AccountNamesSerializer(StrictFieldsSerializer):
+    first_name = serializers.CharField(max_length=150, allow_blank=False, required=False)
+    last_name = serializers.CharField(max_length=150, allow_blank=True, required=False)
+
+
+class ChangeEmailSerializer(StrictFieldsSerializer):
+    email = serializers.EmailField()
+    current_password = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_email(self, value):
+        return get_user_model().objects.normalize_email(value)

@@ -42,6 +42,7 @@ function createApp(overrides = {}, browser) {
     getFavorites: async () => [{id: 22}],
     getPlans: async () => [],
     getSession: async () => guest,
+    getAccount: async () => ({first_name: 'Тест', last_name: '', email: userA.email}),
     logout: async () => guest,
     login: async () => userB,
     ...overrides,
@@ -906,4 +907,92 @@ test('shortening a draft asks before dropping occupied days and keeps saved slot
   assert.deepEqual(app.state.planDraft.plan.slots, original.slots.slice(0, 1));
   assert.equal(app.state.activePlan.slots.length, 2);
   assert.match(app.root.innerHTML, /1 из 1 приёмов пищи заполнено/);
+});
+
+test('auto-fill uses favorites only, fills draft without any writes and respects selected servings', async () => {
+  const browser = createBrowser('/plans');
+  const favorites = [
+    {id: 4, title: 'Рис', meal_types: ['lunch'], image_url: '/media/4.webp'},
+    {id: 5, title: 'Рагу', meal_types: ['lunch'], image_url: '/media/5.webp'},
+    {id: 6, title: 'Суп', meal_types: ['lunch'], image_url: '/media/6.webp'},
+  ];
+  const app = createApp({
+    getSession: async () => userA,
+    getFavorites: async () => favorites,
+    createPlan: () => assert.fail('Generation must not write to PostgreSQL'),
+    updatePlan: () => assert.fail('Generation must not update an existing plan'),
+  }, browser);
+  await app.start();
+  await app.openPlanEditor('new');
+  const draft = app.state.planDraft;
+  draft.plan.enabled_meals = ['lunch'];
+  draft.generationServings = 3;
+  await app.autoFillPlan();
+  assert.equal(app.state.planDraft, draft);
+  assert.equal(draft.plan.slots.length, 3);
+  assert.deepEqual(new Set(draft.plan.slots.map(({recipe_id}) => recipe_id)), new Set([4, 5, 6]));
+  assert.ok(draft.plan.slots.every(({servings}) => servings === 3));
+  assert.equal(draft.dirty, true);
+  assert.match(app.root.innerHTML, /Есть несохранённые изменения/);
+  assert.equal(app.planDrafts.get(userA.id, null).plan.slots.length, 3);
+});
+
+test('auto-fill refuses to overwrite existing draft without confirmation and keeps previous selection', async () => {
+  const app = createApp({getFavorites: async () => [
+    {id: 5, title: 'Рагу', meal_types: ['lunch']},
+    {id: 6, title: 'Суп', meal_types: ['lunch']},
+  ]});
+  app.state.initialLoading = false;
+  app.state.view = 'plans';
+  app.state.planMode = 'edit';
+  app.state.activePlanId = 8;
+  app.state.activePlanStatus = 'ready';
+  const draft = makePlanDraft({
+    id: 8, version: 1, title: '', duration_days: 1, start_date: '2026-11-20',
+    enabled_meals: ['lunch'], slots: [
+      {day_index: 0, meal_type: 'lunch', recipe_id: 5, recipe_title: 'Рагу', servings: 2},
+    ],
+  });
+  app.state.planDraft = draft;
+  app.confirm = () => false;
+  await app.autoFillPlan({replace: true});
+  assert.equal(draft.plan.slots[0].recipe_id, 5);
+  app.confirm = () => true;
+  await app.autoFillPlan({replace: true});
+  assert.equal(draft.plan.slots[0].recipe_id, 6);
+  assert.equal(draft.dirty, true);
+});
+
+test('account data forms use API without changing auth status and clear after logout', async () => {
+  const app = createApp({
+    getAccount: async () => ({first_name: 'Саша', last_name: '', email: userA.email}),
+    updateAccount: async ({first_name, last_name}) => ({first_name, last_name, email: userA.email}),
+    changeEmail: async ({email, current_password}) => {
+      assert.equal(current_password, 'Valid_pass123');
+      return {first_name: 'Саша', last_name: 'Иванов', email};
+    },
+  });
+  app.state.initialLoading = false;
+  app.state.view = 'auth';
+  await app.loadAccount();
+  assert.match(app.root.innerHTML, /Личные данные/);
+  await app.updateAccountNames({first_name: 'Саша', last_name: 'Иванов'});
+  assert.equal(app.state.account.last_name, 'Иванов');
+  await app.updateAccountEmail({email: 'new@example.com', current_password: 'Valid_pass123'});
+  assert.equal(app.state.session.email, 'new@example.com');
+  assert.equal(app.state.session.id, userA.id);
+  app.setSession(guest);
+  assert.equal(app.state.account, null);
+  assert.equal(app.state.accountStatus, 'idle');
+});
+
+test('registration sends first name with email and password', async () => {
+  let payload;
+  const app = createApp({register: async (value) => {
+    payload = value;
+    return {email: value.email, first_name: value.first_name};
+  }});
+  await app.register({first_name: 'Алиса', email: 'alice@example.com', password: 'Valid_pass123'});
+  assert.equal(payload.first_name, 'Алиса');
+  assert.equal(app.state.registeredEmail, 'alice@example.com');
 });

@@ -870,6 +870,20 @@ dialog:has(.slot-picker) { width: min(54rem, calc(100% - 2rem)); }
 .editor-heading h1 { font-size: clamp(2.75rem, 5.25vw, 5.5rem); }
 .plan-settings { border: 1px solid var(--line); padding: clamp(1rem, 1.75vw, 1.5rem); }
 .plan-configuration { display: grid; gap: 1.25rem; }
+
+.account-form { width: min(100%, 34rem); padding-block: 1.25rem; border-top: 1px solid var(--line); }
+.account-form h2 { font-size: clamp(1.5rem, 2.5vw, 2rem); }
+
+.plan-auto-fill {
+  display: grid;
+  gap: 0.8rem;
+  padding-block: 1.25rem;
+  border-block: 1px solid var(--line);
+}
+.plan-auto-fill h3 { font-size: 1.55rem; }
+.plan-auto-fill label { max-width: 20rem; }
+.plan-auto-fill input { max-width: 9rem; }
+.plan-auto-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem 1rem; }
 .active-plan-header .plan-progress { margin-top: 0.65rem; }
 .draft-status { color: var(--muted); font-size: 0.875rem; }
 .plan-editor-actions { align-items: stretch; }

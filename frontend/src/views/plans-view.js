@@ -91,6 +91,19 @@ function planEditor(state) {
               ${MEALS.map(({id, label}) => `<label><input type="checkbox" name="enabled_meals" data-change="plan-meal" value="${id}" ${plan.enabled_meals.includes(id) ? 'checked' : ''} />${label}</label>`).join('')}
             </div></fieldset>
           </fieldset>
+          <section class="plan-auto-fill" aria-labelledby="auto-fill-title">
+            <h3 id="auto-fill-title">Автоматически подобрать блюда</h3>
+            <p class="muted">Выберите период и приёмы пищи выше, затем укажите количество человек. Мы заполним меню блюдами из избранного без частых повторов.</p>
+            <label for="plan-auto-servings">Человек (порций на каждое блюдо)
+              <input id="plan-auto-servings" type="number" min="1" max="20" step="1"
+                data-change="plan-auto-servings" value="${escapeAttr(state.planDraft.generationServings ?? 1)}" ${disabled} />
+            </label>
+            <div class="plan-auto-actions">
+              <button class="button button-secondary" type="button" data-action="auto-fill-plan" ${disabled}>Заполнить пустые слоты</button>
+              <button class="text-button" type="button" data-action="regenerate-plan" ${disabled}>Пересобрать меню</button>
+            </div>
+            <p class="muted" role="status" aria-live="polite">${escapeHtml(state.planDraft.generationNotice || 'Все изменения останутся черновиком до нажатия «Сохранить рацион».')}</p>
+          </section>
           ${omitted ? `<p class="inline-notice">Пропущено блюд · ${omitted}. Для копии доступны опубликованные рецепты из избранного, подходящие для этого приёма пищи.</p>` : ''}
           <p class="draft-status" data-draft-status tabindex="-1" role="status">${draftStatus(state)}</p>
           <div class="plan-editor-actions">
