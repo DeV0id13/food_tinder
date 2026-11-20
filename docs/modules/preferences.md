@@ -7,20 +7,18 @@
 - `apps/preferences/models.py` — модель `UserRecipeState` и уникальность `(user, recipe)`.
 - `apps/preferences/serializers.py` — `RecipeSummary`, `RecipeState` и входные serializers.
 - `apps/preferences/views.py` — feed, swipes, favorite и favorites.
-- `apps/preferences/selectors.py` — `is_favorite(*, user_id, recipe_id)` для FT-04.
+- `apps/preferences/selectors.py` — одиночная и пакетная проверка избранного для planning.
 - `apps/preferences/urls.py` — маршруты FT-03.
 - `apps/preferences/migrations/0001_initial.py` — миграция состояния пользователя.
 - `tests/preferences/` — API-тесты и отдельный тестовый URLConf.
 
 ## Интеграция
 
-Для подключения API интегратор должен добавить в `config/urls.py`:
+API подключён в `config/urls.py`:
 
 ```text
 path("api/v1/preferences/", include("apps.preferences.urls")),
 ```
-
-Общий файл `config/urls.py` в рамках FT-03 не изменяется.
 
 Миграция `apps/preferences/migrations/0001_initial.py` зависит от:
 
@@ -54,7 +52,7 @@ path("api/v1/preferences/", include("apps.preferences.urls")),
 При свайпе `LastSwipe` сохраняет предыдущие `liked_at`, `disliked_until` и `is_favorite`
 в той же транзакции. Если до свайпа состояния не было, отмена удаляет созданную запись.
 Хранится один последний свайп на аккаунт, привязанный к Django-сессии, которая его сделала.
-Отдельного таймера нет. Новый свайп в любой сессии, изменение закладки того же рецепта
+Токен действует пять секунд. Новый свайп в любой сессии, изменение закладки того же рецепта
 или успешная отмена делают предыдущий токен недействительным (409). Другой аккаунт или
 другая сессия с тем же токеном также получают 409. Запрос требует сессию и CSRF.
 
@@ -78,15 +76,16 @@ path("api/v1/preferences/", include("apps.preferences.urls")),
 - Неизвестные поля write-запросов, включая `user_id`, отклоняются с `400`.
 - `is_favorite` принимает только настоящий JSON boolean: `true` или `false`.
 
-## Selector для FT-04
+## Чтение из planning
 
-Planning использует только публичный selector:
+Обработчик записи одного слота вызывает:
 
 ```python
 is_favorite(*, user_id: int, recipe_id: int) -> bool
 ```
 
-Функция читает состояние конкретного пользователя и рецепта и не требует импорта views или serializers модуля `preferences`.
+При пакетном сохранении редактор вызывает `favorite_recipe_ids(*, user_id, recipe_ids)`
+для новых или заменённых рецептов. Обе функции читают состояние текущего пользователя.
 
 ## FT-10. Срок отмены и дата добавления в избранное
 

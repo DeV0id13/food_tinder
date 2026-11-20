@@ -39,7 +39,7 @@
 
 ## Baseline
 
-Количество строк — физические строки отслеживаемых текстовых файлов, включая пустые; файлы с NUL в первых 8000 байтах считаются бинарными. Backend включает `apps/`, `common/`, `config/` и `manage.py`; тесты backend — `tests/`; остальное frontend включает его собственные тесты; документация включает `docs/`, корневые README и AGENTS.
+Количество строк — физические строки отслеживаемых текстовых файлов, включая пустые. Файлы с NUL в первых 8000 байтах считаются бинарными. Backend включает `apps/`, `common/`, `config/` и `manage.py`. Backend-тесты находятся в `tests/`, frontend-тесты учтены внутри `frontend/`. Документация включает `docs/`, корневые README и AGENTS.
 
 | Область | Файлы | Текстовые файлы | Строки |
 | --- | ---: | ---: | ---: |
@@ -53,7 +53,8 @@
 - Прямые зависимости из `pyproject.toml`: 4 base, 7 дополнительных dev, 1 дополнительная prod. Из `frontend/package.json`: 1 dev, 0 runtime.
 - `npm run build` (Node 26.13.1, Vite 8.3.4): 12 файлов, 749 140 байт в `frontend/dist`. Размер — сумма байтов обычных файлов.
 - `npm test`: 90 passed. `npm run lint`: успешно.
-- Development и production Dockerfile собраны из чистого Git-снимка. Размер production backend по `docker image inspect .Size`: 252 213 210 байт. Сборка frontend Dockerfile и smoke запущены отдельно.
+- Сборки `docker build --target development`, `docker build --target production` и `docker build -f deploy/Dockerfile.frontend` выполнены из чистого снимка Git. На Docker Desktop (linux/arm64) `docker image inspect .Size` показывает 360 558 796, 252 213 210 и 88 852 243 байта соответственно.
+- `pnpm run test:integration` в Node 22: 1 passed с настоящим Vite proxy, Django и временной PostgreSQL 16 с двумя тестовыми рецептами.
 - `ruff check .` и `ruff format --check .` (99 файлов), `python .github/scripts/run_mypy.py` (55 исходников) — успешно в development image с кэшами в `/tmp`.
 - `python manage.py check`, `makemigrations --check --dry-run` и `migrate --noinput` — успешно на чистой PostgreSQL 16.15.
 - `pytest -q` на PostgreSQL 16.15: 363 passed, 40 существующих предупреждений Django Admin по схеме URL.

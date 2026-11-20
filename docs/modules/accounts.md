@@ -6,7 +6,7 @@
 | Метод | Путь | Поведение |
 | --- | --- | --- |
 | GET | `session/` | Текущий `{authenticated, id, email}`; устанавливает CSRF cookie. |
-| POST | `register/` | Проверяет email и пароль, атомарно создаёт User и UserProfile, возвращает 201 `{id, email}` без входа. |
+| POST | `register/` | Проверяет имя, email и пароль, атомарно создаёт User и UserProfile, возвращает 201 `{id, email, first_name}` без входа. |
 | POST | `login/` | Проверяет email/пароль через Django, создаёт сессию, возвращает 200 `{authenticated, id, email}`. |
 | POST | `logout/` | Завершает сессию, возвращает 204 также для гостя. |
 | GET | `profile/` | Возвращает только базовые поля своего профиля. |

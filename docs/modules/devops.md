@@ -1,5 +1,8 @@
 # FT-07 — Pre-commit, CI, typecheck and security
 
+Implementation notes for FT-07. The current production procedure is in the
+[deployment guide](../deployment.md).
+
 ## Scope and status
 
 This PR configures the product code quality gates, not a deployment. GitHub Actions
