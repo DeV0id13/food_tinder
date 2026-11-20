@@ -419,6 +419,7 @@ class TestPlanningAPI:
             "recipe_id": recipe.id,
             "recipe_title": recipe.title,
             "servings": 3,
+            "recipe_image_url": recipe.image_url,
         }
         slot = MealPlanSlot.objects.get(plan=plan, day_index=0, meal_type="lunch")
         assert slot.recipe == recipe

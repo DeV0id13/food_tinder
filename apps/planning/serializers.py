@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.catalog.serializers import recipe_image_url
+
 from .models import ALLOWED_DURATIONS, MEAL_TYPES, MealPlan, MealPlanSlot
 
 MEAL_ORDER = {meal: index for index, meal in enumerate(MEAL_TYPES)}
@@ -50,11 +52,22 @@ class MealPlanSummarySerializer(serializers.ModelSerializer):
 class MealPlanSlotSerializer(serializers.ModelSerializer):
     recipe_id = serializers.IntegerField(read_only=True)
     recipe_title = serializers.CharField(source="recipe.title", read_only=True)
+    recipe_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = MealPlanSlot
-        fields = ("day_index", "meal_type", "recipe_id", "recipe_title", "servings")
+        fields = (
+            "day_index",
+            "meal_type",
+            "recipe_id",
+            "recipe_title",
+            "servings",
+            "recipe_image_url",
+        )
         read_only_fields = fields
+
+    def get_recipe_image_url(self, slot: MealPlanSlot) -> str:
+        return recipe_image_url(slot.recipe)
 
 
 class MealPlanDetailSerializer(MealPlanSummarySerializer):

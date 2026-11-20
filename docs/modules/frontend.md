@@ -6,8 +6,28 @@
 сценарий FT-01…FT-05 доступен через UI: гостевой каталог, регистрация и отдельный login,
 реакции, избранное, ручные рационы, shopping list и backend CSV/TXT export.
 
-Frontend не содержит копии server state в localStorage. После reload real mode снова читает
-session, feed, favorites, meal plans и выбранные данные через API.
+Frontend хранит данные только в runtime state. При обновлении страницы приложение восстанавливает
+сессию и загружает данные раздела, указанного в URL.
+
+## Навигация FT-09
+
+| Раздел | URL |
+| --- | --- |
+| Лента | `/` |
+| Рецепты | `/recipes` |
+| Избранное | `/favorites` |
+| Рационы | `/plans` |
+| Покупки | `/shopping` |
+| Аккаунт | `/account` |
+
+Переходы между разделами добавляют записи в историю браузера. Изменения поиска и фильтров
+обновляют текущий URL каталога, например `/recipes?q=суп&meal=lunch&time=60&favorites=1`.
+Гость видит подсказку о входе в приватном разделе по тому же адресу. Если открыть вход из
+этой подсказки, успешный вход вернёт в запрошенный раздел. «Назад» после выхода открывает
+приватный раздел в гостевом режиме.
+
+Caddy отдаёт SPA по существующему `try_files` и отдельно обрабатывает Django Admin, API и media.
+Маршруты сервера и конфигурация Caddy для FT-09 совместимы с этими ссылками.
 
 ## Стек и структура
 
@@ -67,7 +87,7 @@ Controller сразу очищает приватные данные и отри
 Поколение меняется при login/logout (включая повторный вход тем же аккаунтом) и смене/сбросе
 авторизации. Устаревшие результаты и ошибки игнорируются до изменения state; проверка
 повторяется и после асинхронного session refresh при 403. Это относится также к персональной
-ленте. При boot/login рационы не загружаются до открытия соответствующего раздела.
+ленте. При открытии прямой ссылки на рационы или покупки сначала восстанавливается сессия.
 
 Пароль используется только для текущего register/login request. Session token, cookies и
 пароль не записываются в browser storage.
@@ -78,9 +98,9 @@ Controller сразу очищает приватные данные и отри
 | --- | --- |
 | Auth | `GET auth/session/`, `POST auth/register/`, `POST auth/login/`, `POST auth/logout/` |
 | Catalog | `GET recipes/`, `GET recipes/<id>/` |
-| Preferences | `GET preferences/feed/`, `POST preferences/swipes/`, `PUT preferences/favorites/<id>/`, `GET preferences/favorites/` |
+| Preferences | `GET preferences/feed/`, `POST preferences/swipes/`, `POST preferences/swipes/undo/`, `PUT preferences/favorites/<id>/`, `GET preferences/favorites/` |
 | Planning | `GET/POST meal-plans/`, `GET/DELETE meal-plans/<id>/`, `PUT/DELETE meal-plans/<id>/slots/<day>/<meal>/` |
-| Shopping | `GET shopping-list/?plan_id=`, `GET shopping-list/export/?plan_id=&file_type=csv\|txt` |
+| Shopping | `GET shopping-list/?plan_id=`, `PUT shopping-list/<plan>/purchases/<ingredient>/`, `DELETE shopping-list/<plan>/purchases/`, `GET shopping-list/export/?plan_id=&file_type=csv\|txt` |
 
 Все пути добавляются к `/api/v1/`; завершающий slash сохранён.
 
@@ -90,6 +110,8 @@ Controller сразу очищает приватные данные и отри
 - Like гостя открывает экран входа.
 - Guest dislike добавляет ID только в runtime `Set`, не отправляется и исчезает при reload.
 - Authenticated like/dislike вызывает API, затем перезагружает первую страницу feed.
+- Кнопка «Отменить» использует токен последнего свайпа и обновляет ленту и избранное.
+  Для гостя отмена удаляет последний скрытый ID из локального `Set`.
 - Favorite — отдельный PUT. Он меняет звезду/коллекцию после успеха и не скрывает карточку.
 - Favorite IDs строятся из server favorites response, так как RecipeSummary не содержит
   `is_favorite`.
@@ -100,11 +122,10 @@ Controller сразу очищает приватные данные и отри
 `enabled_meals`. Список планов сортирует backend; UI выбирает активный ID и отдельно получает
 PlanDetail. Дни вычисляются только для отображения из start_date/day_index.
 
-Для каждого enabled slot UI показывает favorite recipes, у которых `meal_types` содержит
-meal type слота. PUT одновременно создаёт, меняет servings или заменяет recipe. Если ранее
-сохранённый рецепт уже удалён из favorites, он остаётся доступным как current option, чтобы
-разрешённое backend изменение одних servings продолжало работать. DELETE slot и DELETE plan
-вызывают только согласованные endpoints.
+«Выбрать блюдо» открывает диалог с фотографиями, временем готовки и поиском по активному
+избранному для этого приёма пищи. Пользователь выбирает карточку и сохраняет блюдо с 1–20
+порциями. Сохранённый рецепт, удалённый впоследствии из избранного, виден в слоте. Можно
+сохранить его с другим числом порций или заменить совместимым рецептом из избранного.
 
 После любой slot/plan mutation cached shopping response инвалидируется. При открытии покупок
 или по кнопке «Обновить» выполняется новый backend request.
@@ -118,8 +139,9 @@ meal type слота. PUT одновременно создаёт, меняет 
 
 ## Shopping и export
 
-Frontend показывает `name`, точную decimal-string `quantity` и `unit` из response. Никаких
-коэффициентов, агрегации или округления в JS нет.
+Frontend показывает `name`, `quantity` и `unit` из ответа API. Покупки распределяются по
+группам на экране. «Куплено» сохраняется на сервере с `quantity_version` показанной позиции.
+«Снять все отметки» запрашивает подтверждение для текущего рациона.
 
 CSV/TXT запрашиваются с `file_type`; ответ читается как Blob. Имя берётся из
 `Content-Disposition` с fallback. Содержимое файлов не генерируется frontend.

@@ -3,6 +3,10 @@ from rest_framework import serializers
 from .models import Recipe, RecipeIngredient
 
 
+def recipe_image_url(recipe: Recipe) -> str:
+    return recipe.photo.url if recipe.photo else recipe.image_url
+
+
 class RecipeSummarySerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
@@ -25,7 +29,7 @@ class RecipeSummarySerializer(serializers.ModelSerializer):
         read_only_fields: tuple[str, ...] = fields
 
     def get_image_url(self, recipe: Recipe) -> str:
-        return recipe.photo.url if recipe.photo else recipe.image_url
+        return recipe_image_url(recipe)
 
 
 class RecipeIngredientSerializer(serializers.ModelSerializer):

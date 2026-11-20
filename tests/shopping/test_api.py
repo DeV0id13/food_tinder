@@ -1,10 +1,14 @@
 import csv
 import io
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
+from threading import Barrier
+from unittest.mock import ANY
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import close_old_connections, connections
 from rest_framework.test import APIClient
 
 # До слияния FT-04 в master модели planning отсутствуют: ORM/API-проверки пропускаются.
@@ -12,6 +16,7 @@ planning_models = pytest.importorskip("apps.planning.models")
 
 from apps.catalog.models import Ingredient, Recipe, RecipeIngredient  # noqa: E402
 from apps.preferences.models import UserRecipeState  # noqa: E402
+from apps.shopping.models import PurchasedIngredient  # noqa: E402
 
 MealPlan = planning_models.MealPlan
 MealPlanSlot = planning_models.MealPlanSlot
@@ -112,6 +117,142 @@ def contract_catalog():
     return recipe_a, recipe_b
 
 
+def purchase_url(plan, ingredient_id):
+    return f"{SHOPPING}{plan.id}/purchases/{ingredient_id}/"
+
+
+def checklist_items(client, plan):
+    response = client.get(SHOPPING, {"plan_id": plan.id})
+    assert response.status_code == 200
+    return response.json()["items"]
+
+
+def mark_purchased(client, plan, item, purchased=True):
+    return client.put(
+        purchase_url(plan, item["ingredient_id"]),
+        {"purchased": purchased, "quantity_version": item["quantity_version"]},
+        format="json",
+    )
+
+
+def test_purchases_survive_a_new_session_and_clear_only_the_selected_plan(
+    client, owner, contract_catalog
+):
+    first, second = create_plan(owner), create_plan(owner)
+    for plan in (first, second):
+        add_slot(plan, contract_catalog[0])
+        item, _ = checklist_items(client, plan)
+        assert item["purchased"] is False
+        assert mark_purchased(client, plan, item).status_code == 204
+        assert mark_purchased(client, plan, item).status_code == 204
+
+    second_session = APIClient()
+    second_session.force_login(owner)
+    assert checklist_items(second_session, first)[0]["purchased"] is True
+    assert second_session.delete(f"{SHOPPING}{first.id}/purchases/").status_code == 204
+    assert not any(item["purchased"] for item in checklist_items(client, first))
+    assert checklist_items(client, second)[0]["purchased"] is True
+    second_item = checklist_items(client, second)[0]
+    assert mark_purchased(client, second, second_item, purchased=False).status_code == 204
+    assert PurchasedIngredient.objects.count() == 0
+
+
+def test_slot_changes_clear_changed_and_removed_items_without_resurrecting_marks(client, owner):
+    rice = create_ingredient("rice", "Рис", "g")
+    milk = create_ingredient("milk", "Молоко", "ml")
+    main = create_recipe("a", base_servings=10, lines=[(rice, "0.001")])
+    side = create_recipe("b", lines=[(milk, "20")])
+    for recipe in (main, side):
+        UserRecipeState.objects.create(user=owner, recipe=recipe, is_favorite=True)
+    plan = create_plan(owner)
+    add_slot(plan, main)
+    add_slot(plan, side, meal_type="dinner")
+    rice_item, milk_item = checklist_items(client, plan)
+    assert mark_purchased(client, plan, rice_item).status_code == 204
+    assert mark_purchased(client, plan, milk_item).status_code == 204
+
+    slot = f"{PLANS}{plan.id}/slots/0/lunch/"
+    assert client.put(slot, {"recipe_id": main.id, "servings": 2}, format="json").status_code == 200
+    changed, unchanged = checklist_items(client, plan)
+    assert changed["quantity"] == rice_item["quantity"]
+    assert changed["purchased"] is False
+    assert unchanged["purchased"] is True
+    assert mark_purchased(client, plan, rice_item).status_code == 409
+    # Return to the original quantity before visiting the list again.
+    assert client.put(slot, {"recipe_id": main.id, "servings": 1}, format="json").status_code == 200
+    assert checklist_items(client, plan)[0]["purchased"] is False
+    assert client.delete(f"{PLANS}{plan.id}/slots/0/dinner/").status_code == 204
+    assert mark_purchased(client, plan, milk_item).status_code == 404
+    assert PurchasedIngredient.objects.filter(plan=plan).count() == 0
+
+
+def test_purchase_endpoints_enforce_plan_access_csrf_and_strict_payload(
+    client, owner, contract_catalog
+):
+    plan = create_plan(owner)
+    add_slot(plan, contract_catalog[0])
+    item = checklist_items(client, plan)[0]
+    url = purchase_url(plan, item["ingredient_id"])
+    clear = f"{SHOPPING}{plan.id}/purchases/"
+    payload = {"purchased": True, "quantity_version": item["quantity_version"]}
+    outsider = APIClient()
+    assert outsider.put(url, payload, format="json").status_code == 403
+    outsider.force_login(create_user("outsider@example.com"))
+    assert outsider.put(url, payload, format="json").status_code == 404
+    assert outsider.delete(clear).status_code == 404
+    for invalid in (
+        {**payload, "purchased": "true"},
+        {**payload, "ingredient_id": item["ingredient_id"]},
+        {**payload, "quantity_version": "bad"},
+        {"quantity_version": item["quantity_version"]},
+    ):
+        assert client.put(url, invalid, format="json").status_code == 400
+    assert client.delete(clear, {"plan_id": plan.id}, format="json").status_code == 400
+
+    client.handler.enforce_csrf_checks = True
+    assert client.put(url, payload, format="json").status_code == 403
+    assert client.delete(clear).status_code == 403
+    client.get("/api/v1/auth/session/")
+    csrf = client.cookies["csrftoken"].value
+    assert client.put(url, payload, format="json", HTTP_X_CSRFTOKEN=csrf).status_code == 204
+    assert client.delete(clear, HTTP_X_CSRFTOKEN=csrf).status_code == 204
+
+
+@pytest.mark.django_db(transaction=True)
+def test_purchase_and_slot_resize_cannot_leave_a_stale_mark(client, owner, contract_catalog):
+    plan = create_plan(owner)
+    recipe = contract_catalog[0]
+    add_slot(plan, recipe)
+    item = checklist_items(client, plan)[0]
+    cookie = client.cookies["sessionid"].value
+    ready = Barrier(2, timeout=10)
+
+    def run(operation):
+        close_old_connections()
+        try:
+            contender = APIClient()
+            contender.cookies["sessionid"] = cookie
+            ready.wait()
+            return operation(contender).status_code
+        finally:
+            connections.close_all()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        purchase = pool.submit(run, lambda browser: mark_purchased(browser, plan, item))
+        resize = pool.submit(
+            run,
+            lambda browser: browser.put(
+                f"{PLANS}{plan.id}/slots/0/lunch/",
+                {"recipe_id": recipe.id, "servings": 2},
+                format="json",
+            ),
+        )
+        assert purchase.result(timeout=15) in (204, 409)
+        assert resize.result(timeout=15) == 200
+    assert not PurchasedIngredient.objects.filter(plan=plan).exists()
+    assert checklist_items(client, plan)[0]["purchased"] is False
+
+
 class TestControlExampleThroughApi:
     """Сквозной пример контракта: план и слоты меняются только через API planning."""
 
@@ -150,6 +291,8 @@ class TestControlExampleThroughApi:
                     "name": "Рис",
                     "unit": "g",
                     "quantity": "400.000",
+                    "purchased": False,
+                    "quantity_version": ANY,
                 },
                 {
                     "ingredient_id": recipe_a.ingredient_lines.get(
@@ -158,6 +301,8 @@ class TestControlExampleThroughApi:
                     "name": "Курица",
                     "unit": "g",
                     "quantity": "450.000",
+                    "purchased": False,
+                    "quantity_version": ANY,
                 },
                 {
                     "ingredient_id": recipe_b.ingredient_lines.get(
@@ -166,6 +311,8 @@ class TestControlExampleThroughApi:
                     "name": "Молоко",
                     "unit": "ml",
                     "quantity": "200.000",
+                    "purchased": False,
+                    "quantity_version": ANY,
                 },
             ],
         }
@@ -198,7 +345,14 @@ class TestShoppingList:
 
         assert response.status_code == 200
         assert response.json()["items"] == [
-            {"ingredient_id": rice.id, "name": "Рис", "unit": "g", "quantity": "100.000"}
+            {
+                "ingredient_id": rice.id,
+                "name": "Рис",
+                "unit": "g",
+                "quantity": "100.000",
+                "purchased": False,
+                "quantity_version": ANY,
+            }
         ]
 
     def test_rows_are_ordered_by_ingredient_id(self, client, owner):
@@ -245,8 +399,8 @@ class TestShoppingList:
                 recipe = create_recipe(f"r-{day_index}-{meal_type}", lines=[(rice, "10.000")])
                 add_slot(plan, recipe, day_index=day_index, meal_type=meal_type)
 
-        # Сессия и пользователь + план, слоты, рецепты, строки состава, ингредиенты.
-        with django_assert_max_num_queries(8):
+        # 2 auth, 2 savepoint, 5 загрузок плана и состава, 1 запрос отметок.
+        with django_assert_max_num_queries(10):
             response = client.get(SHOPPING, {"plan_id": plan.id})
 
         assert json_rows(response) == [("Рис", "70.000", "g")]

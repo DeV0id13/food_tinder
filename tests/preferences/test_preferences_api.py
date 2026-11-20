@@ -1,13 +1,15 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from decimal import Decimal
+from threading import Barrier
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, close_old_connections, connections, transaction
 from rest_framework.test import APIClient
 
 from apps.catalog.models import Recipe
-from apps.preferences.models import UserRecipeState
+from apps.preferences.models import LastSwipe, UserRecipeState
 from apps.preferences.selectors import is_favorite
 
 pytestmark = pytest.mark.django_db
@@ -16,6 +18,7 @@ BASE = "/api/v1/preferences/"
 PASSWORD = "Valid_pass123"
 BEFORE_MIDNIGHT = datetime(2026, 9, 25, 12, tzinfo=UTC)
 MIDNIGHT = datetime(2026, 9, 26, tzinfo=UTC)
+UNDO = BASE + "swipes/undo/"
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +57,96 @@ class TestPreferencesAPI:
 
     def login(self, user):
         self.client.force_login(user)
+
+    @pytest.mark.parametrize("action", ["like", "dislike"])
+    @pytest.mark.parametrize("was_favorite", [False, True])
+    def test_undo_restores_all_fields_and_consumes_token(self, action, was_favorite):
+        user, recipe = self.create_user(), self.create_recipe()
+        prior = UserRecipeState.objects.create(
+            user=user,
+            recipe=recipe,
+            liked_at=BEFORE_MIDNIGHT,
+            disliked_until=MIDNIGHT,
+            is_favorite=was_favorite,
+        )
+        self.login(user)
+        swipe = self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": action}, format="json"
+        )
+        payload = {"undo_token": swipe.json()["undo_token"]}
+        assert self.client.post(UNDO, payload, format="json").status_code == 200
+        prior.refresh_from_db()
+        assert (prior.liked_at, prior.disliked_until, prior.is_favorite) == (
+            BEFORE_MIDNIGHT,
+            MIDNIGHT,
+            was_favorite,
+        )
+        assert self.client.post(UNDO, payload, format="json").status_code == 409
+
+    def test_latest_swipe_and_bookmark_changes_invalidate_tokens(self):
+        user, first, second = self.create_user(), self.create_recipe(), self.create_recipe(number=2)
+        self.login(user)
+        tokens = []
+        for recipe in (first, second):
+            result = self.client.post(
+                BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+            )
+            tokens.append({"undo_token": result.json()["undo_token"]})
+        assert self.client.post(UNDO, tokens[0], format="json").status_code == 409
+        favorite_url = BASE + f"favorites/{second.id}/"
+        favorite_response = self.client.put(favorite_url, {"is_favorite": False}, format="json")
+        assert favorite_response.status_code == 200
+        assert self.client.post(UNDO, tokens[1], format="json").status_code == 409
+        assert not LastSwipe.objects.filter(user=user).exists()
+        assert UserRecipeState.objects.get(user=user, recipe=second).liked_at is not None
+
+    def test_undo_checks_user_session_csrf_and_payload(self):
+        user, recipe = self.create_user(), self.create_recipe()
+        self.login(user)
+        result = self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+        )
+        payload = {"undo_token": result.json()["undo_token"]}
+        for account in (user, self.create_user("another@example.com")):
+            other = APIClient()
+            other.force_login(account)
+            assert other.post(UNDO, payload, format="json").status_code == 409
+        assert APIClient().post(UNDO, payload, format="json").status_code == 403
+        response = self.client.post(UNDO, {**payload, "is_favorite": False}, format="json")
+        assert response.status_code == 400
+
+        self.client.handler.enforce_csrf_checks = True
+        assert self.client.post(UNDO, payload, format="json").status_code == 403
+        self.client.get("/api/v1/auth/session/")
+        csrf = self.client.cookies["csrftoken"].value
+        response = self.client.post(UNDO, payload, format="json", HTTP_X_CSRFTOKEN=csrf)
+        assert response.status_code == 200
+
+    @pytest.mark.django_db(transaction=True)
+    def test_concurrent_undo_can_consume_latest_swipe_only_once(self):
+        user, recipe = self.create_user(), self.create_recipe()
+        self.login(user)
+        result = self.client.post(
+            BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
+        )
+        payload = {"undo_token": result.json()["undo_token"]}
+        cookie = self.client.cookies["sessionid"].value
+        ready = Barrier(2, timeout=10)
+
+        def undo():
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.cookies["sessionid"] = cookie
+                ready.wait()
+                return client.post(UNDO, payload, format="json").status_code
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            both = [pool.submit(undo) for _ in range(2)]
+            assert sorted(future.result(timeout=15) for future in both) == [200, 409]
+        assert not UserRecipeState.objects.filter(user=user, recipe=recipe).exists()
 
     def test_feed_is_public_and_returns_active_recipes_only(self):
         active = self.create_recipe()

@@ -1,5 +1,6 @@
+import {picture} from '../components/recipe-card.js';
 import {DURATIONS, MEALS} from '../constants.js';
-import {compatibleFavorites, buildPlanDays} from '../utils/plans.js';
+import {buildPlanDays} from '../utils/plans.js';
 import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
 import {formatDate, isoToday} from '../utils/format.js';
 import {renderPlansError} from '../components/plans-error.js';
@@ -28,29 +29,24 @@ function createPlanForm(state) {
   </details>`;
 }
 
-function recipeOptions(state, mealType, slot) {
-  const options = compatibleFavorites(state.favorites, mealType);
-  const hasCurrent = slot && options.some(({id}) => id === slot.recipe_id);
-  const current = slot && !hasCurrent ? `<option value="${slot.recipe_id}" selected>${escapeHtml(slot.recipe_title)} (в рационе)</option>` : '';
-  return `<option value="">Выберите рецепт</option>${current}${options.map((recipe) => `<option value="${recipe.id}" ${slot?.recipe_id === recipe.id ? 'selected' : ''}>${escapeHtml(recipe.title)}</option>`).join('')}`;
-}
-
-function slotEditor(state, dayIndex, meal) {
-  const slot = meal.slot;
-  const compatible = compatibleFavorites(state.favorites, meal.id);
+function slotCard(state, dayIndex, meal) {
+  const {slot} = meal;
   const mealId = `meal-${dayIndex}-${escapeAttr(meal.id)}`;
-  return `<form class="slot-card ${slot ? 'slot-filled' : ''}" data-form="slot" data-day-index="${dayIndex}" data-meal-type="${escapeAttr(meal.id)}" aria-labelledby="${mealId} plan-day-${dayIndex}">
+  const target = `data-plan-id="${state.activePlan.id}" data-day-index="${dayIndex}" data-meal-type="${escapeAttr(meal.id)}"`;
+  const disabled = state.busy ? 'disabled' : '';
+  return `<section class="slot-card ${slot ? 'slot-filled' : ''}" aria-labelledby="${mealId} plan-day-${dayIndex}">
     <h4 class="slot-heading" id="${mealId}">${escapeHtml(meal.label)}</h4>
-    <div class="slot-fields">
-      <label>Рецепт<select name="recipe_id" required ${!compatible.length && !slot ? 'disabled' : ''}>${recipeOptions(state, meal.id, slot)}</select></label>
-      <label>Порции<input name="servings" type="number" min="1" max="20" step="1" value="${slot?.servings || 1}" required /></label>
-    </div>
+    ${slot ? `<div class="slot-recipe">
+      <div class="slot-photo-wrap">${picture({image_url: slot.recipe_image_url}, 'slot-photo', true, '')}</div>
+      <div><strong>${escapeHtml(slot.recipe_title)}</strong><p>Порций: ${slot.servings}</p></div>
+    </div>` : ''}
     <div class="slot-actions">
-      <button class="button button-small button-primary" type="submit" ${state.busy === `slot-${dayIndex}-${meal.id}` || (!compatible.length && !slot) ? 'disabled' : ''}>${slot ? 'Сохранить' : 'Добавить'}</button>
-      ${slot ? `<button class="button button-small button-ghost" type="button" data-action="delete-slot" data-day-index="${dayIndex}" data-meal-type="${escapeAttr(meal.id)}" ${state.busy === `slot-${dayIndex}-${meal.id}` ? 'disabled' : ''}>Удалить</button>` : ''}
+      <button id="pick-${mealId}" class="button button-small button-secondary" data-action="pick-slot" ${target} ${disabled}
+        aria-haspopup="dialog" aria-describedby="${mealId} plan-day-${dayIndex}">${slot ? 'Заменить блюдо' : 'Выбрать блюдо'}</button>
+      ${slot ? `<button class="button button-small button-ghost" data-action="delete-slot" ${target} ${disabled}
+        aria-describedby="${mealId} plan-day-${dayIndex}">Удалить</button>` : ''}
     </div>
-    ${!compatible.length && !slot ? '<p class="slot-help">Добавьте подходящий рецепт в избранное.</p>' : ''}
-  </form>`;
+  </section>`;
 }
 
 function activePlan(state) {
@@ -66,7 +62,7 @@ function activePlan(state) {
     </header>
     ${days.map((day) => `<section class="plan-day">
       <header class="plan-day-title"><h3 id="plan-day-${day.dayIndex}">${escapeHtml(DAY_FORMAT.format(day.date))}</h3></header>
-      <div class="slots-grid">${day.meals.map((meal) => slotEditor(state, day.dayIndex, meal)).join('')}</div>
+      <div class="slots-grid">${day.meals.map((meal) => slotCard(state, day.dayIndex, meal)).join('')}</div>
     </section>`).join('')}
   </section>`;
 }

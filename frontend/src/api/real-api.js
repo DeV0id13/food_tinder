@@ -59,6 +59,13 @@ export class RealApi {
     });
   }
 
+  undoSwipe(token) {
+    return this.client.request('preferences/swipes/undo/', {
+      method: 'POST',
+      body: {undo_token: token},
+    });
+  }
+
   setFavorite(recipeId, isFavorite) {
     return this.client.request(`preferences/favorites/${recipeId}/`, {
       method: 'PUT',
@@ -101,6 +108,17 @@ export class RealApi {
 
   getShoppingList(planId) {
     return this.client.request('shopping-list/', {query: {plan_id: planId}});
+  }
+
+  setPurchased(planId, ingredientId, payload) {
+    return this.client.request(`shopping-list/${planId}/purchases/${ingredientId}/`, {
+      method: 'PUT',
+      body: payload,
+    });
+  }
+
+  clearPurchases(planId) {
+    return this.client.request(`shopping-list/${planId}/purchases/`, {method: 'DELETE'});
   }
 
   downloadShoppingList(planId, fileType) {
