@@ -269,7 +269,10 @@ class TestPreferencesAPI:
         user = self.create_user()
         recipe = self.create_recipe()
         UserRecipeState.objects.create(
-            user=user, recipe=recipe, liked_at=BEFORE_MIDNIGHT, is_favorite=False,
+            user=user,
+            recipe=recipe,
+            liked_at=BEFORE_MIDNIGHT,
+            is_favorite=False,
         )
         self.login(user)
 
