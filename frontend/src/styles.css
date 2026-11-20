@@ -176,6 +176,23 @@ main:focus { outline: none; }
   align-items: center;
 }
 
+.recipe-search {
+  display: grid;
+  gap: 0.5rem;
+  width: min(100%, 28rem);
+  margin-bottom: 2rem;
+}
+
+.recipe-search label { font-weight: 600; }
+.recipe-search input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--control-line);
+  border-radius: 0;
+  background: var(--paper);
+}
+.recipe-search p { color: var(--muted); font-size: 0.875rem; }
+
 .button,
 .favorite-button,
 .dialog-close {
