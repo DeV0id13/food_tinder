@@ -1,16 +1,23 @@
+from django.db import transaction
 from django.http import HttpResponse
 from django.views.decorators.cache import never_cache
-from rest_framework.decorators import api_view, content_negotiation_class
+from rest_framework import status
+from rest_framework.decorators import api_view, content_negotiation_class, parser_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.negotiation import BaseContentNegotiation
+from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
+
+from apps.planning.selectors import get_locked_plan_for_user
 
 from .exporters import render_csv, render_txt
 from .serializers import (
+    PurchaseSerializer,
     ShoppingItemSerializer,
     ShoppingListExportQuerySerializer,
     ShoppingListQuerySerializer,
 )
-from .services import get_shopping_list_for_user
+from .services import checklist, get_shopping_list_for_user, set_purchased
 
 EXPORTERS = {
     "csv": (render_csv, "text/csv; charset=utf-8"),
@@ -37,10 +44,41 @@ class FileTypeContentNegotiation(BaseContentNegotiation):
 def shopping_list(request):
     query = ShoppingListQuerySerializer(data=request.query_params)
     query.is_valid(raise_exception=True)
-    plan_id, items = get_shopping_list_for_user(
-        user=request.user, plan_id=query.validated_data["plan_id"]
+    plan_id = query.validated_data["plan_id"]
+    with transaction.atomic():
+        plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
+        items, purchased = checklist(plan)
+    rows = ShoppingItemSerializer(items, many=True).data
+    return Response(
+        {
+            "plan_id": plan_id,
+            "items": [{**row, "purchased": row["ingredient_id"] in purchased} for row in rows],
+        }
     )
-    return Response({"plan_id": plan_id, "items": ShoppingItemSerializer(items, many=True).data})
+
+
+@never_cache
+@api_view(["PUT"])
+@parser_classes([JSONParser])
+def purchase(request, plan_id, ingredient_id):
+    with transaction.atomic():
+        plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
+        serializer = PurchaseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        set_purchased(plan, ingredient_id, **serializer.validated_data)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@never_cache
+@api_view(["DELETE"])
+@parser_classes([JSONParser])
+def clear_purchases(request, plan_id):
+    with transaction.atomic():
+        plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
+        if request.data != {}:
+            raise ValidationError({"non_field_errors": ["This request does not take a body."]})
+        plan.purchased_ingredients.all().delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @never_cache

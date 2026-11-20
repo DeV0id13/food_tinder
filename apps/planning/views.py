@@ -18,6 +18,7 @@ from .serializers import (
     MealPlanSummarySerializer,
     SlotWriteSerializer,
 )
+from .signals import plan_slots_changed
 
 
 class MealPlanPagination(LimitOffsetPagination):
@@ -87,9 +88,11 @@ def meal_plan_slot(request, plan_id, day_index, meal_type):
         with transaction.atomic():
             plan = get_locked_plan_for_user(user=request.user, plan_id=plan_id)
             _validate_slot_target(plan, day_index, meal_type)
-            MealPlanSlot.objects.filter(
+            deleted, _ = MealPlanSlot.objects.filter(
                 plan=plan, day_index=day_index, meal_type=meal_type
             ).delete()
+            if deleted:
+                plan_slots_changed.send(sender=MealPlan, plan=plan)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     with transaction.atomic():
@@ -116,5 +119,6 @@ def meal_plan_slot(request, plan_id, day_index, meal_type):
             meal_type=meal_type,
             defaults={"recipe": recipe, "servings": servings},
         )
+        plan_slots_changed.send(sender=MealPlan, plan=plan)
 
     return Response(MealPlanSlotSerializer(slot).data)

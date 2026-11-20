@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
+from hashlib import sha256
 
 QUANTITY_STEP = Decimal("0.001")
 QUANTITY_SCALE = 1000
@@ -28,6 +29,7 @@ class ShoppingItem:
     name: str
     unit: str
     quantity: Decimal
+    quantity_version: str = ""
 
 
 def aggregate_shopping_items(lines: Iterable[PlannedLine]) -> list[ShoppingItem]:
@@ -52,12 +54,14 @@ def aggregate_shopping_items(lines: Iterable[PlannedLine]) -> list[ShoppingItem]
     items = []
     for ingredient_id in sorted(sums):
         name, unit = meta[ingredient_id]
+        total = sums[ingredient_id]
         items.append(
             ShoppingItem(
                 ingredient_id=ingredient_id,
                 name=name,
                 unit=unit,
-                quantity=_round_half_up(sums[ingredient_id]),
+                quantity=_round_half_up(total),
+                quantity_version=sha256(f"{unit}:{total}".encode()).hexdigest(),
             )
         )
     return items

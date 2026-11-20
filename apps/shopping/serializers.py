@@ -14,11 +14,29 @@ class ShoppingListExportQuerySerializer(ShoppingListQuerySerializer):
     file_type = serializers.ChoiceField(choices=FILE_TYPES)
 
 
+class PurchaseSerializer(serializers.Serializer):
+    purchased = serializers.JSONField()
+    quantity_version = serializers.RegexField(r"\A[0-9a-f]{64}\Z", trim_whitespace=False)
+
+    def validate_purchased(self, value):
+        if type(value) is not bool:
+            raise serializers.ValidationError("Expected a JSON boolean.")
+        return value
+
+    def validate(self, attrs):
+        if set(self.initial_data) - set(self.fields):
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Unknown fields are not allowed."]}
+            )
+        return attrs
+
+
 class ShoppingItemSerializer(serializers.Serializer):
     ingredient_id = serializers.IntegerField()
     name = serializers.CharField()
     unit = serializers.CharField()
     quantity = serializers.SerializerMethodField()
+    quantity_version = serializers.CharField()
 
     def get_quantity(self, item):
         return format_quantity(item.quantity)

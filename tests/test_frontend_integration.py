@@ -1,3 +1,5 @@
+from unittest.mock import ANY
+
 import pytest
 from django.urls import resolve
 from rest_framework.test import APIClient
@@ -103,7 +105,14 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
     export_url = f"/api/v1/shopping-list/export/?plan_id={plan_id}"
     assert unsafe("put", slot_url, {"recipe_id": recipe.id, "servings": 3}).status_code == 200
     assert client.get(shopping_url, **origin).data["items"] == [
-        {"ingredient_id": ingredient.id, "name": "Rice", "unit": "g", "quantity": "300.000"}
+        {
+            "ingredient_id": ingredient.id,
+            "name": "Rice",
+            "unit": "g",
+            "quantity": "300.000",
+            "purchased": False,
+            "quantity_version": ANY,
+        }
     ]
     assert unsafe("put", slot_url, {"recipe_id": recipe.id, "servings": 4}).status_code == 200
     assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "400.000"
