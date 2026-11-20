@@ -296,6 +296,54 @@ export class FoodTinderApp {
     if (shouldRender && current()) this.render();
   }
 
+  async loadAccount(shouldRender = true) {
+    if (!this.state.session.authenticated) return;
+    const request = this.beginRequest('account');
+    const current = () => this.isCurrentRequest('account', request);
+    this.state.accountStatus = 'loading';
+    if (shouldRender) this.render();
+    try {
+      const account = await this.api.getAccount();
+      if (!current()) return;
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+    } catch (error) {
+      if (!current()) return;
+      this.state.accountStatus = 'error';
+      await this.handleError(error, current);
+    }
+    if (shouldRender && current()) this.render();
+  }
+
+  async updateAccountNames(payload) {
+    if (!this.state.session.authenticated || this.state.busy) return;
+    const context = this.sessionContext();
+    await this.runMutation('account', async () => {
+      const account = await this.api.updateAccount(payload);
+      if (!this.isCurrentSession(context)) return;
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+      this.toast('Личные данные сохранены');
+    });
+  }
+
+  async updateAccountEmail(payload) {
+    if (!this.state.session.authenticated || this.state.busy) return;
+    if (payload.email.toLowerCase() === this.state.session.email.toLowerCase()) {
+      this.toast('Новый email совпадает с текущим');
+      return;
+    }
+    const context = this.sessionContext();
+    await this.runMutation('account', async () => {
+      const account = await this.api.changeEmail(payload);
+      if (!this.isCurrentSession(context)) return;
+      this.state.account = account;
+      this.state.accountStatus = 'ready';
+      this.state.session = {...this.state.session, email: account.email};
+      this.toast('Email изменён');
+    });
+  }
+
   async loadFavorites(shouldRender = true) {
     if (!this.state.session.authenticated) return;
     const request = this.beginRequest('favorites');
@@ -525,6 +573,7 @@ export class FoodTinderApp {
       ]);
     }
     if (view === 'favorites' && authenticated) await this.loadFavorites();
+    if (view === 'auth' && authenticated) await this.loadAccount();
     if (view === 'plans' && authenticated) {
       if (this.state.planMode === 'list') {
         await this.loadPlans();
@@ -581,6 +630,7 @@ export class FoodTinderApp {
       return;
     }
     if (action === 'retry-favorites') return this.loadFavorites();
+    if (action === 'retry-account') return this.loadAccount();
     if (action === 'retry-plans') return this.loadPlans();
     if (action === 'retry-active-plan') return this.loadActivePlan();
     if ((action === 'retry-shopping' || action === 'refresh-shopping') && !this.state.busy) return this.loadShopping();
@@ -616,7 +666,19 @@ export class FoodTinderApp {
       return this.login({email: data.get('email'), password: data.get('password')});
     }
     if (form.dataset.form === 'register') {
-      return this.register({email: data.get('email'), password: data.get('password')});
+      return this.register({
+        first_name: data.get('first_name'), email: data.get('email'), password: data.get('password'),
+      });
+    }
+    if (form.dataset.form === 'account-names') {
+      return this.updateAccountNames({
+        first_name: data.get('first_name'), last_name: data.get('last_name'),
+      });
+    }
+    if (form.dataset.form === 'account-email') {
+      return this.updateAccountEmail({
+        email: data.get('email'), current_password: data.get('current_password'),
+      });
     }
     if (form.dataset.form === 'plan-editor') return this.savePlan();
     if (form.dataset.form === 'slot-picker' && this.dialog.contains(form)) {
