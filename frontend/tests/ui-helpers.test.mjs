@@ -9,6 +9,7 @@ import {renderAuthView} from '../src/views/auth-view.js';
 import {renderShell} from '../src/views/shell.js';
 import {createInitialState, clearPrivateState} from '../src/state/state.js';
 import {ApiError} from '../src/api/errors.js';
+import {groupShoppingItems} from '../src/utils/shopping.js';
 
 test('account screens use product language and registration explains the password and separate login', () => {
   const state = createInitialState();
@@ -165,4 +166,13 @@ test('shopping checklist groups known ingredients, uses a fallback and labels pu
   assert.match(html, /Прочее/);
   assert.match(html, /aria-label="Куплено: Рис" checked/);
   assert.match(html, /data-action="clear-purchases"\s+data-plan-id="3"/);
+});
+
+test('shopping categories match ingredient words, including yogurt and cucumbers', () => {
+  const groups = groupShoppingItems(['Греческий йогурт', 'Огурец', 'Молотая корица'].map((name) => ({name})));
+  assert.deepEqual(groups.map(([label, items]) => [label, items.map(({name}) => name)]), [
+    ['Овощи и фрукты', ['Огурец']],
+    ['Молочные продукты и яйца', ['Греческий йогурт']],
+    ['Бакалея', ['Молотая корица']],
+  ]);
 });
