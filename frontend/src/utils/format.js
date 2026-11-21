@@ -17,6 +17,20 @@ export function formatQuantity(value) {
   return String(value ?? '').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1').replace('.', ',');
 }
 
+// Keep recipe quantities precise in the API, but show whole units to people.
+// Most catalog amounts are fixed-point decimal strings. Parse those exactly,
+// avoiding floating-point rounding near an integer boundary.
+export function formatIngredientQuantity(value) {
+  const raw = String(value ?? '').trim();
+  const match = /^(\\d+)(?:\\.(\\d+))?$/.exec(raw);
+  if (match) {
+    const fraction = match[2] || '';
+    return String(BigInt(match[1]) + (/[1-9]/.test(fraction) ? 1n : 0n));
+  }
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? String(Math.ceil(numeric)) : formatQuantity(value);
+}
+
 export function formatUnit(unit) {
   return {g: 'г', ml: 'мл', pcs: 'шт.'}[unit] ?? unit;
 }
