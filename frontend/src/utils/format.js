@@ -22,7 +22,7 @@ export function formatQuantity(value) {
 // avoiding floating-point rounding near an integer boundary.
 export function formatIngredientQuantity(value) {
   const raw = String(value ?? '').trim();
-  const match = /^(\\d+)(?:\\.(\\d+))?$/.exec(raw);
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(raw);
   if (match) {
     const fraction = match[2] || '';
     return String(BigInt(match[1]) + (/[1-9]/.test(fraction) ? 1n : 0n));
