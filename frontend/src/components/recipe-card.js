@@ -1,4 +1,4 @@
-import {difficultyLabel, formatMealTypes, formatQuantity, formatUnit, nutritionItems} from '../utils/format.js';
+import {difficultyLabel, formatIngredientQuantity, formatMealTypes, formatQuantity, formatUnit, nutritionItems} from '../utils/format.js';
 import {escapeAttr, escapeHtml} from '../utils/dom.js';
 export function picture(recipe, className, lazy = false, alt = recipe.title) {
   const fallback = `<span class="${className} recipe-photo-placeholder">Без фотографии</span>`;
@@ -60,7 +60,7 @@ export function renderRecipeTile(recipe, {isFavorite = false, busy = false} = {}
 
 export function renderRecipeDetail(recipe) {
   const ingredients = recipe.ingredients?.length
-    ? recipe.ingredients.map((item) => `<li><span>${escapeHtml(item.name)}</span><b>${escapeHtml(formatQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b></li>`).join('')
+    ? recipe.ingredients.map((item) => `<li><span>${escapeHtml(item.name)}</span><b>${escapeHtml(formatIngredientQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b></li>`).join('')
     : '<li class="muted">Состав не указан</li>';
   const steps = recipe.steps?.length
     ? recipe.steps.map((step, index) => `<li><span aria-hidden="true">${index + 1}</span><p>${escapeHtml(step)}</p></li>`).join('')
