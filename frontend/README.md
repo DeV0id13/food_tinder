@@ -23,6 +23,9 @@ vanilla JavaScript с ES modules и Vite как dev server/build tool. Backend A
 - серверный чек-лист покупок с группами и прогрессом;
 - прямые ссылки на разделы и восстановление каталога с фильтрами после обновления страницы;
 - скачивание CSV/TXT из ответа backend с Blob и Content-Disposition;
+- количества ингредиентов в рецептах, списке покупок и экспорте показываются
+  целыми числами с округлением вверх (`г`, `мл`, `шт.`); точные значения
+  для расчётов сохраняются в базе;
 - явные loading, empty, validation, auth/CSRF, not found, server и network states.
 
 Черновик рациона хранится в `sessionStorage` текущей вкладки. Пароль и session token
