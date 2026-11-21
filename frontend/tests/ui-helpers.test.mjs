@@ -4,6 +4,7 @@ import {compatibleFavorites, buildPlanDays, slotFor} from '../src/utils/plans.js
 import {validationMessages} from '../src/api/errors.js';
 import {renderFeedView, visibleFeedRecipes} from '../src/views/feed-view.js';
 import {renderRecipeDetail} from '../src/components/recipe-card.js';
+import {formatIngredientQuantity, formatQuantity} from '../src/utils/format.js';
 import {filterRecipes} from '../src/utils/search.js';
 import {renderRecipesView} from '../src/views/recipes-view.js';
 import {favoriteMatches, renderFavoritesView} from '../src/views/favorites-view.js';
@@ -210,4 +211,51 @@ test('account view renders editable first/last names and protected email change 
   assert.match(html, /name="current_password" type="password"/);
   assert.match(html, /value="Иванов"/);
   assert.match(html, /Подтверждение нового адреса пока не настроено/);
+});
+
+test('ingredient quantities always round up to whole grams, millilitres and pieces', () => {
+  for (const [value, expected] of [
+    ['12.167', '13'], ['283.333', '284'], ['2.333', '3'],
+    ['48.667', '49'], ['15.25', '16'], ['0.001', '1'],
+    ['100.000', '100'], ['0', '0'], ['9007199254740992.001', '9007199254740993'],
+  ]) {
+    assert.equal(formatIngredientQuantity(value), expected);
+  }
+  assert.equal(formatQuantity('15.25'), '15,25', 'nutrition values keep their precision');
+});
+
+test('recipe detail displays whole ingredients without altering their raw values', () => {
+  const recipe = {
+    title: 'Ужин', cooking_time_minutes: 20, difficulty: 1,
+    meal_types: ['dinner'], ingredients: [
+      {name: 'Картофель', quantity: '283.333', unit: 'g'},
+      {name: 'Лимон', quantity: '2.333', unit: 'pcs'},
+      {name: 'Масло', quantity: '48.667', unit: 'ml'},
+    ], steps: [],
+  };
+  const original = structuredClone(recipe);
+  const html = renderRecipeDetail(recipe);
+  for (const expected of ['284 г', '3 шт.', '49 мл']) {
+    assert.ok(html.includes(expected), expected);
+  }
+  assert.doesNotMatch(html, /283,333|2,333|48,667/);
+  assert.deepEqual(recipe, original);
+});
+
+test('shopping view rounds older fractional API data too and keeps checkboxes intact', () => {
+  const state = createInitialState();
+  Object.assign(state, {
+    initialLoading: false, view: 'shopping',
+    session: {authenticated: true, id: 1}, plansStatus: 'ready',
+    plans: [{id: 7, start_date: '2026-11-20', duration_days: 1, enabled_meals: ['lunch']}],
+    shoppingStatus: 'ready', shoppingPlanId: 7,
+    shopping: {plan_id: 7, items: [
+      {ingredient_id: 1, name: 'Масло', unit: 'ml', quantity: '15.25', purchased: false},
+      {ingredient_id: 2, name: 'Лимон', unit: 'pcs', quantity: '2.333', purchased: true},
+    ]},
+  });
+  const html = renderShell(state);
+  assert.match(html, /16 мл/);
+  assert.match(html, /3 шт\./);
+  assert.match(html, /Куплено 1 из 2/);
 });
