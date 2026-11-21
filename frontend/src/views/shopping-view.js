@@ -1,5 +1,5 @@
 import {escapeAttr, escapeHtml, renderStatus} from '../utils/dom.js';
-import {formatQuantity, formatUnit} from '../utils/format.js';
+import {formatIngredientQuantity, formatUnit} from '../utils/format.js';
 import {renderPlansError} from '../components/plans-error.js';
 import {planTitle} from '../utils/plans.js';
 import {groupShoppingItems} from '../utils/shopping.js';
@@ -22,7 +22,7 @@ function checklist(state, items) {
           data-plan-id="${state.shopping.plan_id}" data-ingredient-id="${item.ingredient_id}"
           aria-label="Куплено: ${escapeAttr(item.name)}" ${item.purchased ? 'checked' : ''} ${disabled} />
         <span>${escapeHtml(item.name)}</span>
-        <b>${escapeHtml(formatQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b>
+        <b>${escapeHtml(formatIngredientQuantity(item.quantity))} ${escapeHtml(formatUnit(item.unit))}</b>
       </label>
     </li>`).join('')}</ul>
   </section>`).join('');
