@@ -290,7 +290,7 @@ class TestControlExampleThroughApi:
                     ).ingredient_id,
                     "name": "Рис",
                     "unit": "g",
-                    "quantity": "400.000",
+                    "quantity": "400",
                     "purchased": False,
                     "quantity_version": ANY,
                 },
@@ -300,7 +300,7 @@ class TestControlExampleThroughApi:
                     ).ingredient_id,
                     "name": "Курица",
                     "unit": "g",
-                    "quantity": "450.000",
+                    "quantity": "450",
                     "purchased": False,
                     "quantity_version": ANY,
                 },
@@ -310,7 +310,7 @@ class TestControlExampleThroughApi:
                     ).ingredient_id,
                     "name": "Молоко",
                     "unit": "ml",
-                    "quantity": "200.000",
+                    "quantity": "200",
                     "purchased": False,
                     "quantity_version": ANY,
                 },
@@ -319,13 +319,13 @@ class TestControlExampleThroughApi:
 
         self.put_slot(client, plan_id, "lunch", recipe_a, 1)
         assert json_rows(client.get(SHOPPING, {"plan_id": plan_id})) == [
-            ("Рис", "200.000", "g"),
-            ("Курица", "150.000", "g"),
-            ("Молоко", "200.000", "ml"),
+            ("Рис", "200", "g"),
+            ("Курица", "150", "g"),
+            ("Молоко", "200", "ml"),
         ]
 
         assert client.delete(f"{PLANS}{plan_id}/slots/0/dinner/").status_code == 204
-        expected = [("Рис", "100.000", "g"), ("Курица", "150.000", "g")]
+        expected = [("Рис", "100", "g"), ("Курица", "150", "g")]
         assert json_rows(client.get(SHOPPING, {"plan_id": plan_id})) == expected
         assert csv_rows(client.get(EXPORT, {"plan_id": plan_id, "file_type": "csv"})) == [
             list(row) for row in expected
@@ -349,7 +349,7 @@ class TestShoppingList:
                 "ingredient_id": rice.id,
                 "name": "Рис",
                 "unit": "g",
-                "quantity": "100.000",
+                "quantity": "100",
                 "purchased": False,
                 "quantity_version": ANY,
             }
@@ -368,7 +368,7 @@ class TestShoppingList:
             first.id,
             second.id,
         ]
-        assert response.json()["items"][1]["quantity"] == "1.500"
+        assert response.json()["items"][1]["quantity"] == "2"
 
     def test_empty_plan(self, client, owner):
         plan = create_plan(owner)
@@ -383,11 +383,11 @@ class TestShoppingList:
         recipe = create_recipe("rice-bowl", lines=[(rice, "100.000")])
         plan = create_plan(owner)
         add_slot(plan, recipe, servings=2)
-        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "100.000", "g")]
+        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "100", "g")]
 
         RecipeIngredient.objects.filter(recipe=recipe).update(quantity=Decimal("150.000"))
 
-        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "150.000", "g")]
+        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "150", "g")]
 
     def test_query_count_does_not_grow_with_slots(
         self, client, owner, django_assert_max_num_queries
@@ -403,7 +403,7 @@ class TestShoppingList:
         with django_assert_max_num_queries(10):
             response = client.get(SHOPPING, {"plan_id": plan.id})
 
-        assert json_rows(response) == [("Рис", "70.000", "g")]
+        assert json_rows(response) == [("Рис", "70", "g")]
 
     @pytest.mark.parametrize(
         "params", [{}, {"plan_id": ""}, {"plan_id": "abc"}, {"plan_id": "1.5"}]
@@ -449,9 +449,9 @@ class TestExport:
         assert response.content.startswith(b"\xef\xbb\xbf")
         assert response.content.decode("utf-8-sig").splitlines() == [
             "ingredient;quantity;unit",
-            "Рис;400.000;g",
-            "Курица;450.000;g",
-            "Молоко;200.000;ml",
+            "Рис;400;g",
+            "Курица;450;g",
+            "Молоко;200;ml",
         ]
 
     def test_txt_export(self, client, plan):
@@ -463,7 +463,7 @@ class TestExport:
             response["Content-Disposition"] == f'attachment; filename="shopping-list-{plan.id}.txt"'
         )
         assert response.content.decode("utf-8") == (
-            "[ ] Рис — 400.000 g\n[ ] Курица — 450.000 g\n[ ] Молоко — 200.000 ml\n"
+            "[ ] Рис — 400 g\n[ ] Курица — 450 g\n[ ] Молоко — 200 ml\n"
         )
 
     @pytest.mark.parametrize(
@@ -488,7 +488,7 @@ class TestExport:
             response["Content-Disposition"]
             == f'attachment; filename="shopping-list-{plan.id}.{file_type}"'
         )
-        assert "400.000" in response.content.decode("utf-8-sig")
+        assert "400" in response.content.decode("utf-8-sig")
 
     def test_export_errors_stay_json_with_file_accept_header(self, client, owner):
         response = client.get(
@@ -530,10 +530,10 @@ class TestExport:
         response = client.get(EXPORT, {"plan_id": plan.id, "file_type": "csv"})
 
         assert csv_rows(response) == [
-            ["'" + names[0], "1.000", "g"],
-            [names[1], "1.000", "g"],
-            [names[2], "1.000", "g"],
-            ["'" + names[3], "1.000", "g"],
+            ["'" + names[0], "1", "g"],
+            [names[1], "1", "g"],
+            [names[2], "1", "g"],
+            ["'" + names[3], "1", "g"],
         ]
 
     @pytest.mark.parametrize("file_type", [None, "", "xlsx", "CSV", "json"])
@@ -631,7 +631,7 @@ def test_atomic_editor_preserves_unchanged_marks_and_updates_shopping(
         for item in checklist_items(client, plan)
     }
     assert results == {
-        "Рис": ("300.000", False),
-        "Курица": ("300.000", True),
-        "Молоко": ("200.000", False),
+        "Рис": ("300", False),
+        "Курица": ("300", True),
+        "Молоко": ("200", False),
     }

@@ -3,12 +3,9 @@
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, Decimal
 from fractions import Fraction
 from hashlib import sha256
-
-QUANTITY_STEP = Decimal("0.001")
-QUANTITY_SCALE = 1000
 
 
 @dataclass(frozen=True)
@@ -37,7 +34,9 @@ def aggregate_shopping_items(lines: Iterable[PlannedLine]) -> list[ShoppingItem]
 
     Decimal из каталога переводится в точную дробь целых чисел (``Fraction``), поэтому
     умножение, деление и суммирование не зависят от точности контекста Decimal.
-    Округление до 3 знаков ROUND_HALF_UP выполняется один раз — после суммирования.
+    Количества для покупки округляются строго вверх до целого один раз —
+    после точного суммирования. quantity_version остаётся привязанной к точной
+    дроби: изменение количества не теряется при совпадении округлённого числа.
     Результат отсортирован по ingredient_id.
     """
     sums: dict[int, Fraction] = defaultdict(Fraction)
@@ -60,21 +59,19 @@ def aggregate_shopping_items(lines: Iterable[PlannedLine]) -> list[ShoppingItem]
                 ingredient_id=ingredient_id,
                 name=name,
                 unit=unit,
-                quantity=_round_half_up(total),
+                quantity=_round_up(total),
                 quantity_version=sha256(f"{unit}:{total}".encode()).hexdigest(),
             )
         )
     return items
 
 
-def _round_half_up(value: Fraction) -> Decimal:
-    """Точно округляет положительную дробь до 0.001 по правилу ROUND_HALF_UP."""
-    thousandths, remainder = divmod(value.numerator * QUANTITY_SCALE, value.denominator)
-    if remainder * 2 >= value.denominator:
-        thousandths += 1
-    return Decimal(f"{thousandths}E-3")
+def _round_up(value: Fraction) -> Decimal:
+    """Точно округляет итоговую положительную дробь до целого вверх."""
+    whole, remainder = divmod(value.numerator, value.denominator)
+    return Decimal(whole + bool(remainder))
 
 
 def format_quantity(quantity: Decimal) -> str:
-    """Единое строковое представление количества для JSON, CSV и TXT."""
-    return format(quantity.quantize(QUANTITY_STEP, ROUND_HALF_UP), "f")
+    """Целые единицы для JSON, CSV и TXT, включая устаревшие дробные данные."""
+    return format(quantity.to_integral_value(rounding=ROUND_CEILING), "f")

@@ -111,18 +111,18 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
             "ingredient_id": ingredient.id,
             "name": "Rice",
             "unit": "g",
-            "quantity": "300.000",
+            "quantity": "300",
             "purchased": False,
             "quantity_version": ANY,
         }
     ]
     assert unsafe("put", slot_url, {"recipe_id": recipe.id, "servings": 4}).status_code == 200
-    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "400.000"
+    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "400"
     for file_type in ("csv", "txt"):
         response = client.get(f"{export_url}&file_type={file_type}", **origin)
         assert response.status_code == 200
         assert f"shopping-list-{plan_id}.{file_type}" in response["Content-Disposition"]
-        assert "400.000" in response.content.decode("utf-8-sig")
+        assert "400" in response.content.decode("utf-8-sig")
 
     # A new browser has no runtime/frontend state; logging in must recover database records.
     first_browser = client
@@ -132,13 +132,13 @@ def test_cookie_csrf_full_flow_and_persistence_through_project_routes():
     assert client.get("/api/v1/preferences/favorites/", **origin).data["count"] == 1
     assert client.get("/api/v1/meal-plans/", **origin).data["count"] == 3
     assert client.get(plan_url, **origin).data["slots"][0]["servings"] == 4
-    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "400.000"
+    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "400"
 
     assert unsafe("put", favorite_url, {"is_favorite": False}).status_code == 200
     assert client.get("/api/v1/preferences/favorites/", **origin).data["count"] == 0
     assert client.get("/api/v1/preferences/feed/", **origin).data["count"] == 0
     assert unsafe("put", slot_url, {"recipe_id": recipe.id, "servings": 2}).status_code == 200
-    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "200.000"
+    assert client.get(shopping_url, **origin).data["items"][0]["quantity"] == "200"
     assert unsafe("delete", slot_url).status_code == 204
     assert client.get(shopping_url, **origin).data["items"] == []
     assert unsafe("delete", plan_url).status_code == 204
