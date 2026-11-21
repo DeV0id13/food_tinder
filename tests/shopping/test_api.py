@@ -387,7 +387,7 @@ class TestShoppingList:
 
         RecipeIngredient.objects.filter(recipe=recipe).update(quantity=Decimal("150.000"))
 
-        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "150.000", "g")]
+        assert json_rows(client.get(SHOPPING, {"plan_id": plan.id})) == [("Рис", "150", "g")]
 
     def test_query_count_does_not_grow_with_slots(
         self, client, owner, django_assert_max_num_queries
@@ -403,7 +403,7 @@ class TestShoppingList:
         with django_assert_max_num_queries(10):
             response = client.get(SHOPPING, {"plan_id": plan.id})
 
-        assert json_rows(response) == [("Рис", "70.000", "g")]
+        assert json_rows(response) == [("Рис", "70", "g")]
 
     @pytest.mark.parametrize(
         "params", [{}, {"plan_id": ""}, {"plan_id": "abc"}, {"plan_id": "1.5"}]
@@ -530,10 +530,10 @@ class TestExport:
         response = client.get(EXPORT, {"plan_id": plan.id, "file_type": "csv"})
 
         assert csv_rows(response) == [
-            ["'" + names[0], "1.000", "g"],
-            [names[1], "1.000", "g"],
-            [names[2], "1.000", "g"],
-            ["'" + names[3], "1.000", "g"],
+            ["'" + names[0], "1", "g"],
+            [names[1], "1", "g"],
+            [names[2], "1", "g"],
+            ["'" + names[3], "1", "g"],
         ]
 
     @pytest.mark.parametrize("file_type", [None, "", "xlsx", "CSV", "json"])
