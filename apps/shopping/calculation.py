@@ -7,6 +7,7 @@ from decimal import ROUND_CEILING, Decimal
 from fractions import Fraction
 from hashlib import sha256
 
+
 @dataclass(frozen=True)
 class PlannedLine:
     """Строка состава рецепта, стоящего в одном слоте плана."""
