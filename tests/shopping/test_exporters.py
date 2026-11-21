@@ -24,8 +24,8 @@ def test_csv_has_bom_header_and_rows():
     assert content.decode("utf-8-sig").splitlines()[0] == "ingredient;quantity;unit"
     assert parse_csv(content) == [
         ["ingredient", "quantity", "unit"],
-        ["Рис", "400.000", "g"],
-        ["Молоко", "200.000", "ml"],
+        ["Рис", "400", "g"],
+        ["Молоко", "200", "ml"],
     ]
 
 
@@ -34,7 +34,7 @@ def test_empty_csv_contains_header_only():
 
 
 def test_txt_lines():
-    assert render_txt(ITEMS).decode("utf-8") == "[ ] Рис — 400.000 g\n[ ] Молоко — 200.000 ml\n"
+    assert render_txt(ITEMS).decode("utf-8") == "[ ] Рис — 400 g\n[ ] Молоко — 200 ml\n"
 
 
 def test_empty_txt_has_message():
@@ -45,7 +45,7 @@ def test_csv_escapes_separators_quotes_and_newlines():
     name = 'Соус "Острый"; с перцем\nи солью'
     content = render_csv([ShoppingItem(1, name, "g", Decimal("1"))])
 
-    assert parse_csv(content) == [["ingredient", "quantity", "unit"], [name, "1.000", "g"]]
+    assert parse_csv(content) == [["ingredient", "quantity", "unit"], [name, "1", "g"]]
     assert '"Соус ""Острый""; с перцем' in content.decode("utf-8-sig")
 
 
@@ -66,9 +66,27 @@ def test_csv_neutralizes_formulas(name):
     [_, row] = parse_csv(render_csv([ShoppingItem(1, name, "g", Decimal("1"))]))
 
     assert row[0] == "'" + name
-    assert row[1:] == ["1.000", "g"]
+    assert row[1:] == ["1", "g"]
 
 
 @pytest.mark.parametrize("value", ["Рис", "Масло 82%", "Сыр 'Российский'", "1=1", ""])
 def test_safe_text_is_not_changed(value):
     assert protect_csv_text(value) == value
+
+
+def test_all_export_formats_show_rounded_up_whole_grams_millilitres_and_pieces():
+    items = [
+        ShoppingItem(1, "Чеснок", "g", Decimal("9.500")),
+        ShoppingItem(2, "Лимон", "pcs", Decimal("2.333")),
+        ShoppingItem(3, "Вода", "ml", Decimal("2128.333")),
+    ]
+    rows = parse_csv(render_csv(items))
+    assert rows == [
+        ["ingredient", "quantity", "unit"],
+        ["Чеснок", "10", "g"],
+        ["Лимон", "3", "pcs"],
+        ["Вода", "2129", "ml"],
+    ]
+    assert render_txt(items).decode("utf-8") == (
+        "[ ] Чеснок — 10 g\n[ ] Лимон — 3 pcs\n[ ] Вода — 2129 ml\n"
+    )
