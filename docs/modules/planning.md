@@ -1,13 +1,14 @@
 # FT-04 — planning
 
 Модуль `planning` реализует ручной конструктор рациона: планы на 1/3/7 дней, их слоты и порции.
-Рецепты берутся из избранного пользователя через публичный selector модуля `preferences`.
+Рецепты для новых слотов берутся из избранного пользователя через селекторы `preferences`.
 
 ## Файлы
 
 - `apps/planning/models.py` — модели `MealPlan` и `MealPlanSlot`, валидатор `enabled_meals` и ограничения БД.
 - `apps/planning/serializers.py` — входные serializers, `PlanSummary`, `PlanDetail` и `Slot`.
-- `apps/planning/views.py` — list/create планов, detail/delete плана, PUT/DELETE слота.
+- `apps/planning/views.py` — HTTP, проверка запроса и граница транзакции для снимка плана.
+- `apps/planning/editor.py` — проверка слотов, сохранение, версия и сигнал покупок.
 - `apps/planning/selectors.py` — `get_plan_for_user(*, user, plan_id)` для FT-05 и
   `get_locked_plan_for_user(*, user, plan_id)` для записей под `SELECT FOR UPDATE`.
 - `apps/planning/urls.py` — маршруты FT-04; `day_index` использует локальный знаковый конвертер `sint`.
@@ -26,23 +27,9 @@
 
 ## Интеграция
 
-Для подключения API интегратор должен добавить в `config/urls.py`:
-
-```text
-path("api/v1/meal-plans/", include("apps.planning.urls")),
-```
-
-Общий файл `config/urls.py` в рамках FT-04 не изменяется. До merge API тестируется через
-`tests/planning/urls.py`, поэтому корневой URLConf проекта для тестов не редактируется.
-
-Миграция `apps/planning/migrations/0001_initial.py` зависит от:
-
-```python
-("catalog", "0001_initial")
-```
-
-и от текущей модели пользователя через `settings.AUTH_USER_MODEL`. Обратной зависимости от
-`preferences` и `shopping` нет: `is_favorite` вызывается на уровне кода view, а не схемы БД.
+Маршруты подключены в `config/urls.py` по префиксу `/api/v1/meal-plans/`. Миграции
+зависят от модели пользователя и каталога. Избранное проверяется в редакторе
+через селекторы preferences.
 
 ## API
 
@@ -52,18 +39,19 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
 | Метод | Путь | Результат |
 | --- | --- | --- |
 | GET | `/api/v1/meal-plans/` | Страница `PlanSummary`, сортировка `id` по убыванию |
-| POST | `/api/v1/meal-plans/` | `201` `PlanDetail` с пустыми `slots` |
+| POST | `/api/v1/meal-plans/` | `201` `PlanDetail`, `200` при идемпотентном повторе |
 | GET | `/api/v1/meal-plans/<plan_id>/` | `200` `PlanDetail` |
-| DELETE | `/api/v1/meal-plans/<plan_id>/` | `204`, каскадно удаляет слоты |
+| PUT | `/api/v1/meal-plans/<plan_id>/` | `200` `PlanDetail` после атомарного сохранения, `409` при конфликте |
+| DELETE | `/api/v1/meal-plans/<plan_id>/` | `204`, каскадно удаляет слоты и отметки о покупках |
 | PUT | `/api/v1/meal-plans/<plan_id>/slots/<day_index>/<meal_type>/` | `200` `Slot`, идемпотентно создаёт/заменяет |
 | DELETE | `/api/v1/meal-plans/<plan_id>/slots/<day_index>/<meal_type>/` | `204`, в том числе для пустого допустимого слота |
 
-`PlanSummary`: `{id, start_date, duration_days, enabled_meals}`.
+`PlanSummary` содержит `id, start_date, duration_days, enabled_meals, title, version, filled_slots`.
 `PlanDetail` добавляет `slots`, отсортированные по `day_index`, затем по порядку
 `breakfast/lunch/snack/dinner`. `Slot` содержит `day_index`, `meal_type`, `recipe_id`, `recipe_title`,
 `servings` и `recipe_image_url` (URL фото, внешнее изображение или пустая строка).
 
-Список использует локальную `LimitOffsetPagination`: `limit=30` по умолчанию, максимум 100, `offset=0`.
+Список использует общую `StandardPagination`: `limit=30` по умолчанию, максимум 100, `offset=0`.
 Неизвестные поля записи, включая `user_id`, отклоняются с `400`. Владельцем плана всегда становится
 `request.user`.
 
@@ -87,8 +75,8 @@ path("api/v1/meal-plans/", include("apps.planning.urls")),
   План, удалённый конкурентным запросом, даёт `404`, а не `500`.
 - После PUT или фактического DELETE слота `planning` отправляет `plan_slots_changed` внутри
   транзакции. Подписчики получают сохранённый план, строка которого ещё заблокирована.
-- Период, `start_date` и `enabled_meals` после создания не изменяются; несколько планов с одинаковыми
-  датами разрешены.
+- Период, дата и включённые приёмы пищи меняются через PUT всего рациона.
+  Несколько планов могут иметь одинаковые даты.
 
 ## Selector для FT-05
 

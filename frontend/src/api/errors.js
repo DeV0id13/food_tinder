@@ -2,18 +2,26 @@ const DEFAULT_MESSAGES = {
   validation: 'Проверьте заполненные поля.',
   auth: 'Сессия отсутствует или устарела. Войдите снова.',
   not_found: 'Запрошенные данные не найдены.',
+  rate_limited: 'Слишком много попыток. Попробуйте позже.',
   server: 'Сервер временно недоступен.',
   network: 'Не удалось связаться с сервером. Проверьте соединение.',
   http: 'Запрос завершился с ошибкой.',
 };
 
 export class ApiError extends Error {
-  constructor({type = 'http', status = 0, details = null, message} = {}) {
-    super(message || DEFAULT_MESSAGES[type] || DEFAULT_MESSAGES.http);
+  constructor({type = 'http', status = 0, details = null, message, retryAfterSeconds = null} = {}) {
+    let rateLimitMessage;
+    if (type === 'rate_limited' && retryAfterSeconds !== null) {
+      rateLimitMessage = retryAfterSeconds === 0
+        ? 'Слишком много попыток. Можно повторить попытку.'
+        : `Слишком много попыток. Повторите попытку через ${retryAfterSeconds} сек.`;
+    }
+    super(message || rateLimitMessage || DEFAULT_MESSAGES[type] || DEFAULT_MESSAGES.http);
     this.name = 'ApiError';
     this.type = type;
     this.status = status;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -21,6 +29,7 @@ export function errorTypeForStatus(status) {
   if (status === 400) return 'validation';
   if (status === 401 || status === 403) return 'auth';
   if (status === 404) return 'not_found';
+  if (status === 429) return 'rate_limited';
   if (status >= 500) return 'server';
   return 'http';
 }

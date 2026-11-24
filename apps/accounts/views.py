@@ -1,70 +1,88 @@
+import logging
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
-from django.db import IntegrityError, transaction
+from django.contrib.auth.models import AnonymousUser
+from django.db import transaction
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from .models import UserProfile
+from common.schema import (
+    CSRF_REQUIRED,
+    RATE_LIMITED,
+    RETRY_AFTER,
+    SESSION_REQUIRED,
+    VALIDATION_ERROR,
+)
+
+from .authentication import authenticated_user
+from .models import User, UserProfile
+from .rate_limit import limit_auth_attempt
 from .serializers import (
     AccountNamesSerializer,
+    AccountSerializer,
     ChangeEmailSerializer,
     LoginSerializer,
     LogoutSerializer,
     ProfileSerializer,
+    RegisteredUserSerializer,
     RegisterSerializer,
+    SessionSerializer,
 )
+from .services import change_user_email, register_user
+
+logger = logging.getLogger("foodtinder.auth")
 
 
-def _require_csrf(request):
+def _require_csrf(request: Request) -> None:
     # SessionAuthentication checks authenticated requests; anonymous requests need this too.
     SessionAuthentication().enforce_csrf(request)
 
 
-def _session_data(user):
-    authenticated = user.is_authenticated
-    return {
-        "authenticated": authenticated,
-        "id": user.pk if authenticated else None,
-        "email": user.email if authenticated else None,
-    }
+def _session_data(user: User | AnonymousUser) -> dict[str, bool | int | str | None]:
+    if isinstance(user, AnonymousUser):
+        return {"authenticated": False, "id": None, "email": None}
+    return {"authenticated": True, "id": user.pk, "email": user.email}
 
 
 @never_cache
 @ensure_csrf_cookie
+@extend_schema(responses=SessionSerializer, summary="Состояние сессии и выдача CSRF-cookie")
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def session(request):
+def session(request: Request) -> Response:
     return Response(_session_data(request.user))
 
 
 @never_cache
+@extend_schema(
+    request=RegisterSerializer,
+    parameters=[RETRY_AFTER],
+    responses={
+        201: RegisteredUserSerializer,
+        400: VALIDATION_ERROR,
+        403: CSRF_REQUIRED,
+        429: RATE_LIMITED,
+    },
+    summary="Регистрация без автоматического входа",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def register(request):
+def register(request: Request) -> Response:
     _require_csrf(request)
+    limit_auth_attempt(request, "register")
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    email = serializer.validated_data["email"]
-    try:
-        with transaction.atomic():
-            user = get_user_model().objects.create_user(
-                email=email,
-                password=serializer.validated_data["password"],
-                first_name=serializer.validated_data["first_name"],
-            )
-            UserProfile.objects.create(user=user)
-    except IntegrityError as exc:
-        if get_user_model().objects.filter(email__iexact=email).exists():
-            raise serializers.ValidationError(
-                {"email": ["This email is already registered."]}
-            ) from exc
-        raise
+    user = register_user(**serializer.validated_data)
+    logger.info("registration_succeeded")
     return Response(
         {"id": user.pk, "email": user.email, "first_name": user.first_name},
         status=status.HTTP_201_CREATED,
@@ -72,10 +90,22 @@ def register(request):
 
 
 @never_cache
+@extend_schema(
+    request=LoginSerializer,
+    parameters=[RETRY_AFTER],
+    responses={
+        200: SessionSerializer,
+        400: VALIDATION_ERROR,
+        403: CSRF_REQUIRED,
+        429: RATE_LIMITED,
+    },
+    summary="Вход с установкой сессии и ротацией CSRF-cookie",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def login(request):
+def login(request: Request) -> Response:
     _require_csrf(request)
+    limit_auth_attempt(request, "login")
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = authenticate(
@@ -86,13 +116,19 @@ def login(request):
     if user is None:
         raise serializers.ValidationError({"non_field_errors": ["Invalid credentials."]})
     django_login(request, user)
+    logger.info("login_succeeded")
     return Response(_session_data(user))
 
 
 @never_cache
+@extend_schema(
+    request=None,
+    responses={204: None, 400: VALIDATION_ERROR, 403: CSRF_REQUIRED},
+    summary="Выход из сессии без тела запроса",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def logout(request):
+def logout(request: Request) -> Response:
     _require_csrf(request)
     serializer = LogoutSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -101,36 +137,49 @@ def logout(request):
 
 
 @never_cache
+@extend_schema(methods=["GET"], responses={200: ProfileSerializer, 403: SESSION_REQUIRED})
+@extend_schema(
+    methods=["PATCH"],
+    request=ProfileSerializer,
+    responses={200: ProfileSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+)
 @api_view(["GET", "PATCH"])
-def profile(request):
-    current_profile = UserProfile.objects.filter(user=request.user).first()
+def profile(request: Request) -> Response:
+    user = authenticated_user(request)
+    current_profile = UserProfile.objects.filter(user=user).first()
     if request.method == "GET":
         return Response(ProfileSerializer(current_profile or UserProfile()).data)
 
     serializer = ProfileSerializer(current_profile, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     with transaction.atomic():
-        current_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        current_profile, _ = UserProfile.objects.get_or_create(user=user)
         for field, value in serializer.validated_data.items():
             setattr(current_profile, field, value)
         current_profile.save()
     return Response(ProfileSerializer(current_profile).data)
 
 
-def _account_data(user):
+def _account_data(user: User) -> dict[str, str]:
     return {"first_name": user.first_name, "last_name": user.last_name, "email": user.email}
 
 
 @never_cache
+@extend_schema(methods=["GET"], responses={200: AccountSerializer, 403: SESSION_REQUIRED})
+@extend_schema(
+    methods=["PATCH"],
+    request=AccountNamesSerializer,
+    responses={200: AccountSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+)
 @api_view(["GET", "PATCH"])
-def account(request):
+def account(request: Request) -> Response:
     if request.method == "GET":
-        return Response(_account_data(request.user))
+        return Response(_account_data(authenticated_user(request)))
 
     serializer = AccountNamesSerializer(data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     with transaction.atomic():
-        user = get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        user = get_user_model().objects.select_for_update().get(pk=authenticated_user(request).pk)
         for field, value in serializer.validated_data.items():
             setattr(user, field, value)
         if serializer.validated_data:
@@ -139,26 +188,20 @@ def account(request):
 
 
 @never_cache
+@extend_schema(
+    request=ChangeEmailSerializer,
+    responses={200: AccountSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+    summary="Смена email по текущему паролю",
+)
 @api_view(["POST"])
-def change_email(request):
+def change_email(request: Request) -> Response:
     serializer = ChangeEmailSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    user_model = get_user_model()
-    new_email = serializer.validated_data["email"]
-    with transaction.atomic():
-        user = user_model.objects.select_for_update().get(pk=request.user.pk)
-        if not user.check_password(serializer.validated_data["current_password"]):
-            raise serializers.ValidationError({"current_password": ["Incorrect current password."]})
-        if user_model.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
-            raise serializers.ValidationError({"email": ["This email is already registered."]})
-        user.email = new_email
-        try:
-            # Savepoint lets us map a concurrent unique-email conflict to a 400.
-            with transaction.atomic():
-                user.save(update_fields=["email"])
-        except IntegrityError as exc:
-            raise serializers.ValidationError(
-                {"email": ["This email is already registered."]}
-            ) from exc
-    request.user.email = user.email
+    current_user = authenticated_user(request)
+    user = change_user_email(
+        current_user.pk,
+        serializer.validated_data["email"],
+        serializer.validated_data["current_password"],
+    )
+    current_user.email = user.email
     return Response(_account_data(user))

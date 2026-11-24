@@ -8,10 +8,10 @@ app_name = "planning"
 class SignedIntConverter:
     regex = r"-?\d+"
 
-    def to_python(self, value):
+    def to_python(self, value: str) -> int:
         return int(value)
 
-    def to_url(self, value):
+    def to_url(self, value: int | str) -> str:
         return str(value)
 
 

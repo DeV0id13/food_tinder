@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ApiClient, buildApiUrl, filenameFromDisposition, readCookie} from '../src/api/api-client.js';
-import {ApiError} from '../src/api/errors.js';
+import {ApiError, apiErrorMessage} from '../src/api/errors.js';
 
 test('default browser fetch keeps its global receiver instead of the ApiClient instance', async (t) => {
   t.mock.method(globalThis, 'fetch', async function (url) {
@@ -102,4 +102,45 @@ test('blob response uses backend filename', async () => {
   const result = await client.request('shopping-list/export/', {responseType: 'blob'});
   assert.equal(result.filename, 'shopping-list-9.csv');
   assert.equal(await result.blob.text(), 'ingredient;quantity;unit');
+});
+
+test('429 displays a safe retry message and never retries the submitted POST', async (t) => {
+  const now = Date.UTC(2026, 10, 24, 12);
+  t.mock.method(Date, 'now', () => now);
+  const exhausted = 'Слишком много попыток. Попробуйте позже.';
+  const wait = 'Слишком много попыток. Повторите попытку через 42 сек.';
+  const cases = [
+    ['42', 42, wait],
+    [new Date(now + 42_000).toUTCString(), 42, wait],
+    [null, null, exhausted],
+    ['not-a-delay', null, exhausted],
+    ['-3', null, exhausted],
+    ['1.5', null, exhausted],
+    ['9007199254740993', null, exhausted],
+    ['0', 0, 'Слишком много попыток. Можно повторить попытку.'],
+  ];
+  for (const [header, seconds, message] of cases) {
+    await t.test(String(header), async () => {
+      let requests = 0;
+      const client = new ApiClient({
+        cookieReader: () => 'csrftoken=token',
+        fetchImpl: async (url, options) => {
+          requests++;
+          assert.equal(url, '/api/v1/auth/login/');
+          assert.equal(options.method, 'POST');
+          const headers = {'Content-Type': 'application/json'};
+          if (header !== null) headers['Retry-After'] = header;
+          return new Response(JSON.stringify({detail: '<script>unsafe</script>'}), {status: 429, headers});
+        },
+      });
+      await assert.rejects(client.request('auth/login/', {method: 'POST', body: {}}), (error) => {
+        assert.equal(error.type, 'rate_limited');
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfterSeconds, seconds);
+        assert.equal(apiErrorMessage(error), message);
+        return true;
+      });
+      assert.equal(requests, 1);
+    });
+  }
 });

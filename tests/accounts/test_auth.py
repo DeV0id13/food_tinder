@@ -62,7 +62,7 @@ def test_register_creates_user_and_profile_without_login():
 
 def test_register_rolls_back_user_when_profile_creation_fails():
     client = csrf_client()
-    with patch("apps.accounts.views.UserProfile.objects.create", side_effect=RuntimeError):
+    with patch("apps.accounts.services.UserProfile.objects.create", side_effect=RuntimeError):
         with pytest.raises(RuntimeError):
             client.post(
                 f"{BASE}register/",

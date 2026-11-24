@@ -1,4 +1,6 @@
+from datetime import date
 from decimal import Decimal
+from typing import TypedDict
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -9,8 +11,14 @@ from rest_framework import serializers
 from .models import UserProfile
 
 
+class RegistrationData(TypedDict):
+    email: str
+    password: str
+    first_name: str
+
+
 class StrictFieldsSerializer(serializers.Serializer):
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: object) -> dict[str, object]:
         if isinstance(data, dict):
             unknown = set(data) - set(self.fields)
             if unknown:
@@ -25,10 +33,10 @@ class RegisterSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
-    def validate_email(self, value):
+    def validate_email(self, value: str) -> str:
         return get_user_model().objects.normalize_email(value)
 
-    def validate(self, attrs):
+    def validate(self, attrs: RegistrationData) -> RegistrationData:
         user = get_user_model()(email=attrs["email"], first_name=attrs["first_name"])
         try:
             validate_password(attrs["password"], user=user)
@@ -41,7 +49,7 @@ class LoginSerializer(StrictFieldsSerializer):
     email = serializers.CharField(allow_blank=True)
     password = serializers.CharField(write_only=True, trim_whitespace=False, allow_blank=True)
 
-    def validate_email(self, value):
+    def validate_email(self, value: str) -> str:
         return get_user_model().objects.normalize_email(value)
 
 
@@ -69,7 +77,7 @@ class ProfileSerializer(StrictFieldsSerializer, serializers.ModelSerializer):
         model = UserProfile
         fields = ("date_of_birth", "gender", "height_cm", "weight_kg")
 
-    def validate_date_of_birth(self, value):
+    def validate_date_of_birth(self, value: date | None) -> date | None:
         if value is not None and value > timezone.localdate():
             raise serializers.ValidationError("Date of birth cannot be in the future.")
         return value
@@ -84,5 +92,23 @@ class ChangeEmailSerializer(StrictFieldsSerializer):
     email = serializers.EmailField()
     current_password = serializers.CharField(write_only=True, trim_whitespace=False)
 
-    def validate_email(self, value):
+    def validate_email(self, value: str) -> str:
         return get_user_model().objects.normalize_email(value)
+
+
+class SessionSerializer(serializers.Serializer):
+    authenticated = serializers.BooleanField()
+    id = serializers.IntegerField(allow_null=True)
+    email = serializers.EmailField(allow_null=True)
+
+
+class RegisteredUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+
+
+class AccountSerializer(serializers.Serializer):
+    first_name = serializers.CharField(allow_blank=True)
+    last_name = serializers.CharField(allow_blank=True)
+    email = serializers.EmailField()

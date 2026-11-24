@@ -1,13 +1,15 @@
 from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.db import router
+from django.forms import ModelForm
 from django.forms.models import BaseInlineFormSet
+from django.http import HttpRequest
 
 from .models import Ingredient, Recipe, RecipeIngredient, delete_unused_recipe_photo_on_commit
 
 
 class RecipeIngredientInlineFormSet(BaseInlineFormSet):
-    def clean(self):
+    def clean(self) -> None:
         super().clean()
         if not self.instance.is_active or any(self.errors):
             return
@@ -36,9 +38,10 @@ class RecipeAdmin(admin.ModelAdmin):
     search_fields = ("title", "slug")
     inlines = (RecipeIngredientInline,)
 
-    def save_model(self, request, obj, form, change):
+    def save_model(self, request: HttpRequest, obj: Recipe, form: ModelForm, change: bool) -> None:
         if not change:
-            return super().save_model(request, obj, form, change)
+            super().save_model(request, obj, form, change)
+            return
 
         using = router.db_for_write(self.model, instance=obj)
         previous = self.model.objects.using(using).select_for_update().only("photo").get(pk=obj.pk)

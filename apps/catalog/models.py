@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from django.core.exceptions import ValidationError
@@ -13,7 +16,7 @@ from django.dispatch import receiver
 from .validators import validate_meal_types, validate_recipe_photo, validate_steps
 
 
-def recipe_photo_path(instance, filename):
+def recipe_photo_path(instance: Recipe, filename: str) -> str:
     return f"recipes/{uuid4().hex}{Path(filename).suffix.lower()}"
 
 
@@ -34,16 +37,16 @@ class Ingredient(models.Model):
             )
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    def clean(self):
+    def clean(self) -> None:
         super().clean()
         if self.pk and type(self).objects.filter(pk=self.pk).exclude(unit=self.unit).exists():
             if self.recipeingredient_set.exists():
                 raise ValidationError({"unit": "Unit cannot change after the ingredient is used."})
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -108,10 +111,10 @@ class Recipe(models.Model):
             ],
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.title
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -128,7 +131,7 @@ def delete_unused_recipe_photo_on_commit(storage: Storage, name: str | None, *, 
 
 
 @receiver(pre_delete, sender=Recipe)
-def schedule_deleted_recipe_photo_cleanup(instance: Recipe, using: str, **kwargs) -> None:
+def schedule_deleted_recipe_photo_cleanup(instance: Recipe, using: str, **kwargs: object) -> None:
     # Read under the same row lock used by Admin when replacing a photo.
     name = (
         Recipe.objects.using(using)
@@ -155,10 +158,10 @@ class RecipeIngredient(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.recipe}: {self.ingredient} ({self.quantity})"
 
-    def clean(self):
+    def clean(self) -> None:
         super().clean()
         if self.ingredient_id and isinstance(self.quantity, Decimal):
             if (
@@ -167,6 +170,6 @@ class RecipeIngredient(models.Model):
             ):
                 raise ValidationError({"quantity": "Piece quantities must be whole numbers."})
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.full_clean()
         return super().save(*args, **kwargs)

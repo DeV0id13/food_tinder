@@ -43,6 +43,17 @@ export function filenameFromDisposition(value, fallback = 'download') {
   return filename.replace(/[\\/:*?"<>|]/g, '-');
 }
 
+function parseRetryAfter(value) {
+  if (!value) return null;
+  if (/^\d+$/.test(value)) {
+    const seconds = Number(value);
+    return Number.isSafeInteger(seconds) ? seconds : null;
+  }
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.toUTCString() !== value) return null;
+  return Math.max(0, Math.ceil((date.getTime() - Date.now()) / 1000));
+}
+
 async function responseBody(response) {
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') || '';
@@ -115,6 +126,9 @@ export class ApiClient {
         type: errorTypeForStatus(response.status),
         status: response.status,
         details,
+        retryAfterSeconds: response.status === 429
+          ? parseRetryAfter(response.headers.get('Retry-After'))
+          : null,
       });
     }
 

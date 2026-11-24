@@ -1,226 +1,140 @@
-from datetime import UTC, datetime, time, timedelta
-from uuid import uuid4
-
-from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.db.models import Exists, OuterRef, Subquery
-from django.utils import timezone as django_timezone
 from django.utils.crypto import salted_hmac
 from django.views.decorators.cache import never_cache
-from rest_framework import status
+from drf_spectacular.utils import extend_schema
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import NotFound
-from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.catalog.models import Recipe
+from apps.accounts.authentication import authenticated_user
+from common.pagination import StandardPagination
+from common.schema import (
+    NOT_FOUND,
+    PAGE_PARAMETERS,
+    RECIPE_ID,
+    SESSION_REQUIRED,
+    VALIDATION_ERROR,
+    DetailErrorSerializer,
+    paginated_schema,
+)
 
-from .models import LastSwipe, UserRecipeState
+from .selectors import favorite_recipes, feed_recipes
 from .serializers import (
     FavoriteRecipeSerializer,
     FavoriteSerializer,
     RecipeStateSerializer,
     RecipeSummarySerializer,
+    SwipeResultSerializer,
     SwipeSerializer,
     UndoSwipeSerializer,
 )
-
-UNDO_WINDOW = timedelta(seconds=5)
-
-
-class RecipePagination(LimitOffsetPagination):
-    default_limit = 30
-    max_limit = 100
+from .services import record_swipe, reverse_swipe, set_favorite
 
 
-def _recipe_or_404(recipe_id):
-    try:
-        return Recipe.objects.get(pk=recipe_id)
-    except Recipe.DoesNotExist as exc:
-        raise NotFound from exc
-
-
-def _active_recipe_or_404(recipe_id):
-    recipe = _recipe_or_404(recipe_id)
-    if not recipe.is_active:
-        raise NotFound
-    return recipe
-
-
-def _next_midnight_utc(now):
-    utc_now = now.astimezone(UTC)
-    tomorrow = utc_now.date() + timedelta(days=1)
-    return datetime.combine(tomorrow, time.min, tzinfo=UTC)
-
-
-def _feed_queryset(user):
-    now = django_timezone.now()
-    queryset = Recipe.objects.filter(is_active=True)
-
-    if user.is_authenticated:
-        own_states = UserRecipeState.objects.filter(user=user, recipe_id=OuterRef("pk"))
-        queryset = queryset.annotate(
-            has_like=Exists(own_states.filter(liked_at__isnull=False)),
-            has_active_dislike=Exists(own_states.filter(disliked_until__gt=now)),
-        ).filter(has_like=False, has_active_dislike=False)
-
-    return queryset.order_by("id")
-
-
-def _state_response(state):
-    return Response(RecipeStateSerializer(state).data)
-
-
-def _lock_preferences(user):
-    # Serialize new swipes, undo and bookmark writes even when there is no state row yet.
-    get_user_model().objects.select_for_update().only("pk").get(pk=user.pk)
-
-
-def _session_hash(request):
+def _session_hash(request: Request) -> str:
     return salted_hmac(
         "preferences.swipe-undo", request.session.session_key or "", algorithm="sha256"
     ).hexdigest()
 
 
 @never_cache
+@extend_schema(
+    parameters=PAGE_PARAMETERS,
+    responses=paginated_schema("FeedPage", RecipeSummarySerializer),
+    summary="Лента активных рецептов с учётом реакций текущего пользователя",
+)
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def feed(request):
-    paginator = RecipePagination()
-    page: list[Recipe] | None = paginator.paginate_queryset(
-        _feed_queryset(request.user), request, view=None
-    )
+def feed(request: Request) -> Response:
+    paginator = StandardPagination()
+    page = paginator.paginate_queryset(feed_recipes(request.user), request)
     return paginator.get_paginated_response(RecipeSummarySerializer(page, many=True).data)
 
 
 @never_cache
+@extend_schema(
+    request=SwipeSerializer,
+    responses={
+        200: SwipeResultSerializer,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+    },
+    summary="Записать свайп и выдать токен отмены на пять секунд",
+)
 @api_view(["POST"])
-def swipes(request):
+def swipes(request: Request) -> Response:
     serializer = SwipeSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    recipe = _active_recipe_or_404(serializer.validated_data["recipe_id"])
-    action = serializer.validated_data["action"]
-    with transaction.atomic():
-        _lock_preferences(request.user)
-        state, created = UserRecipeState.objects.select_for_update().get_or_create(
-            user=request.user, recipe=recipe
-        )
-        now = django_timezone.now()
-        swipe, _ = LastSwipe.objects.update_or_create(
-            user=request.user,
-            defaults={
-                "state": state,
-                "state_created": created,
-                "token": uuid4(),
-                "session_hash": _session_hash(request),
-                "liked_at": state.liked_at,
-                "disliked_until": state.disliked_until,
-                "is_favorite": state.is_favorite,
-                "favorited_at": state.favorited_at,
-                "swiped_at": now,
-            },
-        )
-        if action == "like":
-            if state.liked_at is None:
-                state.liked_at = now
-            state.disliked_until = None
-            if not state.is_favorite:
-                state.is_favorite = True
-                state.favorited_at = now
-            state.save(update_fields=("liked_at", "disliked_until", "is_favorite", "favorited_at"))
-        else:
-            state.disliked_until = _next_midnight_utc(now)
-            state.save(update_fields=("disliked_until",))
-
+    state, token, remaining_ms = record_swipe(
+        authenticated_user(request),
+        serializer.validated_data["recipe_id"],
+        serializer.validated_data["action"],
+        _session_hash(request),
+    )
     return Response(
         {
             **RecipeStateSerializer(state).data,
-            "undo_token": str(swipe.token),
-            "undo_remaining_ms": max(
-                0, int((now + UNDO_WINDOW - django_timezone.now()).total_seconds() * 1000)
-            ),
+            "undo_token": str(token),
+            "undo_remaining_ms": remaining_ms,
         }
     )
 
 
 @never_cache
+@extend_schema(
+    request=UndoSwipeSerializer,
+    responses={
+        200: RecipeStateSerializer,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        409: DetailErrorSerializer,
+    },
+    summary="Отменить последний свайп текущей сессии",
+)
 @api_view(["POST"])
-def undo_swipe(request):
+def undo_swipe(request: Request) -> Response:
     serializer = UndoSwipeSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    with transaction.atomic():
-        _lock_preferences(request.user)
-        swipe = LastSwipe.objects.filter(
-            user=request.user,
-            token=serializer.validated_data["undo_token"],
-            session_hash=_session_hash(request),
-        ).first()
-        state = (
-            UserRecipeState.objects.select_for_update().filter(pk=swipe.state_id).first()
-            if swipe is not None
-            else None
-        )
-        if (
-            swipe is None
-            or state is None
-            or swipe.swiped_at is None
-            or django_timezone.now() >= swipe.swiped_at + UNDO_WINDOW
-        ):
-            return Response(
-                {"detail": "This swipe can no longer be undone."},
-                status=status.HTTP_409_CONFLICT,
-            )
-        state.liked_at = swipe.liked_at
-        state.disliked_until = swipe.disliked_until
-        state.is_favorite = swipe.is_favorite
-        state.favorited_at = swipe.favorited_at
-        swipe.delete()
-        if swipe.state_created:
-            state.delete()
-        else:
-            state.save(update_fields=("liked_at", "disliked_until", "is_favorite", "favorited_at"))
-    return _state_response(state)
+    state = reverse_swipe(
+        authenticated_user(request), serializer.validated_data["undo_token"], _session_hash(request)
+    )
+    return Response(RecipeStateSerializer(state).data)
 
 
 @never_cache
+@extend_schema(
+    parameters=[RECIPE_ID],
+    request=FavoriteSerializer,
+    responses={
+        200: RecipeStateSerializer,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+    },
+    summary="Установить состояние закладки",
+)
 @api_view(["PUT"])
-def favorite(request, recipe_id):
+def favorite(request: Request, recipe_id: int) -> Response:
     serializer = FavoriteSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    recipe = _recipe_or_404(recipe_id)
-    is_favorite_value = serializer.validated_data["is_favorite"]
-
-    if is_favorite_value and not recipe.is_active:
-        raise NotFound
-
-    with transaction.atomic():
-        _lock_preferences(request.user)
-        state, _ = UserRecipeState.objects.select_for_update().get_or_create(
-            user=request.user, recipe=recipe
-        )
-        if state.is_favorite != is_favorite_value:
-            state.is_favorite = is_favorite_value
-            state.favorited_at = django_timezone.now() if is_favorite_value else None
-            state.save(update_fields=("is_favorite", "favorited_at"))
-            LastSwipe.objects.filter(user=request.user, state=state).delete()
-
-    return _state_response(state)
+    state = set_favorite(
+        authenticated_user(request), recipe_id, serializer.validated_data["is_favorite"]
+    )
+    return Response(RecipeStateSerializer(state).data)
 
 
 @never_cache
+@extend_schema(
+    parameters=PAGE_PARAMETERS,
+    responses={
+        200: paginated_schema("FavoritesPage", FavoriteRecipeSerializer),
+        403: SESSION_REQUIRED,
+    },
+    summary="Список активных рецептов в избранном",
+)
 @api_view(["GET"])
-def favorites(request):
-    state_queryset = UserRecipeState.objects.filter(
-        user=request.user, recipe_id=OuterRef("pk"), is_favorite=True
-    )
-    queryset = (
-        Recipe.objects.filter(is_active=True)
-        .alias(is_owned_favorite=Exists(state_queryset))
-        .annotate(favorited_at=Subquery(state_queryset.values("favorited_at")[:1]))
-        .filter(is_owned_favorite=True)
-        .order_by("id")
-    )
-    paginator = RecipePagination()
-    page: list[Recipe] | None = paginator.paginate_queryset(queryset, request, view=None)
+def favorites(request: Request) -> Response:
+    paginator = StandardPagination()
+    page = paginator.paginate_queryset(favorite_recipes(authenticated_user(request)), request)
     return paginator.get_paginated_response(FavoriteRecipeSerializer(page, many=True).data)

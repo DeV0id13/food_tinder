@@ -8,7 +8,7 @@ MEAL_CHOICES = [(meal, meal) for meal in MEAL_TYPES]
 ALLOWED_DURATIONS = (1, 3, 7)
 
 
-def validate_enabled_meals(value):
+def validate_enabled_meals(value: object) -> None:
     if not isinstance(value, list) or not value:
         raise ValidationError("Enabled meals must be a nonempty array.")
     if any(not isinstance(item, str) or item not in MEAL_TYPES for item in value):
@@ -43,7 +43,7 @@ class MealPlan(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"MealPlan #{self.pk} ({self.start_date}, {self.duration_days}d)"
 
 
@@ -78,5 +78,5 @@ class MealPlanSlot(models.Model):
             ),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.plan_id}:{self.day_index}:{self.meal_type}"

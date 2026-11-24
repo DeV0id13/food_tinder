@@ -19,6 +19,8 @@ services:
     image: ghcr.io/dev0id13/food_tinder-backend:${IMAGE_TAG:?Required}
     restart: unless-stopped
     env_file: .env.prod
+    environment:
+      AUTH_RATE_LIMIT_TRUST_PROXY: "true"
     volumes:
       - staticfiles:/app/staticfiles
       - recipe_photos:/app/media/recipes

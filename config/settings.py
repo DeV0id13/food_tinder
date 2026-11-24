@@ -9,22 +9,32 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def env_required(name):
+def env_required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
         raise ImproperlyConfigured(f"Set the {name} environment variable.")
     return value
 
 
-def env_bool(name, default=False):
+def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name, str(default)).lower().strip()
     if value not in {"true", "false", "1", "0"}:
         raise ImproperlyConfigured(f"{name} must be true, false, 1 or 0.")
     return value in {"true", "1"}
 
 
-def env_list(name, default=""):
+def env_list(name: str, default: str = "") -> list[str]:
     return [value.strip() for value in os.environ.get(name, default).split(",") if value.strip()]
+
+
+def env_positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be a positive integer.") from exc
+    if value < 1:
+        raise ImproperlyConfigured(f"{name} must be a positive integer.")
+    return value
 
 
 SECRET_KEY = env_required("DJANGO_SECRET_KEY")
@@ -33,13 +43,15 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.accounts.apps.FoodTinderAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "apps.accounts.apps.AccountsConfig",
     "apps.catalog.apps.CatalogConfig",
     "apps.preferences.apps.PreferencesConfig",
@@ -59,7 +71,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "config" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -92,9 +104,31 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
 ]
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+}
+
+API_DOCS_ENABLED = env_bool("DJANGO_API_DOCS_ENABLED", DEBUG)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "FoodTinder API",
+    "VERSION": "1.0.0",
+    "DESCRIPTION": (
+        "Вход устанавливает сессионную cookie Django. Для изменяющих запросов передайте "
+        "X-CSRFToken из текущей cookie csrftoken. GET /api/v1/auth/session/ выдаёт CSRF-cookie "
+        "для гостя. После входа Django меняет токен, используйте новое значение. "
+        "Swagger UI передаёт cookies и актуальный заголовок автоматически для того же origin."
+    ),
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {"MealType": "apps.planning.models.MEAL_CHOICES"},
+    "SERVE_PERMISSIONS": [
+        "rest_framework.permissions.AllowAny" if DEBUG else "rest_framework.permissions.IsAdminUser"
+    ],
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
 }
 
 LANGUAGE_CODE = os.environ.get("DJANGO_LANGUAGE_CODE", "en-us")
@@ -142,3 +176,42 @@ EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS")
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL")
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+
+
+AUTH_RATE_LIMITS = {
+    "admin_login": (
+        env_positive_int("AUTH_ADMIN_LOGIN_LIMIT", 20),
+        env_positive_int("AUTH_ADMIN_LOGIN_WINDOW_SECONDS", 60),
+    ),
+    "login": (
+        env_positive_int("AUTH_LOGIN_LIMIT", 20),
+        env_positive_int("AUTH_LOGIN_WINDOW_SECONDS", 60),
+    ),
+    "register": (
+        env_positive_int("AUTH_REGISTER_LIMIT", 10),
+        env_positive_int("AUTH_REGISTER_WINDOW_SECONDS", 300),
+    ),
+}
+AUTH_RATE_LIMIT_TRUST_PROXY = env_bool("AUTH_RATE_LIMIT_TRUST_PROXY")
+
+LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
+if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    raise ImproperlyConfigured("DJANGO_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR or CRITICAL.")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "application": {"()": "common.logging.ApplicationFormatter", "json_output": not DEBUG},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "application",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "loggers": {
+        name: {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False}
+        for name in ("django", "django.server", "foodtinder")
+    },
+}

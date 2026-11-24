@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
@@ -26,11 +27,11 @@ class User(AbstractUser):
             ),
         ]
 
-    def save(self, *args, **kwargs):
+    def save(self, *args: Any, **kwargs: Any) -> None:
         self.email = type(self).objects.normalize_email(self.email)
         super().save(*args, **kwargs)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.email
 
 
@@ -58,5 +59,12 @@ class UserProfile(models.Model):
     )
     avatar = models.ImageField(upload_to="avatars/%Y/%m/", blank=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Profile: {self.user.email}"
+
+
+class AuthRateBucket(models.Model):
+    # HMAC of operation and normalized client IP. Addresses are not stored.
+    key = models.CharField(max_length=64, primary_key=True)
+    expires_at = models.DateTimeField(db_index=True)
+    attempts = models.PositiveIntegerField(default=0)

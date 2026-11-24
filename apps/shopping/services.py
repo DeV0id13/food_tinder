@@ -2,6 +2,7 @@ from django.db.models import prefetch_related_objects
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
 
+from apps.accounts.models import User
 from apps.planning.models import MealPlan
 from apps.planning.selectors import get_plan_for_user
 
@@ -9,7 +10,7 @@ from .calculation import PlannedLine, ShoppingItem, aggregate_shopping_items
 from .models import PurchasedIngredient
 
 
-def collect_plan_lines(plan) -> list[PlannedLine]:
+def collect_plan_lines(plan: MealPlan) -> list[PlannedLine]:
     prefetch_related_objects([plan], "slots__recipe__ingredient_lines__ingredient")
     return [
         PlannedLine(
@@ -25,7 +26,7 @@ def collect_plan_lines(plan) -> list[PlannedLine]:
     ]
 
 
-def get_shopping_list_for_user(*, user, plan_id: int) -> tuple[int, list[ShoppingItem]]:
+def get_shopping_list_for_user(*, user: User, plan_id: int) -> tuple[int, list[ShoppingItem]]:
     """Возвращает id плана и покупки. Чужой или несуществующий план — NotFound."""
     plan = get_plan_for_user(user=user, plan_id=plan_id)
     return plan.id, aggregate_shopping_items(collect_plan_lines(plan))
@@ -46,13 +47,15 @@ def checklist(plan: MealPlan) -> tuple[list[ShoppingItem], set[int]]:
     }
 
 
-def invalidate_purchases(sender, plan, **kwargs):
+def invalidate_purchases(sender: type[MealPlan], plan: MealPlan, **kwargs: object) -> None:
     if plan.purchased_ingredients.exists():
         _, valid = checklist(plan)
         plan.purchased_ingredients.exclude(ingredient_id__in=valid).delete()
 
 
-def set_purchased(plan: MealPlan, ingredient_id: int, *, purchased: bool, quantity_version: str):
+def set_purchased(
+    plan: MealPlan, ingredient_id: int, *, purchased: bool, quantity_version: str
+) -> None:
     items = aggregate_shopping_items(collect_plan_lines(plan))
     item = next((item for item in items if item.ingredient_id == ingredient_id), None)
     if item is None:
