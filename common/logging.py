@@ -30,7 +30,7 @@ def _event_fields(record: logging.LogRecord) -> dict[str, object]:
     if type(status) is int:
         fields["status"] = status
     operation = getattr(record, "operation", None)
-    if operation in ("login", "register"):
+    if operation in ("login", "register", "admin_login"):
         fields["operation"] = operation
     match = getattr(getattr(record, "request", None), "resolver_match", None)
     if match and match.view_name:

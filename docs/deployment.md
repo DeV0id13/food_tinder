@@ -97,7 +97,9 @@ or volumes are deleted by the workflow.
    retries Django readiness with a configured Host. The internal check
    emulates HTTPS when TLS is terminated outside Django. For the current
    `SITE_ADDRESS=:80` configuration, it also checks readiness through Caddy over
-   loopback using the configured HTTP Host and loads the frontend.
+   loopback using the configured HTTP Host. Both readiness and the frontend
+   must return HTTP 200 and the expected body. Redirects fail the check.
+   Connection errors and HTTP 5xx have bounded retries.
 6. The deploy job is **not** triggered for pull requests or manual dispatch.
    Keep required Environment reviewers and master branch protection enabled.
 7. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
@@ -119,9 +121,10 @@ production. Database migrations are **not** rolled back automatically.
 | `GET /api/v1/ready/` | 200 and `{"status":"ok"}` after authenticating to PostgreSQL and running `SELECT 1` | 503 and `{"status":"unavailable"}` on failure or timeout |
 
 Both probes are public. Readiness bypasses session loading, uses a fresh short
-connection with a two-second deadline and sends `Cache-Control: no-store`.
-Its HTTP body contains only the status. The deploy job makes a bounded number
-of attempts while the services start.
+connection with a two-second deadline and reuses either result for one second
+inside each worker. Parallel requests in a single worker share the probe.
+HTTP responses carry `Cache-Control: no-store` and contain only the status.
+The deploy job makes a bounded number of attempts while the services start.
 
 Django writes JSON lines to stderr in production and readable text in dev.
 `DJANGO_LOG_LEVEL` defaults to `INFO` and accepts `DEBUG`, `INFO`, `WARNING`,
@@ -133,7 +136,8 @@ in each window. Gunicorn access entries include HTTP status and duration.
 The [auth limits and defaults](modules/accounts.md#лимиты-авторизации) require
 no new `.env.prod` variables. Production Compose trusts the dedicated client
 IP header because only Caddy exposes the app to the network. Caddy overwrites
-that header with its immediate peer address. Keep Gunicorn's port private.
+that header with its immediate peer address for both API and Admin. Keep
+Gunicorn's port private.
 The migration creates only the independent counter table and its expiry
 index. [API documentation](api.md) is disabled in production by default.
 

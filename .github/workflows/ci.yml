@@ -410,14 +410,11 @@ jobs:
               if attempt == 7:
                   raise SystemExit(f"Django readiness failed: HTTP {response.status_code}")
               sleep(3)
-          '
+          ' </dev/null
           # The IP-based HTTP deployment also exercises the real Gunicorn/Caddy path.
           if grep -qx 'SITE_ADDRESS=:80' .env.prod; then
             allowed_host="$(compose exec -T web python -c 'import config.settings as settings; print(settings.ALLOWED_HOSTS[0])' </dev/null)"
-            curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-connrefused \
-              --max-time 5 --retry-max-time 35 -H "Host: $allowed_host" http://127.0.0.1/api/v1/ready/
-            curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-connrefused \
-              --max-time 5 --retry-max-time 35 http://127.0.0.1/ > /dev/null
+            bash deploy/check-http.sh http://127.0.0.1 "$allowed_host" </dev/null
           fi
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts

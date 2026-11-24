@@ -5,13 +5,11 @@
 {$SITE_ADDRESS} {
     encode zstd gzip
 
-    handle /api/* {
+    @django path /api/* /admin*
+    handle @django {
         reverse_proxy web:8000 {
             header_up X-FoodTinder-Client-IP {remote_host}
         }
-    }
-    handle /admin* {
-        reverse_proxy web:8000
     }
     handle_path /static/* {
         root * /srv/static

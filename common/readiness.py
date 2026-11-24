@@ -1,4 +1,6 @@
 import asyncio
+from threading import Lock
+from time import monotonic
 
 from asgiref.sync import async_to_sync
 from django.db import connections
@@ -7,6 +9,9 @@ from psycopg.conninfo import make_conninfo
 from psycopg.pq import ExecStatus
 
 PROBE_TIMEOUT_SECONDS = 2
+PROBE_CACHE_SECONDS = 1
+_probe_lock = Lock()
+_last_probe: tuple[float, bool] | None = None
 
 
 async def _probe(conninfo: str) -> bool:
@@ -24,7 +29,7 @@ async def _probe(conninfo: str) -> bool:
             await connection.close()
 
 
-def database_ready() -> bool:
+def _check_database() -> bool:
     # A fresh connection checks that a worker can connect using the deployed
     # settings even if another worker still has an open connection.
     params = connections["default"].get_connection_params()
@@ -37,3 +42,14 @@ def database_ready() -> bool:
         return async_to_sync(_probe)(make_conninfo(**libpq_options))
     except (Error, OSError, TimeoutError):
         return False
+
+
+def database_ready() -> bool:
+    """Share a probe result within each worker, including during database outages."""
+    global _last_probe
+    with _probe_lock:
+        if _last_probe is not None and monotonic() < _last_probe[0]:
+            return _last_probe[1]
+        ready = _check_database()
+        _last_probe = (monotonic() + PROBE_CACHE_SECONDS, ready)
+        return ready

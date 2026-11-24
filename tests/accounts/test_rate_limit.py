@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import pytest
 from django.db import connection, connections
+from django.test import Client
+from django.urls import reverse
 from rest_framework.exceptions import Throttled
 from rest_framework.request import Request
 from rest_framework.test import APIClient, APIRequestFactory
@@ -134,3 +136,63 @@ def test_workers_share_one_atomic_limit(settings):
         results = list(pool.map(lambda _: attempt(), range(4)))
     assert results.count(True) == 2
     assert AuthRateBucket.objects.get().attempts == 3
+
+
+def test_admin_login_keeps_csrf_and_normal_staff_session(settings):
+    settings.AUTH_RATE_LIMITS = {**settings.AUTH_RATE_LIMITS, "admin_login": (2, 60)}
+    admin = Client(enforce_csrf_checks=True)
+    login = reverse("admin:login")
+    password = f"Local_{uuid4().hex}9"
+    staff = User.objects.create_user("teacher@example.test", password, is_staff=True)
+    payload = {"username": staff.email, "password": password, "next": reverse("admin:index")}
+
+    assert admin.get(login).status_code == 200
+    assert admin.post(login, payload).status_code == 403
+    assert not AuthRateBucket.objects.exists()
+
+    token = admin.cookies["csrftoken"].value
+    response = admin.post(login, payload, HTTP_X_CSRFTOKEN=token)
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:index")
+    assert admin.session["_auth_user_id"] == str(staff.pk)
+    assert admin.get(reverse("admin:index")).status_code == 200
+
+
+def test_admin_limit_is_separate_and_uses_trusted_proxy(browser, settings, monkeypatch):
+    settings.AUTH_RATE_LIMITS = {**settings.AUTH_RATE_LIMITS, "admin_login": (1, 60)}
+    clock = datetime(2026, 11, 24, tzinfo=UTC)
+    monkeypatch.setattr("apps.accounts.rate_limit.timezone.now", lambda: clock)
+    admin = Client(enforce_csrf_checks=True)
+    login = reverse("admin:login")
+    payload = {"username": "missing@example.test", "password": "invalid"}
+    assert admin.get(login).status_code == 200
+    meta = {
+        "REMOTE_ADDR": "172.20.0.2",
+        "HTTP_X_CSRFTOKEN": admin.cookies["csrftoken"].value,
+        "HTTP_X_FOODTINDER_CLIENT_IP": "192.0.2.10",
+        "HTTP_X_FORWARDED_FOR": "192.0.2.10",
+    }
+    assert admin.post(login, payload, **meta).status_code == 200
+    meta["HTTP_X_FORWARDED_FOR"] = "192.0.2.11"
+    meta["HTTP_X_FOODTINDER_CLIENT_IP"] = "192.0.2.11"
+    response = admin.post(login, payload, **meta)
+    assert response.status_code == 429
+    assert response["Retry-After"] == "60"
+    assert "no-store" in response["Cache-Control"]
+    assert payload["username"] not in response.content.decode()
+    assert (
+        post(
+            browser,
+            "login",
+            {"email": payload["username"], "password": payload["password"]},
+            REMOTE_ADDR=meta["REMOTE_ADDR"],
+        ).status_code
+        == 400
+    )
+
+    settings.AUTH_RATE_LIMIT_TRUST_PROXY = True
+    assert admin.post(login, payload, **meta).status_code == 200
+    meta["HTTP_X_FORWARDED_FOR"] = "192.0.2.12"
+    assert admin.post(login, payload, **meta).status_code == 429
+    clock += timedelta(seconds=60)
+    assert admin.post(login, payload, **meta).status_code == 200

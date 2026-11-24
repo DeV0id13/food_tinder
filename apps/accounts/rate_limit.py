@@ -6,18 +6,23 @@ from typing import Literal
 
 from django.conf import settings
 from django.db import transaction
+from django.http import HttpRequest
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 from rest_framework.exceptions import Throttled
-from rest_framework.request import Request
 
 from .models import AuthRateBucket
 
-AuthOperation = Literal["login", "register"]
+AuthOperation = Literal["login", "register", "admin_login"]
 logger = logging.getLogger("foodtinder.auth")
 
 
-def client_ip(request: Request) -> str:
+class AuthRateLimited(Throttled):
+    # The limiter always supplies integer seconds to DRF.
+    wait: int
+
+
+def client_ip(request: HttpRequest) -> str:
     forwarded = (
         request.META.get("HTTP_X_FOODTINDER_CLIENT_IP")
         if settings.AUTH_RATE_LIMIT_TRUST_PROXY
@@ -49,7 +54,7 @@ def _purge_expired(now: datetime) -> None:
             AuthRateBucket.objects.filter(pk__in=keys).delete()
 
 
-def limit_auth_attempt(request: Request, operation: AuthOperation) -> None:
+def limit_auth_attempt(request: HttpRequest, operation: AuthOperation) -> None:
     limit, seconds = settings.AUTH_RATE_LIMITS[operation]
     key = salted_hmac(
         "accounts.rate-limit", f"{operation}:{client_ip(request)}", algorithm="sha256"
@@ -75,4 +80,4 @@ def limit_auth_attempt(request: Request, operation: AuthOperation) -> None:
         if first_rejection:
             logger.warning("auth_rate_limited", extra={"operation": operation})
         retry_after = max(1, ceil((bucket.expires_at - timezone.now()).total_seconds()))
-        raise Throttled(wait=retry_after)
+        raise AuthRateLimited(wait=retry_after)

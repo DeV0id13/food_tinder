@@ -43,7 +43,7 @@ ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "apps.accounts.apps.FoodTinderAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -179,6 +179,10 @@ DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "webmaster@localhost")
 
 
 AUTH_RATE_LIMITS = {
+    "admin_login": (
+        env_positive_int("AUTH_ADMIN_LOGIN_LIMIT", 20),
+        env_positive_int("AUTH_ADMIN_LOGIN_WINDOW_SECONDS", 60),
+    ),
     "login": (
         env_positive_int("AUTH_LOGIN_LIMIT", 20),
         env_positive_int("AUTH_LOGIN_WINDOW_SECONDS", 60),
