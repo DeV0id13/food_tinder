@@ -2,6 +2,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
+from uuid import uuid4
 
 import pytest
 from django.db import connection, connections
@@ -57,7 +58,11 @@ def test_login_limit_has_retry_header_and_expiry(browser, monkeypatch, caplog):
 
 
 def test_operation_and_address_are_independent(browser):
-    payload = {"first_name": "Anna", "email": "anna@example.test", "password": "Strong_123Ab"}
+    payload = {
+        "first_name": "Anna",
+        "email": "anna@example.test",
+        "password": f"Local_{uuid4().hex}9",
+    }
     assert post(browser, "register", payload, REMOTE_ADDR="192.0.2.1").status_code == 201
     assert post(browser, "register", payload, REMOTE_ADDR="192.0.2.1").status_code == 429
     other = {**payload, "email": "other@example.test"}

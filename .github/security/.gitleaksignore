@@ -4,3 +4,6 @@
 # Reassess when fixtures change or by 2027-02-01.
 2a53b234b2fc4051d0270e9e40b8e11ef484eaeb:tests/catalog/test_api.py:generic-api-key:62
 3962480c32e2d905788beb38a408b4b9ec600415:tests/test_foundation.py:generic-api-key:11
+
+# FT-36: synthetic password in the original isolated rate-limit test fixture.
+5e287ef035d852f50034543d26d9d4869d8311eb:tests/accounts/test_rate_limit.py:generic-api-key:60
