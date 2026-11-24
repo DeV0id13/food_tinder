@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, cast
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.base_user import BaseUserManager
 from django.core.exceptions import ValidationError
@@ -8,30 +10,34 @@ if TYPE_CHECKING:
     from .models import User
 
 
-class UserManager(BaseUserManager):
+class UserManager(BaseUserManager["User"]):
     use_in_migrations = True
 
     @classmethod
-    def normalize_email(cls, email):
+    def normalize_email(cls, email: str | None) -> str:
         """FoodTinder treats the entire email address as case-insensitive."""
         return super().normalize_email(email).strip().lower()
 
-    def get_by_natural_key(self, email):
+    def get_by_natural_key(self, email: str | None) -> User:
         return self.get(email=self.normalize_email(email))
 
-    def create_user(self, email, password=None, **extra_fields):
+    def create_user(
+        self, email: str | None, password: str | None = None, **extra_fields: object
+    ) -> User:
         email = self.normalize_email(email)
         if not email:
             raise ValidationError("An email address is required.", code="required")
         validate_email(email)
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
-        user = cast("User", self.model(email=email, **extra_fields))
+        user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
 
-    def create_superuser(self, email, password=None, **extra_fields):
+    def create_superuser(
+        self, email: str | None, password: str | None = None, **extra_fields: object
+    ) -> User:
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         if extra_fields.get("is_staff") is not True:

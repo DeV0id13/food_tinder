@@ -9,21 +9,21 @@ from django.core.exceptions import ImproperlyConfigured
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def env_required(name):
+def env_required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
         raise ImproperlyConfigured(f"Set the {name} environment variable.")
     return value
 
 
-def env_bool(name, default=False):
+def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name, str(default)).lower().strip()
     if value not in {"true", "false", "1", "0"}:
         raise ImproperlyConfigured(f"{name} must be true, false, 1 or 0.")
     return value in {"true", "1"}
 
 
-def env_list(name, default=""):
+def env_list(name: str, default: str = "") -> list[str]:
     return [value.strip() for value in os.environ.get(name, default).split(",") if value.strip()]
 
 

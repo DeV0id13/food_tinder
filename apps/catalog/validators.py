@@ -2,6 +2,7 @@ from io import BytesIO
 from pathlib import Path
 
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from PIL import Image
 
 MEAL_TYPES = ("breakfast", "lunch", "snack", "dinner")
@@ -10,7 +11,7 @@ MAX_RECIPE_PHOTO_BYTES = 10 * 1024 * 1024
 MAX_RECIPE_PHOTO_PIXELS = 24_000_000
 
 
-def validate_meal_types(value):
+def validate_meal_types(value: object) -> None:
     if not isinstance(value, list) or not value:
         raise ValidationError("Meal types must be a nonempty array.")
     if any(not isinstance(item, str) or item not in MEAL_TYPES for item in value):
@@ -19,18 +20,18 @@ def validate_meal_types(value):
         raise ValidationError("Meal types must not repeat.")
 
 
-def validate_steps(value):
+def validate_steps(value: object) -> None:
     if not isinstance(value, list) or not value:
         raise ValidationError("Steps must be a nonempty array.")
     if any(not isinstance(item, str) or not item.strip() for item in value):
         raise ValidationError("Each step must be a nonempty string.")
 
 
-def validate_recipe_photo(value):
+def validate_recipe_photo(value: File) -> None:
     if getattr(value, "_committed", False):
         return
 
-    expected_format = RECIPE_PHOTO_FORMATS.get(Path(value.name).suffix.lower())
+    expected_format = RECIPE_PHOTO_FORMATS.get(Path(value.name or "").suffix.lower())
     if not expected_format:
         raise ValidationError("Choose a JPEG, PNG, or WebP image.")
 

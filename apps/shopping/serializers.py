@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .calculation import format_quantity
+from .calculation import ShoppingItem, format_quantity
 
 MAX_BIGINT = 2**63 - 1
 FILE_TYPES = ("csv", "txt")
@@ -18,12 +18,12 @@ class PurchaseSerializer(serializers.Serializer):
     purchased = serializers.JSONField()
     quantity_version = serializers.RegexField(r"\A[0-9a-f]{64}\Z", trim_whitespace=False)
 
-    def validate_purchased(self, value):
+    def validate_purchased(self, value: object) -> bool:
         if type(value) is not bool:
             raise serializers.ValidationError("Expected a JSON boolean.")
         return value
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         if set(self.initial_data) - set(self.fields):
             raise serializers.ValidationError(
                 {"non_field_errors": ["Unknown fields are not allowed."]}
@@ -38,5 +38,5 @@ class ShoppingItemSerializer(serializers.Serializer):
     quantity = serializers.SerializerMethodField()
     quantity_version = serializers.CharField()
 
-    def get_quantity(self, item):
+    def get_quantity(self, item: ShoppingItem) -> str:
         return format_quantity(item.quantity)

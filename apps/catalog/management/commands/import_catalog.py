@@ -1,7 +1,11 @@
 import json
+from argparse import ArgumentParser
 from collections import Counter
+from collections.abc import Iterable
 from contextlib import suppress
+from decimal import Decimal
 from pathlib import Path
+from typing import NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
@@ -24,7 +28,36 @@ FIELDS = (
 )
 
 
-def read_manifest(path):
+class PhotoSpec(TypedDict):
+    source: str
+    license: str
+    author: str
+    file: str
+
+
+class IngredientSpec(TypedDict):
+    slug: str
+    name: str
+    unit: str
+    quantity: str | int | float
+
+
+class RecipeSpec(TypedDict):
+    slug: str
+    title: str
+    description: str
+    cooking_time_minutes: int
+    difficulty: int
+    base_servings: int
+    meal_types: list[str]
+    steps: list[str]
+    is_active: bool
+    ingredients: list[IngredientSpec]
+    previous: NotRequired[dict[str, object]]
+    photo: NotRequired[PhotoSpec]
+
+
+def read_manifest(path: Path) -> list[object]:
     try:
         entries = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -34,9 +67,9 @@ def read_manifest(path):
     return entries
 
 
-def check_photo(photo, directory):
-    for key in ("source", "license"):
-        url = urlsplit(photo[key])
+def check_photo(photo: PhotoSpec, directory: Path) -> Path:
+    for key, value in (("source", photo["source"]), ("license", photo["license"])):
+        url = urlsplit(value)
         if url.scheme != "https" or not url.hostname:
             raise ValueError(f"Photo {key} must be an HTTPS URL.")
     if not photo["author"].strip():
@@ -50,7 +83,7 @@ def check_photo(photo, directory):
     return path
 
 
-def prepare_ingredients(entries):
+def prepare_ingredients(entries: list[IngredientSpec]) -> Iterable[tuple[Ingredient, Decimal]]:
     result = {}
     quantity_field = RecipeIngredient._meta.get_field("quantity")
     for line in entries:
@@ -70,9 +103,10 @@ def prepare_ingredients(entries):
     return result.values()
 
 
-def import_recipe(entry, directory, *, dry_run):
+def import_recipe(entry: RecipeSpec, directory: Path, *, dry_run: bool) -> tuple[str, str, str]:
     slug = entry["slug"]
-    fields = {name: entry[name] for name in FIELDS}
+    raw_entry: dict[str, object] = dict(entry)
+    fields = {name: raw_entry[name] for name in FIELDS}
     new_photo = None
     try:
         with transaction.atomic():
@@ -98,9 +132,9 @@ def import_recipe(entry, directory, *, dry_run):
                 if recipe.is_active and not content:
                     raise ValueError("An active recipe needs ingredients.")
             if update:
-                recipe.description = fields["description"]
-                recipe.steps = fields["steps"]
-                recipe.cooking_time_minutes = fields["cooking_time_minutes"]
+                recipe.description = entry["description"]
+                recipe.steps = entry["steps"]
+                recipe.cooking_time_minutes = entry["cooking_time_minutes"]
             recipe.full_clean()
 
             path = None
@@ -151,14 +185,14 @@ def import_recipe(entry, directory, *, dry_run):
 class Command(BaseCommand):
     help = "Import reviewed recipes and local photographs without overwriting edited records."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument("--manifest", required=True, type=Path)
         parser.add_argument("--media-dir", required=True, type=Path)
         parser.add_argument("--dry-run", action="store_true")
 
-    def handle(self, *args, **options):
-        entries = read_manifest(options["manifest"])
-        directory = options["media_dir"].resolve()
+    def handle(self, *args: object, **options: object) -> None:
+        entries = read_manifest(cast(Path, options["manifest"]))
+        directory = cast(Path, options["media_dir"]).resolve()
         if not directory.is_dir():
             raise CommandError("Media directory does not exist.")
         recipes: Counter[str] = Counter()
@@ -170,7 +204,9 @@ class Command(BaseCommand):
                 if not isinstance(entry, dict) or not isinstance(label, str) or label in seen:
                     raise ValueError("Recipe entries need unique slugs.")
                 seen.add(label)
-                status, photo, reason = import_recipe(entry, directory, dry_run=options["dry_run"])
+                status, photo, reason = import_recipe(
+                    cast(RecipeSpec, entry), directory, dry_run=bool(options["dry_run"])
+                )
             except (
                 ValidationError,
                 IntegrityError,

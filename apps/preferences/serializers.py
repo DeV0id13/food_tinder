@@ -6,7 +6,7 @@ from .models import UserRecipeState
 
 
 class StrictSerializer(serializers.Serializer):
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
         unknown_fields = set(self.initial_data) - set(self.fields)
         if unknown_fields:
             raise serializers.ValidationError(
@@ -27,12 +27,12 @@ class UndoSwipeSerializer(StrictSerializer):
 class StrictBooleanField(serializers.Field):
     default_error_messages = {"invalid": "Expected a JSON boolean."}
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: object) -> bool:
         if type(data) is not bool:
             self.fail("invalid")
         return data
 
-    def to_representation(self, value):
+    def to_representation(self, value: object) -> bool:
         return bool(value)
 
 

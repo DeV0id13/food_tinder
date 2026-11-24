@@ -92,7 +92,7 @@ class TestPreferencesAPI:
         user, recipe = self.create_user(), self.create_recipe()
         self.login(user)
         clock = BEFORE_MIDNIGHT
-        monkeypatch.setattr("apps.preferences.views.django_timezone.now", lambda: clock)
+        monkeypatch.setattr("apps.preferences.services.django_timezone.now", lambda: clock)
         swipe = self.client.post(
             BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
         )
@@ -116,7 +116,7 @@ class TestPreferencesAPI:
         user, recipe = self.create_user(), self.create_recipe()
         self.login(user)
         clock = BEFORE_MIDNIGHT
-        monkeypatch.setattr("apps.preferences.views.django_timezone.now", lambda: clock)
+        monkeypatch.setattr("apps.preferences.services.django_timezone.now", lambda: clock)
         self.client.post(
             BASE + "swipes/", {"recipe_id": recipe.id, "action": "like"}, format="json"
         )
@@ -244,7 +244,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: BEFORE_MIDNIGHT,
             )
             response = self.client.get(BASE + "feed/")
@@ -267,7 +267,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: MIDNIGHT,
             )
             response = self.client.get(BASE + "feed/")
@@ -309,7 +309,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: BEFORE_MIDNIGHT,
             )
             response = self.client.post(
@@ -336,7 +336,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: first,
             )
             first_response = self.client.post(
@@ -345,7 +345,7 @@ class TestPreferencesAPI:
                 format="json",
             )
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: second,
             )
             second_response = self.client.post(
@@ -371,7 +371,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: BEFORE_MIDNIGHT,
             )
             response = self.client.post(
@@ -392,7 +392,7 @@ class TestPreferencesAPI:
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(
-                "apps.preferences.views.django_timezone.now",
+                "apps.preferences.services.django_timezone.now",
                 lambda: BEFORE_MIDNIGHT,
             )
             response = self.client.post(

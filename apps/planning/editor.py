@@ -1,14 +1,18 @@
+from datetime import date
 from hashlib import sha256
 from json import dumps
+from typing import TypedDict
+from uuid import UUID
 
-from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.exceptions import APIException, ValidationError
 
+from apps.accounts.models import User
 from apps.catalog.models import Recipe
-from apps.preferences.selectors import favorite_recipe_ids
+from apps.catalog.selectors import get_recipe
+from apps.preferences.selectors import favorite_recipe_ids, is_favorite
 
-from .models import MealPlan, MealPlanSlot
+from .models import MEAL_TYPES, MealPlan, MealPlanSlot
 from .signals import plan_slots_changed
 
 
@@ -17,11 +21,83 @@ class PlanEditorConflict(APIException):
     default_detail = "The plan has changed since it was opened."
 
 
-def _replace_slots(plan, slots, existing):
-    desired = {}
+class PlanConfig(TypedDict):
+    title: str
+    start_date: date
+    duration_days: int
+    enabled_meals: list[str]
+
+
+class SlotData(TypedDict):
+    day_index: int
+    meal_type: str
+    recipe_id: int
+    servings: int
+
+
+def _day_enabled(plan: MealPlan, day_index: int) -> bool:
+    return 0 <= day_index < plan.duration_days
+
+
+def _meal_enabled(plan: MealPlan, meal_type: str) -> bool:
+    return meal_type in MEAL_TYPES and meal_type in plan.enabled_meals
+
+
+def validate_slot_target(plan: MealPlan, day_index: int, meal_type: str) -> None:
+    errors = {}
+    if not _day_enabled(plan, day_index):
+        errors["day_index"] = ["Day index is outside the plan period."]
+    if meal_type not in MEAL_TYPES:
+        errors["meal_type"] = ["Unknown meal type."]
+    elif not _meal_enabled(plan, meal_type):
+        errors["meal_type"] = ["This meal is not enabled for the plan."]
+    if errors:
+        raise ValidationError(errors)
+
+
+def _increment_version(plan: MealPlan, *fields: str) -> None:
+    plan.version += 1
+    plan.save(update_fields=[*fields, "version"])
+
+
+def write_slot(
+    plan: MealPlan, day_index: int, meal_type: str, recipe_id: int, servings: int
+) -> MealPlanSlot:
+    """Write to a validated address under the caller's plan lock."""
+    slots = plan.slots.filter(day_index=day_index, meal_type=meal_type)
+    existing = slots.first()
+    if existing is not None and existing.recipe_id == recipe_id:
+        recipe = existing.recipe
+    else:
+        recipe = get_recipe(recipe_id)
+        if not is_favorite(user_id=plan.user_id, recipe_id=recipe_id):
+            raise ValidationError({"recipe_id": ["Recipe is not in favorites."]})
+    if meal_type not in recipe.meal_types:
+        raise ValidationError({"meal_type": ["Recipe is not suitable for this meal."]})
+    slot, _ = plan.slots.update_or_create(
+        day_index=day_index, meal_type=meal_type, defaults={"recipe": recipe, "servings": servings}
+    )
+    if existing is None or (existing.recipe_id, existing.servings) != (recipe_id, servings):
+        _increment_version(plan)
+    plan_slots_changed.send(sender=MealPlan, plan=plan)
+    return slot
+
+
+def remove_slot(plan: MealPlan, day_index: int, meal_type: str) -> None:
+    """Remove a validated address under the caller's plan lock."""
+    deleted, _ = plan.slots.filter(day_index=day_index, meal_type=meal_type).delete()
+    if deleted:
+        _increment_version(plan)
+        plan_slots_changed.send(sender=MealPlan, plan=plan)
+
+
+def _replace_slots(
+    plan: MealPlan, slots: list[SlotData], existing: dict[tuple[int, str], MealPlanSlot]
+) -> bool:
+    desired: dict[tuple[int, str], tuple[int, int]] = {}
     for slot in slots:
         key = (slot["day_index"], slot["meal_type"])
-        if key[0] >= plan.duration_days or key[1] not in plan.enabled_meals:
+        if not _day_enabled(plan, key[0]) or not _meal_enabled(plan, key[1]):
             raise ValidationError({"slots": ["A slot is outside the enabled meals or days."]})
         if key in desired:
             raise ValidationError({"slots": ["A meal can contain only one recipe."]})
@@ -42,11 +118,12 @@ def _replace_slots(plan, slots, existing):
                 continue
             recipe = old.recipe
         else:
-            recipe = recipes.get(recipe_id)
-            if recipe is None or not recipe.is_active or recipe_id not in favorites:
+            candidate = recipes.get(recipe_id)
+            if candidate is None or not candidate.is_active or recipe_id not in favorites:
                 raise ValidationError(
                     {"slots": [f"Day {day + 1}, {meal}: choose an active favorite recipe."]}
                 )
+            recipe = candidate
         if meal not in recipe.meal_types:
             raise ValidationError(
                 {"slots": [f"Day {day + 1}, {meal}: the recipe is unsuitable for this meal."]}
@@ -78,11 +155,14 @@ def _replace_slots(plan, slots, existing):
     return bool(removed or created or changed)
 
 
-def create_plan(user, config, slots, creation_key):
+def create_plan(
+    user: User, config: PlanConfig, slots: list[SlotData], creation_key: UUID | None
+) -> tuple[MealPlan, bool]:
+    """Create a plan or replay a matching request within the caller's transaction."""
     digest = ""
     if creation_key is not None:
         # Concurrent retries for the same owner must see the first committed result.
-        get_user_model().objects.select_for_update(no_key=True).only("pk").get(pk=user.pk)
+        User.objects.select_for_update(no_key=True).only("pk").get(pk=user.pk)
         digest = sha256(dumps([config, slots], sort_keys=True, default=str).encode()).hexdigest()
         existing = (
             MealPlan.objects.select_for_update()
@@ -102,7 +182,8 @@ def create_plan(user, config, slots, creation_key):
     return plan, True
 
 
-def update_plan(plan, config, slots, version):
+def update_plan(plan: MealPlan, config: PlanConfig, slots: list[SlotData], version: int) -> None:
+    """Apply the editor snapshot under the caller's plan lock."""
     existing = {
         (slot.day_index, slot.meal_type): slot for slot in plan.slots.select_related("recipe")
     }
@@ -129,7 +210,6 @@ def update_plan(plan, config, slots, version):
         setattr(plan, field, value)
     slots_changed = _replace_slots(plan, slots, existing)
     if config_changed or slots_changed:
-        plan.version += 1
-        plan.save(update_fields=[*config, "version"])
+        _increment_version(plan, *config)
     if slots_changed:
         plan_slots_changed.send(sender=MealPlan, plan=plan)

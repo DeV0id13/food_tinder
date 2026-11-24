@@ -48,7 +48,7 @@ function createApp(overrides = {}, browser) {
     ...overrides,
   };
   const app = new FoodTinderApp({root: element(), dialog, toast: element(), api, browser});
-  app.setSession(userA);
+  app.account.setSession(userA);
   app.messages = [];
   app.toast = (message) => app.messages.push(message);
   return app;
@@ -68,10 +68,10 @@ for (const resource of ['plan', 'shopping']) {
       const select = async (id) => {
         if (resource === 'plan') {
           app.state.activePlanId = id;
-          return app.loadActivePlan();
+          return app.plans.loadActivePlan();
         }
         app.state.shoppingPlanId = id;
-        return app.loadShopping();
+        return app.shopping.loadShopping();
       };
       const pendingA = select(1);
       const pendingB = select(2);
@@ -97,8 +97,8 @@ test('a newer request for the same plan wins even when the selection ID has not 
   let calls = 0;
   const app = createApp({getPlan: () => ++calls === 1 ? old.promise : Promise.resolve({id: 1, slots: ['new']})});
   app.state.activePlanId = 1;
-  const first = app.loadActivePlan();
-  await app.loadActivePlan();
+  const first = app.plans.loadActivePlan();
+  await app.plans.loadActivePlan();
   old.resolve({id: 1, slots: ['old']});
   await first;
   assert.deepEqual(app.state.activePlan.slots, ['new']);
@@ -113,9 +113,9 @@ test('plan save and shopping export refuse a mismatch between displayed and sele
   app.state.shoppingStatus = 'ready';
   app.state.shoppingPlanId = 2;
   app.state.shopping = {plan_id: 1, items: []};
-  await app.savePlan();
-  await app.deletePlan(2);
-  await app.exportShopping('csv');
+  await app.plans.savePlan();
+  await app.plans.deletePlan(2);
+  await app.shopping.exportShopping('csv');
   assert.deepEqual(calls, []);
 });
 
@@ -127,9 +127,9 @@ test('plan save is bound to the open editor and blocks duplicate saves or naviga
     getPlan: () => assert.fail('Changed editor before the save finished'),
   });
   editSavedPlan(app, savedPlan(1));
-  const saving = app.savePlan();
-  await app.savePlan();
-  await app.openPlanEditor('edit', 2);
+  const saving = app.plans.savePlan();
+  await app.plans.savePlan();
+  await app.plans.openPlanEditor('edit', 2);
   assert.equal(app.state.activePlanId, 1);
   save.resolve({...savedPlan(1), version: 2});
   await saving;
@@ -142,9 +142,9 @@ for (const outcome of ['success', 'error']) {
     const delayedA = deferred();
     let reads = 0;
     const app = createApp({getFavorites: () => ++reads === 1 ? delayedA.promise : Promise.resolve([{id: 22}])});
-    const oldRequest = app.loadFavorites();
-    await app.logout();
-    await app.login({email: userB.email, password: 'TestPassword_1'});
+    const oldRequest = app.recipes.loadFavorites();
+    await app.account.logout();
+    await app.account.login({email: userB.email, password: 'TestPassword_1'});
     const snapshot = structuredClone(app.state);
     if (outcome === 'success') delayedA.resolve([{id: 11}]);
     else delayedA.reject(new ApiError({type: 'auth', status: 403}));
@@ -159,13 +159,18 @@ for (const resource of ['plans', 'activePlan', 'shopping', 'feed']) {
   test(`${resource}: responses from a previous session are discarded`, async () => {
     const old = deferred();
     const methods = {plans: 'getPlans', activePlan: 'getPlan', shopping: 'getShoppingList', feed: 'getFeed'};
-    const loaders = {plans: 'loadPlans', activePlan: 'loadActivePlan', shopping: 'loadShopping', feed: 'loadFeed'};
     const app = createApp({[methods[resource]]: () => old.promise});
     app.state.activePlanId = 1;
     app.state.shoppingPlanId = 1;
-    const loading = app[loaders[resource]]();
-    app.setSession(guest, true);
-    app.setSession(userB, true);
+    const loaders = {
+      plans: () => app.plans.loadPlans(),
+      activePlan: () => app.plans.loadActivePlan(),
+      shopping: () => app.shopping.loadShopping(),
+      feed: () => app.recipes.loadFeed(),
+    };
+    const loading = loaders[resource]();
+    app.account.setSession(guest, true);
+    app.account.setSession(userB, true);
     const snapshot = structuredClone(app.state);
     old.resolve(resource === 'plans' ? [{id: 1}] : resource === 'feed' ? {results: [{id: 11}]} : {id: 1, plan_id: 1});
     await loading;
@@ -176,8 +181,8 @@ for (const resource of ['plans', 'activePlan', 'shopping', 'feed']) {
 test('re-login to the same user also invalidates old private requests', async () => {
   const old = deferred();
   const app = createApp({getFavorites: () => old.promise});
-  const loading = app.loadFavorites();
-  app.setSession(userA, true);
+  const loading = app.recipes.loadFavorites();
+  app.account.setSession(userA, true);
   setFavorites(app.state, [{id: 22}]);
   old.resolve([{id: 11}]);
   await loading;
@@ -188,7 +193,7 @@ test('a delayed session check for an old 403 cannot clear a newer login', async 
   const session = deferred();
   const app = createApp({getSession: () => session.promise});
   const handling = app.handleError(new ApiError({type: 'auth', status: 403}));
-  app.setSession(userB, true);
+  app.account.setSession(userB, true);
   session.resolve(guest);
   await handling;
   assert.equal(app.state.session.id, userB.id);
@@ -210,7 +215,7 @@ test('logout 204 clears private state even if the subsequent GET session fails',
   app.state.plans = [{id: 1}];
   app.state.activePlan = {id: 1};
   app.state.shopping = {plan_id: 1, items: ['private']};
-  await app.logout();
+  await app.account.logout();
   assert.equal(app.state.session.authenticated, false);
   assert.equal(app.state.favorites, null);
   assert.equal(app.state.favoriteIds.size, 0);
@@ -225,7 +230,7 @@ test('logout 204 clears private state even if the subsequent GET session fails',
 test('a failed logout POST keeps the session and does not announce success', async () => {
   const app = createApp({logout: async () => { throw networkError(); }});
   setFavorites(app.state, [{id: 11}]);
-  await app.logout();
+  await app.account.logout();
   assert.equal(app.state.session.authenticated, true);
   assert.deepEqual([...app.state.favoriteIds], [11]);
   assert.equal(app.state.error.type, 'network');
@@ -236,7 +241,7 @@ test('logout clears private data immediately while optional session refresh is s
   const refresh = deferred();
   const app = createApp({getSession: () => refresh.promise});
   setFavorites(app.state, [{id: 11}]);
-  const logout = app.logout();
+  const logout = app.account.logout();
   await Promise.resolve();
   assert.equal(app.state.session.authenticated, false);
   assert.equal(app.state.favorites, null);
@@ -249,8 +254,8 @@ test('shopping invalidation also discards an already pending response for the sa
   const old = deferred();
   const app = createApp({getShoppingList: () => old.promise});
   app.state.shoppingPlanId = 1;
-  const loading = app.loadShopping();
-  app.invalidateShopping();
+  const loading = app.shopping.loadShopping();
+  app.shopping.invalidateShopping();
   old.resolve({plan_id: 1, items: ['outdated']});
   await loading;
   assert.equal(app.state.shopping, null);
@@ -272,13 +277,13 @@ for (const plansAfter of [[savedPlan(2)], []]) {
         return reads.length === 1 ? stale.promise : Promise.resolve(fresh);
       },
     });
-    app.askConfirmation = async () => true;
+    app.navigation.askConfirmation = async () => true;
     Object.assign(app.state, {
       initialLoading: false, view: 'plans', plans: [savedPlan(1), ...plansAfter],
       plansStatus: 'ready', shoppingPlanId: 1,
     });
-    const deleting = app.deletePlan(1);
-    const navigating = app.navigate('shopping');
+    const deleting = app.plans.deletePlan(1);
+    const navigating = app.navigation.navigate('shopping');
     assert.deepEqual(reads, [1]);
     mutation.resolve();
     await deleting;
@@ -308,9 +313,9 @@ for (const outcome of ['success', '403']) {
       getRecipe: (id) => id === 1 ? a.promise : b.promise,
       getSession: async () => { sessionReads += 1; return guest; },
     });
-    const old = app.openRecipeDetail(1);
+    const old = app.recipes.openRecipeDetail(1);
     app.dialog.close();
-    const next = app.openRecipeDetail(2);
+    const next = app.recipes.openRecipeDetail(2);
     app.dialog.dispatchEvent(new Event('close'));
     b.resolve({title: 'Новый рецепт'});
     await next;
@@ -333,11 +338,11 @@ test('plans 404 is kept with its resource and a successful retry clears only tha
     if (++calls === 1) throw missing;
     return [];
   }});
-  await app.loadPlans();
+  await app.plans.loadPlans();
   assert.equal(app.state.plansError, missing);
   assert.equal(app.state.error, missing);
   assert.equal(app.state.plansStatus, 'error');
-  await app.loadPlans();
+  await app.plans.loadPlans();
   assert.equal(app.state.plansError, null);
   assert.equal(app.state.error, null);
   assert.equal(app.state.plansStatus, 'ready');
@@ -350,7 +355,7 @@ test('liking a recipe refreshes favorites in the frontend', async () => {
     swipe: async (id, action) => { calls.push({id, action}); },
     getFavorites: async () => [{id: 11, title: 'Борщ'}],
   });
-  await app.swipe(11, 'like');
+  await app.recipes.swipe(11, 'like');
   assert.deepEqual(calls, [{id: 11, action: 'like'}]);
   assert.deepEqual([...app.state.favoriteIds], [11]);
   assert.ok(app.messages.includes('Добавлено в избранное'));
@@ -401,10 +406,10 @@ test('catalog combines all filters, preserves them on navigation and drops priva
   assert.match(results.innerHTML, /Суп с копчёностями/);
   assert.doesNotMatch(results.innerHTML, /Суп с грибами|Суп-пюре|Суп с фасолью/);
   assert.equal(count.textContent, 'Найдено: 1 из 4');
-  await app.navigate('feed');
-  await app.navigate('recipes');
+  await app.navigation.navigate('feed');
+  await app.navigation.navigate('recipes');
   assert.equal(app.state.catalogFavoritesOnly, true);
-  app.setSession(userB);
+  app.account.setSession(userB);
   assert.equal(app.state.catalogFavoritesOnly, false);
   assert.equal(app.state.favoriteIds.size, 0);
   assert.equal(app.state.catalogMeal, 'lunch');
@@ -414,10 +419,10 @@ test('catalog combines all filters, preserves them on navigation and drops priva
 
 test('guests can undo the last local hide without restoring earlier hides', async () => {
   const app = createApp({swipe: () => assert.fail('Guest called the server')});
-  app.setSession(guest);
-  await app.swipe(1, 'dislike');
-  await app.swipe(2, 'dislike');
-  await app.undoSwipe();
+  app.account.setSession(guest);
+  await app.recipes.swipe(1, 'dislike');
+  await app.recipes.swipe(2, 'dislike');
+  await app.recipes.undoSwipe();
   assert.deepEqual([...app.state.guestHidden], [1]);
   assert.equal(app.state.lastSwipe, null);
 });
@@ -433,10 +438,10 @@ test('successful undo refreshes feed and favorites, and duplicate clicks make on
     getFavorites: async () => undone ? [] : [recipe],
     getFeed: async () => ({results: undone ? [recipe] : []}),
   });
-  await app.swipe(recipe.id, 'like');
+  await app.recipes.swipe(recipe.id, 'like');
   assert.ok(app.state.favoriteIds.has(recipe.id));
-  const undo = app.undoSwipe();
-  await app.undoSwipe();
+  const undo = app.recipes.undoSwipe();
+  await app.recipes.undoSwipe();
   undone = true;
   pending.resolve();
   await undo;
@@ -452,8 +457,8 @@ test('late swipe response from old session cannot create an undo action or reloa
     swipe: () => pending.promise,
     getFavorites: () => assert.fail('Old user triggered a refresh'),
   });
-  const swipe = app.swipe(11, 'like');
-  app.setSession(userB);
+  const swipe = app.recipes.swipe(11, 'like');
+  app.account.setSession(userB);
   const snapshot = structuredClone(app.state);
   pending.resolve({undo_token: 'old'});
   await swipe;
@@ -483,9 +488,9 @@ test('visual picker stages the exact slot, rejects stale triggers and writes onl
     },
   });
   preparePicker(app);
-  app.openSlotPicker(2, 1, 'lunch');
+  app.plans.openSlotPicker(2, 1, 'lunch');
   assert.equal(app.dialog.open, false);
-  app.openSlotPicker(1, 1, 'lunch');
+  app.plans.openSlotPicker(1, 1, 'lunch');
   assert.match(app.dialog.innerHTML, /Суп с чечевицей/);
   assert.match(app.dialog.innerHTML, /\/media\/soup.webp/);
   assert.match(app.dialog.innerHTML, /25 мин/);
@@ -496,14 +501,14 @@ test('visual picker stages the exact slot, rejects stale triggers and writes onl
   assert.match(app.dialog.querySelector('[data-picker-results]').innerHTML, /Ничего не найдено/);
   app.onInput({target: {dataset: {input: 'picker-search'}, value: 'СУП'}});
   await app.onChange({target: {dataset: {change: 'picker-recipe'}, value: '5'}});
-  await app.savePickedSlot(21);
+  await app.plans.savePickedSlot(21);
   assert.equal(app.state.planDraft.plan.slots.length, 0);
-  await app.savePickedSlot(2);
-  await app.savePickedSlot(2);
+  await app.plans.savePickedSlot(2);
+  await app.plans.savePickedSlot(2);
   assert.equal(app.dialog.open, false);
   assert.equal(app.state.activePlan.slots.length, 0);
   assert.deepEqual(calls, []);
-  await app.savePlan();
+  await app.plans.savePlan();
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], 1);
   assert.deepEqual(calls[0][1].slots, [{day_index: 1, meal_type: 'lunch', recipe_id: 5, servings: 2}]);
@@ -512,10 +517,10 @@ test('visual picker stages the exact slot, rejects stale triggers and writes onl
 test('a saved recipe removed from favorites remains editable without becoming a picker choice', async () => {
   const app = createApp();
   preparePicker(app, {day_index: 0, meal_type: 'lunch', recipe_id: 7, recipe_title: 'Щи', servings: 2});
-  app.openSlotPicker(1, 0, 'lunch');
+  app.plans.openSlotPicker(1, 0, 'lunch');
   assert.match(app.dialog.innerHTML, /Текущее блюдо можно оставить/);
   assert.doesNotMatch(app.dialog.innerHTML, /value="7"/);
-  await app.savePickedSlot(3);
+  await app.plans.savePickedSlot(3);
   assert.equal(app.state.planDraft.plan.slots[0].servings, 3);
   assert.equal(app.state.activePlan.slots[0].servings, 2);
 });
@@ -529,11 +534,11 @@ test('purchase mutation is bound to the displayed plan and late results cannot a
   });
   const item = {ingredient_id: 7, quantity: '10.000', quantity_version: 'v1', unit: 'g', purchased: false};
   Object.assign(app.state, {shoppingPlanId: 1, shoppingStatus: 'ready', shopping: {plan_id: 1, items: [item]}});
-  await app.setPurchased(2, 7, true);
-  const mutation = app.setPurchased(1, 7, true);
-  await app.setPurchased(1, 7, true);
+  await app.shopping.setPurchased(2, 7, true);
+  const mutation = app.shopping.setPurchased(1, 7, true);
+  await app.shopping.setPurchased(1, 7, true);
   assert.deepEqual(calls, [[1, 7, {purchased: true, quantity_version: 'v1'}]]);
-  app.setSession(userB);
+  app.account.setSession(userB);
   const snapshot = structuredClone(app.state);
   pending.resolve();
   await mutation;
@@ -548,7 +553,7 @@ test('purchase conflict refreshes amounts before another attempt', async () => {
     getShoppingList: async () => updated,
   });
   Object.assign(app.state, {shoppingPlanId: 1, shoppingStatus: 'ready', shopping: {plan_id: 1, items: [item]}});
-  await app.setPurchased(1, 7, true);
+  await app.shopping.setPurchased(1, 7, true);
   assert.deepEqual(app.state.shopping, updated);
   assert.equal(app.state.error, null);
   assert.match(app.messages[0], /Список покупок изменился/);
@@ -596,7 +601,7 @@ test('private direct links and reload wait for the session before loading the re
     getShoppingList: async (id) => { calls.push('shopping'); return {plan_id: id, items: []}; },
     getFeed: () => assert.fail('Requested shopping, not feed'),
   }, browser);
-  app.setSession(guest);
+  app.account.setSession(guest);
   const starting = app.start();
   assert.deepEqual(calls, ['session']);
   assert.equal(app.state.view, 'shopping');
@@ -619,9 +624,9 @@ test('anonymous direct links stay on the private view and sign-in returns to it'
   assert.equal(reads, 0);
   assert.equal(browser.location.pathname, '/favorites');
   assert.match(app.root.innerHTML, /Избранное доступно после входа/i);
-  await app.showAuth();
+  await app.account.showAuth();
   assert.equal(browser.location.pathname + browser.location.search, '/account?next=favorites');
-  await app.login({});
+  await app.account.login({});
   assert.equal(reads, 1);
   assert.equal(browser.location.pathname, '/favorites');
   assert.equal(app.state.view, 'favorites');
@@ -638,7 +643,7 @@ test('catalog URL restores filters across reload and browser history without an 
   const app = createApp(api, browser);
   app.root.querySelector = () => null;
   await app.start();
-  await app.navigate('recipes');
+  await app.navigation.navigate('recipes');
   app.onInput({target: {dataset: {input: 'recipe-search'}, value: 'копчен'}});
   await app.onChange({target: {dataset: {change: 'catalog-meal'}, value: 'lunch'}});
   await app.onChange({target: {dataset: {change: 'catalog-time'}, value: '60'}});
@@ -653,7 +658,7 @@ test('catalog URL restores filters across reload and browser history without an 
   assert.equal(reloaded.state.catalogMaxTime, 60);
   assert.equal(reloaded.state.catalogFavoritesOnly, true);
   assert.match(reloaded.root.innerHTML, /Найдено: 1 из 2/);
-  await app.navigate('plans');
+  await app.navigation.navigate('plans');
   browser.history.back();
   assert.equal(app.state.view, 'recipes');
   assert.equal(app.state.catalogQuery, 'копчен');
@@ -676,8 +681,8 @@ test('logout removes private data and back navigation shows sign-in without priv
   }, browser);
   await app.start();
   assert.match(app.root.innerHTML, /Личный рецепт/);
-  await app.navigate('auth');
-  await app.logout();
+  await app.navigation.navigate('auth');
+  await app.account.logout();
   assert.equal(browser.location.pathname, '/');
   browser.history.back();
   assert.equal(browser.location.pathname, '/favorites');
@@ -697,7 +702,7 @@ test('returning to plans shows loading before any stale slot buttons can be used
     initialLoading: false, plans: [plan], plansStatus: 'ready',
     activePlan: plan, activePlanId: plan.id, activePlanStatus: 'ready',
   });
-  const navigating = app.navigate('plans');
+  const navigating = app.navigation.navigate('plans');
   assert.match(app.root.innerHTML, /Загружаем рационы/);
   assert.doesNotMatch(app.root.innerHTML, /Выбрать блюдо/);
   plans.resolve([]);
@@ -710,7 +715,7 @@ test('swipe clock updates in place, replaces the old deadline and expires on vis
   browser.document = Object.assign(new EventTarget(), {hidden: false});
   browser.matchMedia = () => ({matches: true});
   const app = createApp({swipe: () => assert.fail('Guest called the server')}, browser);
-  app.setSession(guest);
+  app.account.setSession(guest);
   app.state.initialLoading = false;
   let now = 0;
   app.now = () => now;
@@ -723,7 +728,7 @@ test('swipe clock updates in place, replaces the old deadline and expires on vis
   };
   app.root.querySelector = (selector) => app.state.lastSwipe ? nodes[selector] : null;
 
-  await app.swipe(1, 'dislike');
+  await app.recipes.swipe(1, 'dislike');
   assert.equal(number.textContent, 5);
   const html = app.root.innerHTML;
   now = 1000;
@@ -732,7 +737,7 @@ test('swipe clock updates in place, replaces the old deadline and expires on vis
   assert.match(description.textContent, /4 сек/);
   assert.equal(app.root.innerHTML, html);
 
-  await app.swipe(2, 'dislike');
+  await app.recipes.swipe(2, 'dislike');
   browser.document.hidden = true;
   now = 5000;
   browser.document.dispatchEvent(new Event('visibilitychange'));
@@ -742,7 +747,7 @@ test('swipe clock updates in place, replaces the old deadline and expires on vis
   browser.document.dispatchEvent(new Event('visibilitychange'));
   assert.equal(removed, 1);
   assert.equal(app.state.lastSwipe, null);
-  await app.undoSwipe();
+  await app.recipes.undoSwipe();
   assert.deepEqual([...app.state.guestHidden], [1, 2]);
 });
 
@@ -754,8 +759,8 @@ test('a late server rejection removes undo and refreshes both collections', asyn
     getFeed: async () => { refreshed++; return {results: []}; },
     getFavorites: async () => { refreshed++; return []; },
   });
-  await app.swipe(1, 'like');
-  await app.undoSwipe();
+  await app.recipes.swipe(1, 'like');
+  await app.recipes.undoSwipe();
   assert.equal(refreshed, 4);
   assert.equal(app.state.lastSwipe, null);
   assert.match(app.messages.at(-1), /уже нельзя отменить/);
@@ -779,7 +784,7 @@ test('favorite filters survive reload and removing a bookmark updates the count 
   await app.start();
   assert.match(app.root.innerHTML, /Найдено 2 из 103/);
   assert.ok(app.root.innerHTML.indexOf('Ёжики с рисом') < app.root.innerHTML.lastIndexOf('Ёжики'));
-  await app.toggleFavorite(2);
+  await app.recipes.toggleFavorite(2);
   assert.match(app.root.innerHTML, /Найдено 1 из 102/);
   assert.doesNotMatch(app.root.innerHTML, /Ёжики с рисом/);
   assert.equal(reads, 1);
@@ -798,20 +803,20 @@ test('new plan stays local until explicit save and survives a failed save with t
     },
   }, browser);
   await app.start();
-  await app.openPlanEditor('new');
+  await app.plans.openPlanEditor('new');
   app.onInput({target: {dataset: {input: 'plan-title'}, value: 'План на праздник'}});
   await app.onChange({target: {dataset: {change: 'plan-date'}, value: '2027-04-05'}});
   assert.match(app.root.innerHTML, /Есть несохранённые изменения/);
   assert.deepEqual(attempts, []);
-  await app.savePlan();
+  await app.plans.savePlan();
   assert.equal(browser.location.search, '?draft=new');
   assert.equal(app.state.planDraft.dirty, true);
   assert.equal(app.state.error.type, 'network');
-  assert.equal(app.planDrafts.get(userA.id, null).plan.title, 'План на праздник');
-  await app.savePlan();
+  assert.equal(app.plans.planDrafts.get(userA.id, null).plan.title, 'План на праздник');
+  await app.plans.savePlan();
   assert.equal(browser.location.search, '?plan_id=9');
   assert.deepEqual(attempts[0], attempts[1]);
-  assert.equal(app.planDrafts.get(userA.id, null), null);
+  assert.equal(app.plans.planDrafts.get(userA.id, null), null);
   assert.match(app.root.innerHTML, /Сохранено/);
 });
 
@@ -820,7 +825,7 @@ test('unsaved navigation can be canceled and an accepted Back keeps the draft fo
   const api = {getSession: async () => userA, getPlan: async () => savedPlan()};
   const app = createApp(api, browser);
   await app.start();
-  await app.openPlanEditor('edit', 1);
+  await app.plans.openPlanEditor('edit', 1);
   app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Мой черновик'}});
   const reload = new Event('beforeunload', {cancelable: true});
   assert.equal(browser.dispatchEvent(reload), false);
@@ -832,7 +837,7 @@ test('unsaved navigation can be canceled and an accepted Back keeps the draft fo
   app.dialog.dispatchEvent(new Event('cancel', {cancelable: true}));
   assert.equal(app.dialog.open, false);
   browser.history.back();
-  await app.resolveNavigationDecision(false);
+  await app.navigation.resolveNavigationDecision(false);
   assert.equal(browser.location.search, '');
   browser.history.forward();
   await new Promise(setImmediate);
@@ -852,13 +857,13 @@ test('duplicate uses eligible source slots only, writes no plan and clears priva
     createPlan: () => assert.fail('Duplication created a plan before Save'),
   }, browser);
   await app.start();
-  await app.duplicatePlan(1);
+  await app.plans.duplicatePlan(1);
   assert.equal(browser.location.search, '?draft=new');
   assert.deepEqual(app.state.planDraft.plan.slots, source.slots.slice(0, 1));
   assert.match(app.root.innerHTML, /Пропущено блюд · 1/);
   assert.match(app.root.innerHTML, /1 из 3 приёмов пищи заполнено/);
   assert.equal(browser.sessionStorage.length, 1);
-  app.setSession(userB);
+  app.account.setSession(userB);
   app.render();
   assert.equal(browser.sessionStorage.length, 0);
   assert.equal(app.state.planDraft, null);
@@ -877,11 +882,11 @@ test('shopping uses the same decision and preserves the draft and selected plan'
   }, browser);
   await app.start();
   app.onInput({target: {dataset: {input: 'plan-title'}, value: 'Останется в черновике'}});
-  await app.openPlanShopping(2);
+  await app.shopping.openPlanShopping(2);
   assert.equal(app.state.view, 'plans');
   assert.match(app.dialog.innerHTML, /Сохранить и перейти/);
   assert.deepEqual(shoppingReads, []);
-  await app.resolveNavigationDecision(false);
+  await app.navigation.resolveNavigationDecision(false);
   assert.equal(browser.location.pathname + browser.location.search, '/shopping?plan_id=2');
   assert.deepEqual(shoppingReads, [2]);
   browser.history.back();
@@ -898,10 +903,10 @@ test('shortening a draft asks before dropping occupied days and keeps saved slot
   app.state.initialLoading = false;
   editSavedPlan(app, original);
   const duration = {dataset: {change: 'plan-duration'}, value: '1'};
-  app.askConfirmation = async () => false;
+  app.navigation.askConfirmation = async () => false;
   await app.onChange({target: duration});
   assert.equal(app.state.planDraft.plan.duration_days, 3);
-  app.askConfirmation = async (warning) => {
+  app.navigation.askConfirmation = async (warning) => {
     assert.match(warning, /удалены блюда · 1/);
     return true;
   };
@@ -926,18 +931,18 @@ test('auto-fill uses favorites only, fills draft without any writes and respects
     updatePlan: () => assert.fail('Generation must not update an existing plan'),
   }, browser);
   await app.start();
-  await app.openPlanEditor('new');
+  await app.plans.openPlanEditor('new');
   const draft = app.state.planDraft;
   draft.plan.enabled_meals = ['lunch'];
   draft.generationServings = 3;
-  await app.autoFillPlan();
+  await app.plans.autoFillPlan();
   assert.equal(app.state.planDraft, draft);
   assert.equal(draft.plan.slots.length, 3);
   assert.deepEqual(new Set(draft.plan.slots.map(({recipe_id}) => recipe_id)), new Set([4, 5, 6]));
   assert.ok(draft.plan.slots.every(({servings}) => servings === 3));
   assert.equal(draft.dirty, true);
   assert.match(app.root.innerHTML, /Есть несохранённые изменения/);
-  assert.equal(app.planDrafts.get(userA.id, null).plan.slots.length, 3);
+  assert.equal(app.plans.planDrafts.get(userA.id, null).plan.slots.length, 3);
 });
 
 test('auto-fill refuses to overwrite existing draft without confirmation and keeps previous selection', async () => {
@@ -957,11 +962,11 @@ test('auto-fill refuses to overwrite existing draft without confirmation and kee
     ],
   });
   app.state.planDraft = draft;
-  app.askConfirmation = async () => false;
-  await app.autoFillPlan({replace: true});
+  app.navigation.askConfirmation = async () => false;
+  await app.plans.autoFillPlan({replace: true});
   assert.equal(draft.plan.slots[0].recipe_id, 5);
-  app.askConfirmation = async () => true;
-  await app.autoFillPlan({replace: true});
+  app.navigation.askConfirmation = async () => true;
+  await app.plans.autoFillPlan({replace: true});
   assert.equal(draft.plan.slots[0].recipe_id, 6);
   assert.equal(draft.dirty, true);
 });
@@ -977,14 +982,14 @@ test('account data forms use API without changing auth status and clear after lo
   });
   app.state.initialLoading = false;
   app.state.view = 'auth';
-  await app.loadAccount();
+  await app.account.loadAccount();
   assert.match(app.root.innerHTML, /Личные данные/);
-  await app.updateAccountNames({first_name: 'Саша', last_name: 'Иванов'});
+  await app.account.updateAccountNames({first_name: 'Саша', last_name: 'Иванов'});
   assert.equal(app.state.account.last_name, 'Иванов');
-  await app.updateAccountEmail({email: 'new@example.com', current_password: 'Valid_pass123'});
+  await app.account.updateAccountEmail({email: 'new@example.com', current_password: 'Valid_pass123'});
   assert.equal(app.state.session.email, 'new@example.com');
   assert.equal(app.state.session.id, userA.id);
-  app.setSession(guest);
+  app.account.setSession(guest);
   assert.equal(app.state.account, null);
   assert.equal(app.state.accountStatus, 'idle');
 });
@@ -995,7 +1000,7 @@ test('registration sends first name with email and password', async () => {
     payload = value;
     return {email: value.email, first_name: value.first_name};
   }});
-  await app.register({first_name: 'Алиса', email: 'alice@example.com', password: 'Valid_pass123'});
+  await app.account.register({first_name: 'Алиса', email: 'alice@example.com', password: 'Valid_pass123'});
   assert.equal(payload.first_name, 'Алиса');
   assert.equal(app.state.registeredEmail, 'alice@example.com');
 });
@@ -1023,21 +1028,21 @@ test('beforeunload is registered exactly while the active draft is dirty, includ
   editTitle(app, 'Последняя правка');
   const reloaded = createApp(api, browser);
   // A real reload removes listeners attached to the old document.
-  browser.removeEventListener('beforeunload', app.confirmUnload);
+  browser.removeEventListener('beforeunload', app.navigation.confirmUnload);
   await reloaded.start();
   assert.match(reloaded.root.innerHTML, /Восстановлен несохранённый черновик/);
   assert.equal(reloaded.state.planDraft.plan.title, 'Последняя правка');
   assert.equal(unloadIsBlocked(browser), true);
-  await reloaded.savePlan();
+  await reloaded.plans.savePlan();
   assert.equal(unloadIsBlocked(browser), false);
   assert.match(reloaded.root.innerHTML, /Сохранено/);
   editTitle(reloaded, 'Удаляемая правка');
-  const discarding = reloaded.discardDraft();
+  const discarding = reloaded.plans.discardDraft();
   assert.match(reloaded.dialog.innerHTML, /Удалить несохранённые изменения/);
   await reloaded.onClick({target: {closest: () => ({dataset: {action: 'accept-confirmation'}})}});
   await discarding;
   assert.equal(unloadIsBlocked(browser), false);
-  assert.equal(reloaded.planDrafts.get(userA.id, 1), null);
+  assert.equal(reloaded.plans.planDrafts.get(userA.id, 1), null);
 });
 
 test('new drafts restore after reload without opening a new plan or changing the creation key', async () => {
@@ -1069,15 +1074,15 @@ for (const [count, view, options] of [
     const app = createApp(api, browser);
     await app.start();
     for (let i = 1; i <= count; i++) editTitle(app, `Правка ${i}`);
-    await app.navigate(view, options);
-    await app.navigate('feed');
-    assert.equal(app.navigationDecision.destination.view, view);
+    await app.navigation.navigate(view, options);
+    await app.navigation.navigate('feed');
+    assert.equal(app.navigation.navigationDecision.destination.view, view);
     assert.equal(app.dialog.open, true);
     assert.equal(browser.location.search, '?plan_id=1');
-    await app.resolveNavigationDecision(false);
+    await app.navigation.resolveNavigationDecision(false);
     assert.equal(app.dialog.open, false);
     assert.equal(app.state.view, view);
-    assert.equal(app.planDrafts.get(userA.id, 1).plan.title, `Правка ${count}`);
+    assert.equal(app.plans.planDrafts.get(userA.id, 1).plan.title, `Правка ${count}`);
     assert.equal(unloadIsBlocked(browser), false);
   });
 }
@@ -1092,19 +1097,19 @@ for (const error of [networkError(), new ApiError({status: 409}), new ApiError({
       updatePlan: () => { writes++; return write.promise; }}, browser);
     await app.start();
     editTitle(app, 'Мой рацион');
-    await app.navigate('auth');
-    const choosing = app.resolveNavigationDecision(true);
-    await app.resolveNavigationDecision(true);
-    await app.navigate('feed');
+    await app.navigation.navigate('auth');
+    const choosing = app.navigation.resolveNavigationDecision(true);
+    await app.navigation.resolveNavigationDecision(true);
+    await app.navigation.navigate('feed');
     assert.equal(writes, 1);
     assert.match(app.root.innerHTML, /Сохраняем рацион…/);
     write.reject(error);
     await choosing;
     assert.equal(browser.location.pathname + browser.location.search, '/plans?plan_id=1');
     assert.equal(app.state.planDraft.plan.title, 'Мой рацион');
-    assert.equal(app.planDrafts.get(userA.id, 1).plan.title, 'Мой рацион');
+    assert.equal(app.plans.planDrafts.get(userA.id, 1).plan.title, 'Мой рацион');
     assert.ok(app.state.error);
-    await app.navigate('recipes');
+    await app.navigation.navigate('recipes');
     assert.equal(app.dialog.open, true);
   });
 }
@@ -1118,13 +1123,13 @@ test('save and leave creates a new plan before opening its shopping list', async
   }, browser);
   await app.start();
   editTitle(app, 'Поход за продуктами');
-  await app.navigate('shopping');
+  await app.navigation.navigate('shopping');
   assert.match(app.dialog.innerHTML, /Покупки доступны после сохранения/);
   assert.doesNotMatch(app.dialog.innerHTML, /Перейти без сохранения/);
-  await app.resolveNavigationDecision(true);
+  await app.navigation.resolveNavigationDecision(true);
   assert.equal(browser.location.pathname + browser.location.search, '/shopping?plan_id=8');
   assert.equal(app.state.shopping.plan_id, 8);
-  assert.equal(app.planDrafts.get(userA.id, null), null);
+  assert.equal(app.plans.planDrafts.get(userA.id, null), null);
 });
 
 test('transfer and undo use draft storage, older transfers cannot overwrite new edits', async () => {
@@ -1141,22 +1146,22 @@ test('transfer and undo use draft storage, older transfers cannot overwrite new 
   await app.start();
   const source = {type: 'favorite', recipe_id: recipe.id};
   const lunch = {day_index: 0, meal_type: 'lunch'};
-  const add = () => app.applyTransfer(app.transferSource(source), lunch);
+  const add = () => app.plans.applyTransfer(app.plans.transferSource(source), lunch);
   assert.equal(add().result, 'added');
   assert.equal(unloadIsBlocked(browser), true);
-  assert.equal(app.planDrafts.get(userA.id, 1).plan.slots[0].recipe_id, 10);
+  assert.equal(app.plans.planDrafts.get(userA.id, 1).plan.slots[0].recipe_id, 10);
   assert.deepEqual(update, []);
-  app.undoTransfer();
+  app.plans.undoTransfer();
   assert.equal(unloadIsBlocked(browser), false);
   assert.deepEqual(app.state.planDraft.plan.slots, []);
   assert.equal(add().result, 'added');
-  const previousContext = app.transferSource(source);
+  const previousContext = app.plans.transferSource(source);
   editTitle(app, 'Новая правка');
-  app.undoTransfer();
+  app.plans.undoTransfer();
   assert.equal(app.state.planDraft.plan.slots.length, 1);
-  assert.equal(app.applyTransfer(previousContext, {...lunch, day_index: 1}).result, 'blocked');
+  assert.equal(app.plans.applyTransfer(previousContext, {...lunch, day_index: 1}).result, 'blocked');
   assert.deepEqual(update, []);
-  await app.savePlan();
+  await app.plans.savePlan();
   assert.equal(update.length, 1);
   assert.deepEqual(update[0].slots, [{...lunch, recipe_id: 10, servings: 1}]);
 });
@@ -1166,13 +1171,13 @@ test('session switch cancels the dialog and cannot commit a destination for the 
   const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan()}, browser);
   await app.start();
   editTitle(app, 'Первый аккаунт');
-  await app.navigate('recipes');
+  await app.navigation.navigate('recipes');
   assert.equal(app.dialog.open, true);
-  app.setSession(userB);
-  await app.resolveNavigationDecision(false);
+  app.account.setSession(userB);
+  await app.navigation.resolveNavigationDecision(false);
   assert.equal(app.dialog.open, false);
   assert.equal(app.state.view, 'plans');
-  assert.equal(app.planDrafts.get(userA.id, 1), null);
+  assert.equal(app.plans.planDrafts.get(userA.id, 1), null);
   assert.equal(unloadIsBlocked(browser), false);
 });
 
@@ -1185,7 +1190,7 @@ test('Forward asks before leaving a dirty plan and replays the original destinat
     updatePlan: async (id, data) => ({...savedPlan(id), ...data, version: 2}),
   }, browser);
   await app.start();
-  await app.navigate('recipes');
+  await app.navigation.navigate('recipes');
   browser.history.back();
   await new Promise(setImmediate);
   editTitle(app, 'Сохранить перед переходом вперёд');
@@ -1194,7 +1199,7 @@ test('Forward asks before leaving a dirty plan and replays the original destinat
   assert.equal(app.dialog.open, true);
   browser.history.forward();
   assert.equal(browser.location.search, '?plan_id=1');
-  await app.resolveNavigationDecision(true);
+  await app.navigation.resolveNavigationDecision(true);
   assert.equal(browser.location.pathname, '/recipes');
   assert.equal(app.dialog.open, false);
   browser.history.back();
@@ -1205,8 +1210,8 @@ test('a stale auto-fill response cannot replace later changes to editor settings
   const read = deferred();
   const app = createApp({getFavorites: () => read.promise});
   editSavedPlan(app, savedPlan());
-  const generating = app.autoFillPlan();
-  await app.changePlanSettings({dataset: {change: 'plan-duration'}, value: '1'});
+  const generating = app.plans.autoFillPlan();
+  await app.plans.changePlanSettings({dataset: {change: 'plan-duration'}, value: '1'});
   read.resolve([{id: 4, title: 'Суп', meal_types: ['lunch']}]);
   await generating;
   assert.equal(app.state.planDraft.plan.duration_days, 1);
@@ -1218,12 +1223,12 @@ test('session expiry protects the draft until the original account signs in agai
   const app = createApp({getSession: async () => userA, getPlan: async () => savedPlan()}, browser);
   await app.start();
   editTitle(app, 'Черновик после истечения сессии');
-  app.setSession(guest);
+  app.account.setSession(guest);
   assert.equal(app.state.planDraft, null);
   assert.equal(unloadIsBlocked(browser), false);
-  assert.equal(app.planDrafts.get(userA.id, 1).plan.title, 'Черновик после истечения сессии');
-  app.setSession(userA);
-  await app.openPlanEditor('edit', 1);
+  assert.equal(app.plans.planDrafts.get(userA.id, 1).plan.title, 'Черновик после истечения сессии');
+  app.account.setSession(userA);
+  await app.plans.openPlanEditor('edit', 1);
   assert.equal(app.state.planDraft.plan.title, 'Черновик после истечения сессии');
   assert.equal(app.state.restoredDraft, true);
 });
