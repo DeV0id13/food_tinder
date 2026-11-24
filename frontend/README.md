@@ -35,7 +35,7 @@ Guest dislike живёт только в памяти открытой стра�
 
 ## Требования
 
-- Node.js 22.12+ (подходит и Node.js 24);
+- Node.js 22.13+ (подходит и Node.js 24);
 - pnpm 11+;
 - Django backend на `http://127.0.0.1:8000`;
 - запуск frontend на `http://localhost:5173` или через [локальную сеть](#проверка-с-телефона).
@@ -168,7 +168,7 @@ Django. На MacBook Vite проксирует их на том же origin, ч�
 pnpm dev          # Vite dev server, localhost:5173, proxy /api/
 pnpm test         # Node test runner
 pnpm run test:integration # live smoke через Vite + Django + PostgreSQL
-pnpm lint         # синтаксическая проверка критичных JS-модулей
+pnpm lint         # ESLint для src, тестов и конфигурации
 pnpm build        # production build в frontend/dist/
 pnpm preview      # просмотр готового build на localhost:4173
 ```
@@ -210,7 +210,8 @@ frontend/
 │   ├── state/
 │   ├── utils/
 │   ├── views/
-│   ├── app.js                  # controller и server-state orchestration
+│   ├── controllers/            # аккаунт, рецепты, рационы, покупки и навигация
+│   ├── app.js                  # композиция контроллеров, события и общие запросы
 │   ├── main.js
 │   └── styles.css
 └── tests/

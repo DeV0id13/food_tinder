@@ -11,6 +11,7 @@ package = false
 base = [
     "Django==5.2.17",
     "djangorestframework==3.18.3",
+    "drf-spectacular[sidecar]==0.30.0",
     "psycopg[binary]==3.3.5",
     "Pillow==13.0.0",
 ]

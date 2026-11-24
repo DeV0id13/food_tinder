@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.catalog.serializers import RecipeSummarySerializer as RecipeSummarySerializer
@@ -24,6 +26,7 @@ class UndoSwipeSerializer(StrictSerializer):
     undo_token = serializers.UUIDField()
 
 
+@extend_schema_field(OpenApiTypes.BOOL)
 class StrictBooleanField(serializers.Field):
     default_error_messages = {"invalid": "Expected a JSON boolean."}
 
@@ -45,7 +48,7 @@ class RecipeStateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserRecipeState
-        fields = ("recipe_id", "liked_at", "disliked_until", "is_favorite")
+        fields: tuple[str, ...] = ("recipe_id", "liked_at", "disliked_until", "is_favorite")
 
 
 class FavoriteRecipeSerializer(RecipeSummarySerializer):
@@ -53,3 +56,11 @@ class FavoriteRecipeSerializer(RecipeSummarySerializer):
 
     class Meta(RecipeSummarySerializer.Meta):
         fields = (*RecipeSummarySerializer.Meta.fields, "favorited_at")
+
+
+class SwipeResultSerializer(RecipeStateSerializer):
+    undo_token = serializers.UUIDField()
+    undo_remaining_ms = serializers.IntegerField(min_value=0)
+
+    class Meta(RecipeStateSerializer.Meta):
+        fields = (*RecipeStateSerializer.Meta.fields, "undo_token", "undo_remaining_ms")

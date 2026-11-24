@@ -155,6 +155,8 @@ jobs:
         run: uv run --locked --only-group dev python manage.py makemigrations --check --dry-run
       - name: Apply all migrations on clean PostgreSQL
         run: uv run --locked --only-group dev python manage.py migrate --noinput
+      - name: Generate and validate OpenAPI
+        run: uv run --locked --only-group dev python manage.py spectacular --file /tmp/foodtinder-openapi.yaml --validate --fail-on-warn
       - name: Full pytest suite with branch coverage
         run: >-
           uv run --locked --only-group dev pytest --durations=20 --cov

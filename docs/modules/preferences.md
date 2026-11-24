@@ -6,6 +6,7 @@
 
 - `apps/preferences/models.py` — модель `UserRecipeState` и уникальность `(user, recipe)`.
 - `apps/preferences/serializers.py` — `RecipeSummary`, `RecipeState` и входные serializers.
+- `apps/preferences/services.py` — транзакции свайпов, отмены и закладок с блокировкой пользователя.
 - `apps/preferences/views.py` — feed, swipes, favorite и favorites.
 - `apps/preferences/selectors.py` — одиночная и пакетная проверка избранного для planning.
 - `apps/preferences/urls.py` — маршруты FT-03.

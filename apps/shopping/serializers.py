@@ -1,3 +1,5 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .calculation import ShoppingItem, format_quantity
@@ -14,8 +16,13 @@ class ShoppingListExportQuerySerializer(ShoppingListQuerySerializer):
     file_type = serializers.ChoiceField(choices=FILE_TYPES)
 
 
+@extend_schema_field(OpenApiTypes.BOOL)
+class PurchaseFlagField(serializers.JSONField):
+    pass
+
+
 class PurchaseSerializer(serializers.Serializer):
-    purchased = serializers.JSONField()
+    purchased = PurchaseFlagField()
     quantity_version = serializers.RegexField(r"\A[0-9a-f]{64}\Z", trim_whitespace=False)
 
     def validate_purchased(self, value: object) -> bool:
@@ -40,3 +47,12 @@ class ShoppingItemSerializer(serializers.Serializer):
 
     def get_quantity(self, item: ShoppingItem) -> str:
         return format_quantity(item.quantity)
+
+
+class ShoppingChecklistItemSerializer(ShoppingItemSerializer):
+    purchased = serializers.BooleanField()
+
+
+class ShoppingChecklistSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField()
+    items = ShoppingChecklistItemSerializer(many=True)

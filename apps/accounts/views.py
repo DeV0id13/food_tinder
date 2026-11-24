@@ -7,6 +7,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
+from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes
@@ -14,16 +15,27 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from common.schema import (
+    CSRF_REQUIRED,
+    RATE_LIMITED,
+    RETRY_AFTER,
+    SESSION_REQUIRED,
+    VALIDATION_ERROR,
+)
+
 from .authentication import authenticated_user
 from .models import User, UserProfile
 from .rate_limit import limit_auth_attempt
 from .serializers import (
     AccountNamesSerializer,
+    AccountSerializer,
     ChangeEmailSerializer,
     LoginSerializer,
     LogoutSerializer,
     ProfileSerializer,
+    RegisteredUserSerializer,
     RegisterSerializer,
+    SessionSerializer,
 )
 from .services import change_user_email, register_user
 
@@ -43,6 +55,7 @@ def _session_data(user: User | AnonymousUser) -> dict[str, bool | int | str | No
 
 @never_cache
 @ensure_csrf_cookie
+@extend_schema(responses=SessionSerializer, summary="Состояние сессии и выдача CSRF-cookie")
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def session(request: Request) -> Response:
@@ -50,6 +63,17 @@ def session(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(
+    request=RegisterSerializer,
+    parameters=[RETRY_AFTER],
+    responses={
+        201: RegisteredUserSerializer,
+        400: VALIDATION_ERROR,
+        403: CSRF_REQUIRED,
+        429: RATE_LIMITED,
+    },
+    summary="Регистрация без автоматического входа",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register(request: Request) -> Response:
@@ -66,6 +90,17 @@ def register(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(
+    request=LoginSerializer,
+    parameters=[RETRY_AFTER],
+    responses={
+        200: SessionSerializer,
+        400: VALIDATION_ERROR,
+        403: CSRF_REQUIRED,
+        429: RATE_LIMITED,
+    },
+    summary="Вход с установкой сессии и ротацией CSRF-cookie",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login(request: Request) -> Response:
@@ -86,6 +121,11 @@ def login(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(
+    request=None,
+    responses={204: None, 400: VALIDATION_ERROR, 403: CSRF_REQUIRED},
+    summary="Выход из сессии без тела запроса",
+)
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def logout(request: Request) -> Response:
@@ -97,6 +137,12 @@ def logout(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(methods=["GET"], responses={200: ProfileSerializer, 403: SESSION_REQUIRED})
+@extend_schema(
+    methods=["PATCH"],
+    request=ProfileSerializer,
+    responses={200: ProfileSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+)
 @api_view(["GET", "PATCH"])
 def profile(request: Request) -> Response:
     user = authenticated_user(request)
@@ -119,6 +165,12 @@ def _account_data(user: User) -> dict[str, str]:
 
 
 @never_cache
+@extend_schema(methods=["GET"], responses={200: AccountSerializer, 403: SESSION_REQUIRED})
+@extend_schema(
+    methods=["PATCH"],
+    request=AccountNamesSerializer,
+    responses={200: AccountSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+)
 @api_view(["GET", "PATCH"])
 def account(request: Request) -> Response:
     if request.method == "GET":
@@ -136,6 +188,11 @@ def account(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(
+    request=ChangeEmailSerializer,
+    responses={200: AccountSerializer, 400: VALIDATION_ERROR, 403: SESSION_REQUIRED},
+    summary="Смена email по текущему паролю",
+)
 @api_view(["POST"])
 def change_email(request: Request) -> Response:
     serializer = ChangeEmailSerializer(data=request.data)

@@ -46,7 +46,7 @@ increase total wall-clock time and is intentionally retained.
    `GITHUB_SHA` and that the `deploy production` job waits for production
    Environment approval even if both images were published already.
 6. On the VM, verify `compose pull web proxy`, one ephemeral web invocation,
-   healthy Postgres/web/proxy and the /api/v1/health/ response.
+   healthy Postgres/web/proxy and the `/api/v1/ready/` response.
 7. Compare the end-to-end duration of several ordinary master push runs with
    #52/#50/#48; exclude the human approval interval when measuring machine speed.
 

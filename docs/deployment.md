@@ -8,9 +8,8 @@ image with Trivy, and publishes it with the same commit SHA **only after both
 Trivy scans pass**. Pull request and manual CI runs build and scan but never
 publish images or deploy. After **all seven checks** pass, the deploy job
 **waits for the required reviewer approval** from the `production` GitHub
-Environment. The deploy job never rebuilds an image.
-Configure and **save** Required reviewers before merging this change,
-otherwise the deploy job may start without approval.
+Environment. The deploy job never rebuilds an image. Configure required reviewers when setting
+up the GitHub Environment.
 
 ## One-time prerequisites
 
@@ -94,9 +93,11 @@ or volumes are deleted by the workflow.
 4. The deploy job checks `origin/master` against the approved commit SHA,
    pulls **only web and proxy** images, runs migrations and collectstatic in one
    temporary container, and updates the web/proxy services without rebuilding.
-5. For the temporary `SITE_ADDRESS=:80` configuration, the workflow checks
-   Caddy via localhost. For a real HTTPS domain, also verify public DNS, TLS
-   and the browser separately.
+5. The workflow verifies that `postgres`, `web` and `proxy` are running and
+   retries Django readiness with a configured Host. The internal check
+   emulates HTTPS when TLS is terminated outside Django. For the current
+   `SITE_ADDRESS=:80` configuration, it also checks readiness through Caddy over
+   loopback using the configured HTTP Host and loads the frontend.
 6. The deploy job is **not** triggered for pull requests or manual dispatch.
    Keep required Environment reviewers and master branch protection enabled.
 7. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
@@ -110,14 +111,50 @@ Persistent named Docker volumes: `postgres_data`, `recipe_photos`,
 `staticfiles`, `caddy_data`, `caddy_config`. Never run `down -v` in
 production. Database migrations are **not** rolled back automatically.
 
+## Health, readiness and logging
+
+| Probe | Success | Failure |
+| --- | --- | --- |
+| `GET /api/v1/health/` | 200 and `{"status":"ok"}` from the HTTP process | HTTP process or proxy unavailable |
+| `GET /api/v1/ready/` | 200 and `{"status":"ok"}` after authenticating to PostgreSQL and running `SELECT 1` | 503 and `{"status":"unavailable"}` on failure or timeout |
+
+Both probes are public. Readiness bypasses session loading, uses a fresh short
+connection with a two-second deadline and sends `Cache-Control: no-store`.
+Its HTTP body contains only the status. The deploy job makes a bounded number
+of attempts while the services start.
+
+Django writes JSON lines to stderr in production and readable text in dev.
+`DJANGO_LOG_LEVEL` defaults to `INFO` and accepts `DEBUG`, `INFO`, `WARNING`,
+`ERROR` and `CRITICAL`. The format includes a UTC timestamp, event, severity,
+HTTP status or resolved view when available and safe exception context. Auth
+events record successful registration/login and the first limit rejection
+in each window. Gunicorn access entries include HTTP status and duration.
+
+The [auth limits and defaults](modules/accounts.md#лимиты-авторизации) require
+no new `.env.prod` variables. Production Compose trusts the dedicated client
+IP header because only Caddy exposes the app to the network. Caddy overwrites
+that header with its immediate peer address. Keep Gunicorn's port private.
+The migration creates only the independent counter table and its expiry
+index. [API documentation](api.md) is disabled in production by default.
+
+For HTTPS use exact `DJANGO_ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`
+and leave secure cookies and redirect enabled. Enable
+`DJANGO_TRUST_PROXY_HEADERS=true` behind the existing trusted Caddy proxy.
+HSTS defaults to zero, configured through `DJANGO_SECURE_HSTS_SECONDS`,
+`DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS` and `DJANGO_SECURE_HSTS_PRELOAD`.
+Use `POSTGRES_SSLMODE=verify-full` when PostgreSQL is configured with a
+trusted TLS certificate. Email settings use `EMAIL_BACKEND`, `EMAIL_HOST`,
+`EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`,
+`EMAIL_USE_SSL`, `EMAIL_TIMEOUT` and `DEFAULT_FROM_EMAIL`; select at most one
+of TLS or SSL. Password reset is currently unavailable.
+
 ## Catalog images and backups
 
-The backend image includes the recipe import command and the tracked manifest.
-Prepare photo inputs separately in the ignored `catalog-import` directory.
-A fresh database will not automatically contain the 62 recipe records or 58
-photographs verified locally in FT-06. Import approved data and upload source
-photos separately using `docs/modules/catalog.md`. Do not assume that the
-manifest contains the image bytes.
+The repository contains the import command and a tracked metadata manifest.
+Catalog records live in PostgreSQL; uploaded recipe photos live in the
+`recipe_photos` volume. New installations start with an empty catalog. See
+[the catalog import guide](modules/catalog.md#импорт-каталога) for preparation
+and validation of import inputs.
 
 Back up PostgreSQL with `pg_dump` and the `recipe_photos` Docker volume;
 store encrypted copies off-VM and test restoration. Back up before migrations.

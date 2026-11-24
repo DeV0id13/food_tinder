@@ -3,6 +3,8 @@ from collections.abc import Iterable
 from django.db import transaction
 from django.http import HttpResponse
 from django.views.decorators.cache import never_cache
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, content_negotiation_class, parser_classes
 from rest_framework.exceptions import ValidationError
@@ -14,10 +16,18 @@ from rest_framework.response import Response
 
 from apps.accounts.authentication import authenticated_user
 from apps.planning.selectors import get_locked_plan_for_user
+from common.schema import (
+    NOT_FOUND,
+    PLAN_ID,
+    SESSION_REQUIRED,
+    VALIDATION_ERROR,
+    DetailErrorSerializer,
+)
 
 from .exporters import render_csv, render_txt
 from .serializers import (
     PurchaseSerializer,
+    ShoppingChecklistSerializer,
     ShoppingItemSerializer,
     ShoppingListExportQuerySerializer,
     ShoppingListQuerySerializer,
@@ -48,6 +58,16 @@ class FileTypeContentNegotiation(BaseContentNegotiation):
 
 
 @never_cache
+@extend_schema(
+    parameters=[ShoppingListQuerySerializer],
+    responses={
+        200: ShoppingChecklistSerializer,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+    },
+    summary="Покупки выбранного рациона с отметками",
+)
 @api_view(["GET"])
 def shopping_list(request: Request) -> Response:
     query = ShoppingListQuerySerializer(data=request.query_params)
@@ -66,6 +86,22 @@ def shopping_list(request: Request) -> Response:
 
 
 @never_cache
+@extend_schema(
+    request=PurchaseSerializer,
+    parameters=[
+        PLAN_ID,
+        OpenApiParameter("ingredient_id", OpenApiTypes.INT64, OpenApiParameter.PATH, required=True),
+    ],
+    responses={
+        204: None,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+        409: DetailErrorSerializer,
+        415: DetailErrorSerializer,
+    },
+    summary="Изменить отметку при совпадении версии количества",
+)
 @api_view(["PUT"])
 @parser_classes([JSONParser])
 def purchase(request: Request, plan_id: int, ingredient_id: int) -> Response:
@@ -78,6 +114,17 @@ def purchase(request: Request, plan_id: int, ingredient_id: int) -> Response:
 
 
 @never_cache
+@extend_schema(
+    parameters=[PLAN_ID],
+    responses={
+        204: None,
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+        415: DetailErrorSerializer,
+    },
+    summary="Снять все отметки с покупок рациона",
+)
 @api_view(["DELETE"])
 @parser_classes([JSONParser])
 def clear_purchases(request: Request, plan_id: int) -> Response:
@@ -90,6 +137,26 @@ def clear_purchases(request: Request, plan_id: int) -> Response:
 
 
 @never_cache
+@extend_schema(
+    parameters=[
+        ShoppingListExportQuerySerializer,
+        OpenApiParameter(
+            "Content-Disposition",
+            OpenApiTypes.STR,
+            OpenApiParameter.HEADER,
+            response=[200],
+            description="Вложение с именем shopping-list-{plan_id}.csv или .txt.",
+        ),
+    ],
+    responses={
+        (200, "text/csv"): OpenApiResponse(OpenApiTypes.BINARY, "CSV в UTF-8 с BOM."),
+        (200, "text/plain"): OpenApiResponse(OpenApiTypes.BINARY, "TXT в UTF-8."),
+        400: VALIDATION_ERROR,
+        403: SESSION_REQUIRED,
+        404: NOT_FOUND,
+    },
+    summary="Скачать покупки в выбранном формате",
+)
 @api_view(["GET"])
 @content_negotiation_class(FileTypeContentNegotiation)
 def shopping_list_export(request: Request) -> HttpResponse:

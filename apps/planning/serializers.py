@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import cast
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.catalog.serializers import recipe_image_url
@@ -82,8 +83,14 @@ class EditorUpdateSerializer(MealPlanCreateSerializer):
     version = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
 
 
+@extend_schema_field({"type": "array", "items": {"type": "string", "enum": list(MEAL_TYPES)}})
+class PlanMealsField(serializers.JSONField):
+    pass
+
+
 class MealPlanSummarySerializer(serializers.ModelSerializer):
     filled_slots = serializers.SerializerMethodField()
+    enabled_meals = PlanMealsField(read_only=True)
 
     class Meta:
         model = MealPlan
@@ -133,6 +140,7 @@ class MealPlanDetailSerializer(MealPlanSummarySerializer):
         fields = (*MealPlanSummarySerializer.Meta.fields, "slots")
         read_only_fields = fields
 
+    @extend_schema_field(MealPlanSlotSerializer(many=True))
     def get_slots(self, obj: MealPlan) -> list[dict[str, object]]:
         slots = sorted(
             obj.slots.all(),

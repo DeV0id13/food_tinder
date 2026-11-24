@@ -1,307 +1,88 @@
 # FoodTinder
 
-Веб-приложение для выбора рецептов, планирования питания и покупок. После регистрации
-и входа можно сохранять рецепты из ленты, собирать рацион на 1, 3 или 7 дней вручную
-или из избранного, отмечать покупки и скачивать список в CSV/TXT.
+FoodTinder помогает выбирать рецепты, составлять рацион на 1, 3 или 7 дней и
+получать список покупок из сохранённого плана. Рецепты доступны гостям. Свайпы,
+избранное, рационы и отметки о покупках привязаны к аккаунту. Покупки можно
+выгрузить в CSV или TXT.
 
-Запуск интерфейса и сквозная проверка описаны во [frontend README](frontend/README.md).
-Для наполнения локальной базы используйте [импорт каталога](docs/modules/catalog.md#импорт-каталога)
-или Django Admin.
+**Стек** — Python 3.12+, Django 5.2 LTS, DRF, PostgreSQL 16+, vanilla JS и Vite.
+Зависимости закреплены в `uv.lock` и `frontend/pnpm-lock.yaml`. В production
+Gunicorn запускает Django, а Caddy раздаёт сайт, static и media на одном origin.
 
-## Stack
+## Быстрый старт
 
-- Python 3.12+, Django 5.2 LTS, Django REST Framework.
-- PostgreSQL 16+, Django ORM и migrations.
-- Django sessions, SessionAuthentication, Django Admin.
-- psycopg 3 для PostgreSQL, Pillow для проверки изображений в ImageField.
-- Docker / Docker Compose; Gunicorn в production image.
-- Vite и vanilla JavaScript; Caddy раздаёт frontend, static и media в production.
-- pytest, pytest-django, Ruff, mypy и встроенный Node test runner.
+Нужны Git, Docker с Compose v2, Node.js 22.13+ (подходит Node.js 24) и pnpm 11.
+Из корня репозитория создайте локальный `.env` со случайными секретами:
 
-Прямые Python-зависимости закреплены в `pyproject.toml`, а все транзитивные
-версии и хеши — в коммитируемом `uv.lock`. Используется **uv 0.13.9**
-с группами `base`, `dev`, `prod`, `security`. Frontend остаётся на pnpm.
-Окружение development не устанавливает Gunicorn; production не устанавливает инструменты тестирования.
+```sh
+docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.12-slim python docker/init_env.py
+docker compose build web
+docker compose up -d --wait postgres
+docker compose run --rm web python manage.py migrate
+docker compose up -d web
+```
 
-## Architecture
+Существующий `.env` сохраняется. Django слушает `http://127.0.0.1:8000`.
+Запустите frontend в отдельном терминале и откройте `http://localhost:5173/`:
 
-Модульный монолит: один Django-проект и одна PostgreSQL БД, разделение по предметным областям.
+```sh
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-| App | Ответственность |
+Для работы с пустым каталогом создайте администратора командой
+`docker compose run --rm web python manage.py createsuperuser` и откройте
+`http://localhost:8000/admin/`. Каталог также можно наполнить через
+[импорт](docs/modules/catalog.md#импорт-каталога). Остановка через
+`docker compose down` сохраняет данные в именованном томе.
+
+Если Django запускается на хосте, установите **uv 0.13.9**, выполните
+`uv sync --locked --only-group dev` и передайте переменные локальной PostgreSQL
+процессу Django. Compose читает `.env` при запуске контейнеров. Подробности
+приведены в [инструкции frontend](frontend/README.md).
+
+## Архитектура и документация
+
+| Модуль | Ответственность |
 | --- | --- |
-| [accounts](docs/modules/accounts.md) | Регистрация, сессия, профиль и изменение данных аккаунта |
+| [accounts](docs/modules/accounts.md) | Email-вход, Django-сессии, профиль, лимиты входа и регистрации |
 | [catalog](docs/modules/catalog.md) | Рецепты, ингредиенты, состав, фотографии, Admin и импорт |
-| [preferences](docs/modules/preferences.md) | Персональная лента, реакции, отмена свайпа и закладки |
-| [planning](docs/modules/planning.md) | Планы на 1/3/7 дней, слоты, порции и атомарное сохранение |
-| [shopping](docs/modules/shopping.md) | Расчёт покупок, отметки и CSV/TXT экспорт |
+| [preferences](docs/modules/preferences.md) | Лента, лайки, временные дизлайки, закладки и отмена свайпа |
+| [planning](docs/modules/planning.md) | Рационы, слоты, порции и атомарное сохранение |
+| [shopping](docs/modules/shopping.md) | Расчёт покупок, отметки и экспорт |
 
-В `common` находится health view. [Автоподбор рациона](docs/modules/auto-plan.md)
-работает в клиентском черновике и сохраняет результат через существующий API планов.
+- [Архитектура и последовательность сохранения рациона](docs/architecture.md)
+- [ER-диаграмма и ограничения данных](docs/data-model.md)
+- [CI/CD и разница между PR и push в master](docs/ci-cd.md)
+- [Зачем приняты архитектурные решения](docs/adr/README.md)
+- [API, Swagger UI, ReDoc и сессии](docs/api.md)
+- [Готовность, логирование, лимиты и production](docs/deployment.md)
 
-```text
-.
-├── manage.py
-├── config/              # settings, URLs, WSGI, ASGI
-├── apps/
-│   ├── accounts/        # User, UserProfile, Admin, validator, migration
-│   ├── catalog/
-│   ├── preferences/
-│   ├── planning/
-│   └── shopping/
-├── common/
-├── frontend/            # Vite, экраны, клиент API и JS-тесты
-├── deploy/              # frontend image и конфигурация Caddy
-├── tests/
-├── docker/init_env.py
-├── Dockerfile
-├── compose.yaml
-├── .env.example
-├── pyproject.toml       # uv project, dependency groups, pytest, Ruff
-├── uv.lock              # locked versions + artifact hashes
-├── .python-version      # Python 3.12
-└── README.md
-```
+В режиме разработки Swagger UI доступен на `http://localhost:8000/api/docs/`,
+схема на `/api/schema/`, ReDoc на `/api/redoc/`. `GET /api/v1/health/`
+показывает, что HTTP-процесс жив. `GET /api/v1/ready/` проверяет PostgreSQL.
 
-### Пользователи и пароли
+## Проверки
 
-`AUTH_USER_MODEL=accounts.User` задан до первой миграции. Поля username нет;
-единственный логин — обязательный email. В FoodTinder весь email считается
-регистронезависимым, нормализуется в нижний регистр, а уникальность дополнительно
-защищена индексом PostgreSQL на `lower(email)`. Методы `create_user()` и
-`create_superuser()` проверяют нормализованный email стандартным Django `validate_email`;
-пустой или некорректный email приводит к `ValidationError` до сохранения пользователя.
-Пароли, permissions, группы,
-сессии и админка используют стандартные механизмы Django.
-
-Пароль: минимум 10 символов, только `A-Z`, `a-z`, `0-9` и `_`;
-обязательны строчная и заглавная буквы, цифра и подчёркивание.
-Фраза «только латинские буквы» трактуется как запрет других алфавитов:
-цифры и `_` разрешены, поскольку они обязательны по требованиям.
-Также включены стандартные проверки сходства с данными пользователя и распространённых паролей.
-Django проверяет пароль в Admin/createsuperuser. Как и стандартный Django,
-`create_user()` сам не вызывает password validation. При регистрации проверку
-`django.contrib.auth.password_validation.validate_password` вызывает API.
-
-Профиль — отдельная запись OneToOne, которая создаётся при регистрации или
-первом изменении профиля старого аккаунта. Имя, фамилия и email хранятся в `User`.
-
-### API
-
-| Метод и путь | Ответ |
-| --- | --- |
-| GET /api/v1/health/ | `{"status":"ok"}` |
-| GET /api/v1/auth/session/ | `{"authenticated":false,"id":null,"email":null}` для гостя; id/email вошедшего пользователя |
-| /api/v1/auth/ | Регистрация с именем, вход, выход, профиль, данные аккаунта и смена email с текущим паролем |
-| /api/v1/recipes/ | Публичный каталог и подробности рецепта |
-| /api/v1/preferences/ | Публичная лента, приватные свайпы, отмена и избранное |
-| /api/v1/meal-plans/ | Планы, слоты, порции и пакетное сохранение |
-| /api/v1/shopping-list/ | Покупки, отметки и экспорт выбранного плана |
-
-Health проверяет работоспособность HTTP-процесса, не доступность БД.
-Сессия проверяется через Django session cookie. Оба endpoint публичны, только для чтения.
-По умолчанию новые DRF endpoints требуют аутентификации.
-Session response запрещён для кеширования. После регистрации пользователь отдельно
-входит в аккаунт.
-Для инициализации CSRF frontend вызывает `GET /api/v1/auth/session/`: endpoint
-устанавливает cookie `csrftoken` даже для анонимного пользователя через `ensure_csrf_cookie`.
-Затем frontend передаёт значение cookie в заголовке `X-CSRFToken` изменяющих запросов.
-
-## Requirements
-
-- Git.
-- Docker Engine / Docker Desktop с Linux containers и Docker Compose v2.
-- Свободный локальный порт 8000.
-- Python на хосте не обязателен: все команды ниже выполняются в контейнерах.
-
-## Python dependencies (uv)
-
-Для всех Python-зависимостей используется [uv](https://docs.astral.sh/uv/)
-версии **0.13.9**. `pyproject.toml` описывает проект как непакетируемое Django-
-приложение (`[tool.uv] package = false`), стандартные группы PEP 735 и
-настройки pytest, Ruff и mypy. `uv.lock` **обязательно коммитится**; в CI
-и Docker используется `--locked`, чтобы исключить незаметное изменение версий.
-
-| Группа | Состав |
-| --- | --- |
-| `base` | Django, DRF, psycopg и Pillow |
-| `dev` | `base` + pytest, pytest-django, Ruff, pre-commit, mypy/stubs |
-| `prod` | `base` + Gunicorn |
-| `security` | Semgrep CE и требуемые build tools — только для SAST |
-
-Установите uv по [официальной инструкции](https://docs.astral.sh/uv/getting-started/installation/)
-и выполните в корне репозитория:
-
-```sh
-uv sync --locked --only-group dev
-uv run --locked --only-group dev python manage.py check
-```
-
-`uv sync` создаст `.venv`, установит Python 3.12 при необходимости и
-синхронизирует точный набор зависимостей. При работе над зависимостями:
-`uv add --group dev <package>` / `uv remove --group dev <package>`
-или редактирование `pyproject.toml` с последующим `uv lock`; коммитьте
-**оба файла**. `uv lock --check` проверяет актуальность lock-файла.
-После изменения зависимостей пересоберите Docker-образы.
-
-Для отдельного production-окружения используйте `uv sync --locked
---only-group prod` (не устанавливайте вместе с dev); для SAST —
-`uv sync --locked --only-group security`.
-
-В Docker зависимости расположены в `/opt/venv`, вне примонтированного
-`/app`; локальная разработка использует обычную `.venv`.
-В production сам uv и системный pip/setuptools/wheel после сборки не остаются.
-Frontend управляется **pnpm**, Python-пакеты не устанавливают Node.js-зависимости.
-
-Переменные окружения и PostgreSQL для запуска Django настраиваются отдельно:
-`uv sync` не загружает `.env` и не запускает БД.
-
-## Local Development
-
-Команды выполняются из корня проекта; подходят для PowerShell и обычной Unix shell.
-
-1. Клонировать репозиторий (основная стабильная ветка — `master`):
-
-   ```sh
-   git clone https://github.com/DeV0id13/food_tinder.git
-   cd food_tinder
-   ```
-
-   Для разработки отдельной задачи создать ветку от актуального `master`, например:
-
-   ```sh
-   git switch -c feat/ft-01-accounts
-   ```
-
-2. Создать `.env` из `.env.example` с новыми случайными секретами:
-
-   ```sh
-   docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.12-slim python docker/init_env.py
-   ```
-
-   Скрипт не перезаписывает существующий `.env`. При наличии Python 3.12+ достаточно
-   `python docker/init_env.py`. Секреты не выводятся в терминал.
-   Настройки загружает Docker Compose; Django не читает `.env` автоматически.
-
-3. Собрать web image и поднять PostgreSQL:
-
-   ```sh
-   docker compose build web
-   docker compose up -d --wait postgres
-   ```
-
-4. Применить миграции:
-
-   ```sh
-   docker compose run --rm web python manage.py migrate
-   ```
-
-5. Создать администратора, задав email и пароль интерактивно:
-
-   ```sh
-   docker compose run --rm web python manage.py createsuperuser
-   ```
-
-6. Запустить backend:
-
-   ```sh
-   docker compose up -d web
-   docker compose logs --tail=50 web
-   ```
-
-7. Открыть [Django Admin](http://localhost:8000/admin/).
-8. Открыть [health endpoint](http://localhost:8000/api/v1/health/) или проверить командой:
-
-   ```sh
-   docker compose exec web python -c "from urllib.request import urlopen; print(urlopen('http://127.0.0.1:8000/api/v1/health/').read().decode())"
-   ```
-
-Compose запускает только `web` и `postgres`; web ждёт успешного healthcheck БД.
-Миграции применяются явно, без гонок при старте нескольких процессов.
-Код примонтирован для autoreload. PostgreSQL не публикует порт на хост;
-`POSTGRES_HOST=postgres` работает внутри Compose network.
-Web доступен только на loopback хоста. Данные БД сохраняются в named volume.
-Смена POSTGRES_PASSWORD после создания volume требует отдельно изменить пароль роли в БД.
-
-Остановить сервисы, сохранив данные:
-
-```sh
-docker compose down
-```
-
-## Tests
-
-Тесты используют **PostgreSQL**, отдельную временную БД `test_foodtinder`.
-Локальная роль PostgreSQL из Compose может создавать тестовые БД.
-Не запускайте тесты с production credentials.
+Для backend нужен тестовый PostgreSQL. Команды запускаются из корня.
 
 ```sh
 docker compose run --rm web pytest
-```
-
-Тесты проверяют аккаунт и CSRF, каталог и Admin, медиа и импорт, реакции и избранное,
-планы, список покупок и экспорт. Отдельный тест проходит через подключённый URLConf.
-Временный POST endpoint для проверки SessionAuthentication существует только в тестовом URLConf.
-
-## Lint
-
-```sh
+docker compose run --rm web pytest --cov --cov-report=term-missing --cov-report=html --cov-report=xml
 docker compose run --rm web ruff check .
 docker compose run --rm web ruff format --check .
 docker compose run --rm web python .github/scripts/run_mypy.py
-```
-
-Автоформатирование: `docker compose run --rm web ruff format .`.
-
-## Migrations
-
-```sh
-docker compose run --rm web python manage.py makemigrations
-docker compose run --rm web python manage.py migrate
-docker compose run --rm web python manage.py makemigrations --check --dry-run
 docker compose run --rm web python manage.py check
+docker compose run --rm web python manage.py makemigrations --check --dry-run
+docker compose run --rm web python manage.py spectacular --validate --fail-on-warn --file /tmp/foodtinder-openapi.yaml
+uv lock --check
 ```
 
-Миграции коммитятся вместе с моделями. Учебные SQLite базы не используются и не переносятся.
+Coverage включает ветвления в `apps`, `common` и `config` с порогом 94,43%.
+CI сохраняет `coverage.xml` и `htmlcov/` из одного прогона. Для просмотра
+отчётов на хосте запускайте coverage в локальном uv-окружении или используйте
+артефакт `backend-coverage` в GitHub Actions.
 
-## Environment and production
-
-`.env.example` предназначен для локальной разработки, настоящие секреты в Git не попадают.
-Django прекращает запуск без DJANGO_SECRET_KEY, POSTGRES_DB, POSTGRES_USER или POSTGRES_PASSWORD.
-Для production используйте отдельное окружение и секреты, а не локальный `.env`:
-
-- `DJANGO_DEBUG=false`, конкретные `DJANGO_ALLOWED_HOSTS` (список через запятую).
-- `CSRF_TRUSTED_ORIGINS` — точные HTTPS origins браузерного приложения.
-- При DEBUG=false по умолчанию включены secure session/CSRF cookies и HTTPS redirect.
-  Эти настройки можно явно менять через `SESSION_COOKIE_SECURE`,
-  `CSRF_COOKIE_SECURE`, `SECURE_SSL_REDIRECT`.
-- HSTS по умолчанию выключен независимо от DEBUG:
-  `DJANGO_SECURE_HSTS_SECONDS=0`, `DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false`,
-  `DJANGO_SECURE_HSTS_PRELOAD=false`. Включайте HSTS только после подтверждения
-  корректной HTTPS-конфигурации production-домена; отдельно проверьте поддомены
-  перед включением includeSubDomains и preload. Прежние имена переменных
-  `SECURE_HSTS_*` без префикса `DJANGO_` больше не используются.
-- Same-origin deployment использует Django sessions и CSRF middleware.
-  Frontend передаёт `X-CSRFToken` в изменяющих запросах.
-- `DJANGO_TRUST_PROXY_HEADERS=true` допустим только за доверенным TLS proxy,
-  который удаляет присланный клиентом `X-Forwarded-Proto` и выставляет его сам.
-- `POSTGRES_*` задают подключение, `POSTGRES_SSLMODE=verify-full` — для БД с
-  настроенным доверенным TLS сертификатом. Production роль должна иметь
-  минимальные необходимые права, без superuser/CREATEDB.
-- `EMAIL_BACKEND`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`,
-  `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `EMAIL_USE_SSL`, `EMAIL_TIMEOUT`,
-  `DEFAULT_FROM_EMAIL` настраивают почту. TLS и SSL одновременно не включают.
-  Password reset flow пока не реализован.
-
-Production image собирается отдельно и по умолчанию запускает Gunicorn от непривилегированного пользователя:
-
-```sh
-docker build --target production -t foodtinder-backend:prod .
-```
-
-При развёртывании передайте environment variables, выполните `python manage.py migrate`,
-`python manage.py collectstatic --noinput` и `python manage.py check --deploy`
-в production окружении. Пока HSTS выключен, deploy check выдаёт ожидаемое предупреждение;
-рассмотрите остальные предупреждения отдельно. TLS termination и раздача `staticfiles/` / `media/`
-должны обеспечиваться платформой размещения; Gunicorn их не обслуживает.
-Production workflow, ручное подтверждение и постоянные тома описаны в
-[инструкции по развёртыванию](docs/deployment.md).
+Из `frontend/` выполните `pnpm test`, `pnpm lint` и `pnpm build`.
+Порядок сквозной проверки в [frontend README](frontend/README.md#ручная-проверка).

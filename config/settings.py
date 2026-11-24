@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "apps.accounts.apps.AccountsConfig",
     "apps.catalog.apps.CatalogConfig",
     "apps.preferences.apps.PreferencesConfig",
@@ -69,7 +71,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "config" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -102,9 +104,31 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
 ]
 REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+}
+
+API_DOCS_ENABLED = env_bool("DJANGO_API_DOCS_ENABLED", DEBUG)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "FoodTinder API",
+    "VERSION": "1.0.0",
+    "DESCRIPTION": (
+        "Вход устанавливает сессионную cookie Django. Для изменяющих запросов передайте "
+        "X-CSRFToken из текущей cookie csrftoken. GET /api/v1/auth/session/ выдаёт CSRF-cookie "
+        "для гостя. После входа Django меняет токен, используйте новое значение. "
+        "Swagger UI передаёт cookies и актуальный заголовок автоматически для того же origin."
+    ),
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {"MealType": "apps.planning.models.MEAL_CHOICES"},
+    "SERVE_PERMISSIONS": [
+        "rest_framework.permissions.AllowAny" if DEBUG else "rest_framework.permissions.IsAdminUser"
+    ],
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
 }
 
 LANGUAGE_CODE = os.environ.get("DJANGO_LANGUAGE_CODE", "en-us")

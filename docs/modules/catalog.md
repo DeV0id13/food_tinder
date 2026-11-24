@@ -70,3 +70,9 @@ PostgreSQL 16 хранит данные в `postgres_data`. Django хранит 
 
 `python manage.py migrate`, `python manage.py makemigrations --check --dry-run`,
 `python manage.py check` и `pytest tests/catalog` выполняются с PostgreSQL.
+
+
+Выдача списка использует общий `StandardPagination` с лимитом 30 по умолчанию
+и максимумом 100. `catalog.selectors.get_recipe` возвращает активный рецепт
+для новых назначений в рацион и свайпов. Снятие закладки допускает также
+неактивный рецепт.

@@ -94,3 +94,21 @@ class ChangeEmailSerializer(StrictFieldsSerializer):
 
     def validate_email(self, value: str) -> str:
         return get_user_model().objects.normalize_email(value)
+
+
+class SessionSerializer(serializers.Serializer):
+    authenticated = serializers.BooleanField()
+    id = serializers.IntegerField(allow_null=True)
+    email = serializers.EmailField(allow_null=True)
+
+
+class RegisteredUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+
+
+class AccountSerializer(serializers.Serializer):
+    first_name = serializers.CharField(allow_blank=True)
+    last_name = serializers.CharField(allow_blank=True)
+    email = serializers.EmailField()
