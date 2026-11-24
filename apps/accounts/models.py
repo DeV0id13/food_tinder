@@ -61,3 +61,10 @@ class UserProfile(models.Model):
 
     def __str__(self) -> str:
         return f"Profile: {self.user.email}"
+
+
+class AuthRateBucket(models.Model):
+    # HMAC of operation and normalized client IP. Addresses are not stored.
+    key = models.CharField(max_length=64, primary_key=True)
+    expires_at = models.DateTimeField(db_index=True)
+    attempts = models.PositiveIntegerField(default=0)

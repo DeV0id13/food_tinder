@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
@@ -14,6 +16,7 @@ from rest_framework.response import Response
 
 from .authentication import authenticated_user
 from .models import User, UserProfile
+from .rate_limit import limit_auth_attempt
 from .serializers import (
     AccountNamesSerializer,
     ChangeEmailSerializer,
@@ -23,6 +26,8 @@ from .serializers import (
     RegisterSerializer,
 )
 from .services import change_user_email, register_user
+
+logger = logging.getLogger("foodtinder.auth")
 
 
 def _require_csrf(request: Request) -> None:
@@ -49,9 +54,11 @@ def session(request: Request) -> Response:
 @permission_classes([AllowAny])
 def register(request: Request) -> Response:
     _require_csrf(request)
+    limit_auth_attempt(request, "register")
     serializer = RegisterSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = register_user(**serializer.validated_data)
+    logger.info("registration_succeeded")
     return Response(
         {"id": user.pk, "email": user.email, "first_name": user.first_name},
         status=status.HTTP_201_CREATED,
@@ -63,6 +70,7 @@ def register(request: Request) -> Response:
 @permission_classes([AllowAny])
 def login(request: Request) -> Response:
     _require_csrf(request)
+    limit_auth_attempt(request, "login")
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     user = authenticate(
@@ -73,6 +81,7 @@ def login(request: Request) -> Response:
     if user is None:
         raise serializers.ValidationError({"non_field_errors": ["Invalid credentials."]})
     django_login(request, user)
+    logger.info("login_succeeded")
     return Response(_session_data(user))
 
 

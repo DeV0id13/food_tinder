@@ -155,8 +155,19 @@ jobs:
         run: uv run --locked --only-group dev python manage.py makemigrations --check --dry-run
       - name: Apply all migrations on clean PostgreSQL
         run: uv run --locked --only-group dev python manage.py migrate --noinput
-      - name: Full pytest suite (record slowest tests)
-        run: uv run --locked --only-group dev pytest --durations=20
+      - name: Full pytest suite with branch coverage
+        run: >-
+          uv run --locked --only-group dev pytest --durations=20 --cov
+          --cov-report=term-missing --cov-report=html --cov-report=xml
+      - name: Upload coverage reports
+        if: ${{ !cancelled() && hashFiles('coverage.xml') != '' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: backend-coverage
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: error
 
   frontend:
     name: frontend
@@ -384,13 +395,27 @@ jobs:
           compose ps --status running --services | grep -qx postgres
           compose ps --status running --services | grep -qx web
           compose ps --status running --services | grep -qx proxy
-          # Internal Django health check uses the configured allowed hostname.
-          compose exec -T web python manage.py shell -c \
-              "from django.conf import settings; from django.test import Client; response = Client(HTTP_HOST=settings.ALLOWED_HOSTS[0]).get('/api/v1/health/', secure=True); print(response.status_code, response.content); assert response.status_code == 200"
-          # For the initial IP-based HTTP deployment, also verify the reverse proxy.
+          # Probe the worker's Django configuration even when TLS terminates at Caddy.
+          compose exec -T web python manage.py shell -c '
+          from time import sleep
+          from django.conf import settings
+          from django.test import Client
+          client = Client(HTTP_HOST=settings.ALLOWED_HOSTS[0])
+          for attempt in range(8):
+              response = client.get("/api/v1/ready/", secure=True)
+              if response.status_code == 200:
+                  break
+              if attempt == 7:
+                  raise SystemExit(f"Django readiness failed: HTTP {response.status_code}")
+              sleep(3)
+          '
+          # The IP-based HTTP deployment also exercises the real Gunicorn/Caddy path.
           if grep -qx 'SITE_ADDRESS=:80' .env.prod; then
-            curl --fail --silent --show-error --retry 8 --retry-delay 3 http://127.0.0.1/api/v1/health/
-            curl --fail --silent --show-error --retry 8 --retry-delay 3 http://127.0.0.1/ > /dev/null
+            allowed_host="$(compose exec -T web python -c 'import config.settings as settings; print(settings.ALLOWED_HOSTS[0])' </dev/null)"
+            curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-connrefused \
+              --max-time 5 --retry-max-time 35 -H "Host: $allowed_host" http://127.0.0.1/api/v1/ready/
+            curl --fail --silent --show-error --retry 8 --retry-delay 3 --retry-connrefused \
+              --max-time 5 --retry-max-time 35 http://127.0.0.1/ > /dev/null
           fi
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts

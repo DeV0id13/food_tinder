@@ -27,6 +27,16 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [value.strip() for value in os.environ.get(name, default).split(",") if value.strip()]
 
 
+def env_positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be a positive integer.") from exc
+    if value < 1:
+        raise ImproperlyConfigured(f"{name} must be a positive integer.")
+    return value
+
+
 SECRET_KEY = env_required("DJANGO_SECRET_KEY")
 DEBUG = env_bool("DJANGO_DEBUG")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
@@ -142,3 +152,38 @@ EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS")
 EMAIL_USE_SSL = env_bool("EMAIL_USE_SSL")
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "webmaster@localhost")
+
+
+AUTH_RATE_LIMITS = {
+    "login": (
+        env_positive_int("AUTH_LOGIN_LIMIT", 20),
+        env_positive_int("AUTH_LOGIN_WINDOW_SECONDS", 60),
+    ),
+    "register": (
+        env_positive_int("AUTH_REGISTER_LIMIT", 10),
+        env_positive_int("AUTH_REGISTER_WINDOW_SECONDS", 300),
+    ),
+}
+AUTH_RATE_LIMIT_TRUST_PROXY = env_bool("AUTH_RATE_LIMIT_TRUST_PROXY")
+
+LOG_LEVEL = os.environ.get("DJANGO_LOG_LEVEL", "INFO").upper()
+if LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+    raise ImproperlyConfigured("DJANGO_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR or CRITICAL.")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "application": {"()": "common.logging.ApplicationFormatter", "json_output": not DEBUG},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "application",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "loggers": {
+        name: {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False}
+        for name in ("django", "django.server", "foodtinder")
+    },
+}
