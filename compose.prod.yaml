@@ -110,10 +110,10 @@ services:
       - /bin/sh
       - -ec
       - |
-        origin="${FOODTINDER_PUBLIC_ORIGIN%%,*}"
-        export GF_SERVER_ROOT_URL="${origin%/}/grafana/"
+        origin="$${FOODTINDER_PUBLIC_ORIGIN%%,*}"
+        export GF_SERVER_ROOT_URL="$${origin%/}/grafana/"
         # No default Grafana password is exposed; Django authenticates staff.
-        GF_SECURITY_ADMIN_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+        GF_SECURITY_ADMIN_PASSWORD="$$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
         export GF_SECURITY_ADMIN_PASSWORD
         exec /run.sh
     volumes:
