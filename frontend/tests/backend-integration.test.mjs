@@ -46,7 +46,7 @@ test('real proxy persists favorites and plans across independent sessions and ex
   let authenticated = false;
   try {
     assert.equal((await api.getSession()).authenticated, false);
-    const recipes = await api.getRecipes();
+    const {results: recipes} = await api.getRecipes();
     assert.ok(recipes.length, 'Import reviewed recipes or create them in Django Admin before this check.');
     recipe = recipes[0];
     const detail = await api.getRecipe(recipe.id);
@@ -138,7 +138,7 @@ test('the editor keeps drops local on leave and only saves the accepted draft to
   await otherBrowser.login(account);
   let id;
   try {
-    const [recipe] = await api.getRecipes();
+    const {results: [recipe]} = await api.getRecipes();
     const meal = recipe.meal_types[0];
     await api.setFavorite(recipe.id, true);
     ({id} = await api.createPlan({

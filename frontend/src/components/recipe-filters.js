@@ -8,7 +8,7 @@ export function renderRecipeFilters(scope, {query, meal, maxTime}, {extra, note 
       <label>Поиск по названию
         <input id="${search}" type="search" data-input="${search}"
           value="${escapeAttr(query)}" placeholder="Например, борщ"
-          autocomplete="off" aria-controls="${resultsId}" />
+          ${scope === 'catalog' ? 'maxlength="200"' : ''} autocomplete="off" aria-controls="${resultsId}" />
       </label>
       <div class="catalog-filters">
         <label>Приём пищи<select data-change="${scope}-meal" aria-controls="${resultsId}">
@@ -27,5 +27,5 @@ export function renderRecipeFilters(scope, {query, meal, maxTime}, {extra, note 
         <button class="text-button" data-action="reset-${scope}">Сбросить фильтры</button>
       </div>
     </div>
-    <section id="${resultsId}" data-${scope}-results>${results}</section>`;
+    <section id="${resultsId}" data-${scope}-results ${scope === 'catalog' ? 'tabindex="-1"' : ''}>${results}</section>`;
 }

@@ -204,6 +204,8 @@ export class NavigationController {
     if (view === 'plans' && this.state.planMode === 'edit' && !this.state.planDraft) {
       this.state.activePlanStatus = 'loading';
     }
+    this.app.recipes.invalidateCatalog();
+    if (view === 'recipes') this.state.catalogStatus = 'idle';
     this.state.view = view;
     if (!fromHistory) {
       if (favoriteFilters) this.state.favoriteFilters = favoriteFilters;

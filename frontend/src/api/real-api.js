@@ -1,4 +1,5 @@
 import {ApiClient} from './api-client.js';
+import {CATALOG_PAGE_SIZE} from '../constants.js';
 
 export class RealApi {
   constructor(client = new ApiClient()) {
@@ -56,8 +57,12 @@ export class RealApi {
     return this.client.request('preferences/feed/', {query: {limit: 30, offset: 0}});
   }
 
-  getRecipes() {
-    return this.collectAll('recipes/');
+  getRecipes({query, meal, maxTime, favorites, sort, offset = 0, signal} = {}) {
+    return this.client.request('recipes/', {
+      query: {q: query, meal, max_time: maxTime || undefined, favorites: favorites ? 1 : undefined,
+        sort, limit: CATALOG_PAGE_SIZE, offset},
+      signal,
+    });
   }
 
   getRecipe(recipeId) {

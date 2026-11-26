@@ -1,4 +1,5 @@
 import {renderRecipeDetail} from '../components/recipe-card.js';
+import {CATALOG_PAGE_SIZE} from '../constants.js';
 import {setFavorites} from '../state/state.js';
 import {renderStatus} from '../utils/dom.js';
 import {UNDO_WINDOW_MS} from '../utils/swipe-notice.js';
@@ -13,6 +14,8 @@ export class RecipesController {
     this.root = app.root;
     this.state = app.state;
     this.swipeTimer = null;
+    this.catalogTimer = null;
+    this.catalogAbort = null;
     this.browser?.document?.addEventListener('visibilitychange', () => this.updateSwipeNotice());
   }
 
@@ -71,22 +74,66 @@ export class RecipesController {
     if (shouldRender && current()) this.app.render();
   }
 
-  async loadCatalog(shouldRender = true) {
-    const request = this.app.beginRequest('catalog');
-    const current = () => this.app.isCurrentRequest('catalog', request);
+  invalidateCatalog() {
+    clearTimeout(this.catalogTimer);
+    this.catalogAbort?.abort();
+    this.catalogAbort = null;
+  }
+
+  paintCatalog() {
+    const results = this.root.querySelector?.('[data-catalog-results]');
+    if (results) results.innerHTML = renderCatalogResults(this.state);
+    const count = this.root.querySelector?.('[data-catalog-count]');
+    if (count) count.textContent = catalogSearchCount(this.state);
+  }
+
+  changeCatalogFilters({debounce = false} = {}) {
+    this.state.catalogOffset = 0;
+    this.app.navigation.writeRoute(true);
+    if (!debounce) return this.loadCatalog();
+    this.invalidateCatalog();
     this.state.catalogStatus = 'loading';
-    if (shouldRender) this.app.render();
-    try {
-      const catalog = await this.app.api.getRecipes();
-      if (!current()) return;
-      this.state.catalog = catalog;
-      this.state.catalogStatus = 'ready';
-    } catch (error) {
-      if (!current()) return;
-      this.state.catalogStatus = 'error';
-      await this.app.handleError(error, current);
+    this.paintCatalog();
+    this.catalogTimer = setTimeout(() => this.loadCatalog(), 250);
+  }
+
+  async changeCatalogPage(offset) {
+    this.state.catalogOffset = offset;
+    this.app.navigation.writeRoute();
+    await this.loadCatalog();
+    if (this.state.view === 'recipes' && this.state.catalogOffset === offset) {
+      this.root.querySelector?.('[data-catalog-results]')?.focus?.();
     }
-    if (shouldRender && current()) this.app.render();
+  }
+
+  async loadCatalog() {
+    this.invalidateCatalog();
+    const abort = new AbortController();
+    this.catalogAbort = abort;
+    const request = this.app.beginRequest('catalog');
+    const current = () => !abort.signal.aborted && this.app.isCurrentRequest('catalog', request);
+    const state = this.state;
+    state.catalogStatus = 'loading';
+    this.paintCatalog();
+    try {
+      const page = await this.app.api.getRecipes({
+        query: state.catalogQuery.trim(), meal: state.catalogMeal, maxTime: state.catalogMaxTime,
+        favorites: state.session.authenticated && state.catalogFavoritesOnly, sort: state.catalogSort,
+        offset: state.catalogOffset, signal: abort.signal,
+      });
+      if (!current()) return;
+      if (!page.results.length && state.catalogOffset >= page.count && state.catalogOffset) {
+        state.catalogOffset = Math.floor(Math.max(0, page.count - 1) / CATALOG_PAGE_SIZE) * CATALOG_PAGE_SIZE;
+        this.app.navigation.writeRoute(true);
+        return this.loadCatalog();
+      }
+      state.catalog = page;
+      state.catalogStatus = 'ready';
+    } catch {
+      if (!current()) return;
+      state.catalogStatus = 'error';
+    }
+    this.paintCatalog();
   }
 
   async loadFavorites(shouldRender = true) {
@@ -108,13 +155,12 @@ export class RecipesController {
     if (shouldRender && current()) this.app.render();
   }
 
-  updateRecipeResults(scope) {
-    const favorites = scope === 'favorites';
+  updateFavoriteResults() {
     this.app.navigation.writeRoute(true);
-    const results = this.root.querySelector(`[data-${scope}-results]`);
-    if (results) results.innerHTML = favorites ? renderFavoriteResults(this.state) : renderCatalogResults(this.state);
-    const count = this.root.querySelector(`[data-${scope}-count]`);
-    if (count) count.textContent = favorites ? favoriteSearchCount(this.state) : catalogSearchCount(this.state);
+    const results = this.root.querySelector('[data-favorites-results]');
+    if (results) results.innerHTML = renderFavoriteResults(this.state);
+    const count = this.root.querySelector('[data-favorites-count]');
+    if (count) count.textContent = favoriteSearchCount(this.state);
   }
 
   async swipe(recipeId, action) {
@@ -204,7 +250,8 @@ export class RecipesController {
 
   async toggleFavorite(recipeId) {
     if (!this.state.session.authenticated) return this.app.account.showAuth('Войдите, чтобы сохранять рецепты.');
-    const shouldFavorite = !this.state.favoriteIds.has(recipeId);
+    const inFilteredCatalog = this.state.view === 'recipes' && this.state.catalogFavoritesOnly;
+    const shouldFavorite = !inFilteredCatalog && !this.state.favoriteIds.has(recipeId);
     const context = this.app.account.sessionContext();
     await this.app.runMutation(`recipe-${recipeId}`, async () => {
       await this.app.api.setFavorite(recipeId, shouldFavorite);
@@ -216,6 +263,7 @@ export class RecipesController {
       } else {
         await this.loadFavorites(false);
       }
+      if (this.state.view === 'recipes' && this.state.catalogFavoritesOnly) await this.loadCatalog();
       if (this.app.account.isCurrentSession(context)) this.app.toast(shouldFavorite ? 'Добавлено в избранное' : 'Удалено из избранного');
     });
   }

@@ -104,9 +104,9 @@ test('guest dislike hides a card only from page-memory set', () => {
 
 test('empty and unavailable Django results render different states', () => {
   const state = createInitialState();
-  Object.assign(state, {feed: {results: []}, feedStatus: 'ready', catalog: [], catalogStatus: 'ready'});
+  Object.assign(state, {feed: {results: []}, feedStatus: 'ready', catalog: {results: [], count: 0}, catalogStatus: 'ready'});
   assert.match(renderFeedView(state), /В ленте пока пусто/);
-  assert.match(renderRecipesView(state), /Рецептов пока нет/);
+  assert.match(renderRecipesView(state), /Ничего не найдено/);
   state.catalogStatus = 'error';
   assert.match(renderRecipesView(state), /data-action="retry-recipes"/);
 });
@@ -137,16 +137,17 @@ test('recipe search filters by title without case or ё differences and escapes 
   assert.equal(filterRecipes(recipes, '').length, 3);
 
   const state = createInitialState();
-  state.catalog = recipes;
+  state.catalog = {results: recipes.slice(0, 1), count: 1};
   state.catalogStatus = 'ready';
   state.catalogQuery = 'борщ';
   const html = renderRecipesView(state);
   assert.match(html, /Поиск по названию/);
   assert.match(html, /Борщ с говядиной/);
   assert.doesNotMatch(html, /Творожная запеканка/);
-  assert.match(html, /Найдено: 1 из 3/);
+  assert.match(html, /Показано: 1–1 из 1/);
 
   state.catalogQuery = '<img src=x onerror=alert(1)>';
+  state.catalog = {results: [], count: 0};
   const safe = renderRecipesView(state);
   assert.doesNotMatch(safe, /value="<img/);
   assert.match(safe, /value="&lt;img/);

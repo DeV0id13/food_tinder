@@ -1,4 +1,4 @@
-import {COOKING_TIMES, FAVORITE_SORTS, MEAL_LABELS} from '../constants.js';
+import {CATALOG_PAGE_SIZE, CATALOG_SORTS, COOKING_TIMES, FAVORITE_SORTS, MEAL_LABELS} from '../constants.js';
 
 const VIEW_PATHS = {
   feed: '/',
@@ -33,10 +33,16 @@ export function readRoute({pathname, search}) {
         query, meal: mealType, maxTime, sort: Object.hasOwn(FAVORITE_SORTS, sort) ? sort : 'added',
       }};
     }
+    const offset = Number(params.get('offset'));
+    const sort = params.get('sort');
+    const catalogOffset = Number.isInteger(offset) && offset > 0 && offset <= 2_147_483_647
+      && offset % CATALOG_PAGE_SIZE === 0 ? offset : 0;
     return {
       view,
       filters: {
-        catalogQuery: query, catalogMeal: mealType, catalogMaxTime: maxTime,
+        catalogQuery: Array.from(query).slice(0, 200).join(''), catalogMeal: mealType, catalogMaxTime: maxTime,
+        catalogOffset,
+        catalogSort: Object.hasOwn(CATALOG_SORTS, sort) ? sort : 'id',
         catalogFavoritesOnly: params.get('favorites') === '1',
       },
     };
@@ -56,6 +62,8 @@ export function routeUrl(view, state, next, nextPlanId) {
     if (state.catalogQuery) params.set('q', state.catalogQuery);
     if (state.catalogMeal) params.set('meal', state.catalogMeal);
     if (state.catalogMaxTime) params.set('time', state.catalogMaxTime);
+    if (state.catalogSort !== 'id') params.set('sort', state.catalogSort);
+    if (state.catalogOffset) params.set('offset', state.catalogOffset);
     if (state.session.authenticated && state.catalogFavoritesOnly) params.set('favorites', '1');
   }
   if (view === 'favorites') {

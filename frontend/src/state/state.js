@@ -2,6 +2,10 @@ export function defaultFavoriteFilters() {
   return {query: '', meal: '', maxTime: 0, sort: 'added'};
 }
 
+export function defaultCatalogFilters() {
+  return {catalogQuery: '', catalogMeal: '', catalogMaxTime: 0, catalogFavoritesOnly: false, catalogSort: 'id', catalogOffset: 0};
+}
+
 export function createInitialState() {
   return {
     initialLoading: true,
@@ -12,10 +16,7 @@ export function createInitialState() {
     feedStatus: 'idle',
     catalog: null,
     catalogStatus: 'idle',
-    catalogQuery: '',
-    catalogMeal: '',
-    catalogMaxTime: 0,
-    catalogFavoritesOnly: false,
+    ...defaultCatalogFilters(),
     favoriteFilters: defaultFavoriteFilters(),
     favorites: null,
     favoritesStatus: 'idle',
@@ -46,7 +47,10 @@ export function createInitialState() {
 }
 
 export function clearPrivateState(state) {
+  if (state.catalogFavoritesOnly) state.catalogOffset = 0;
   state.catalogFavoritesOnly = false;
+  state.catalog = null;
+  state.catalogStatus = 'idle';
   state.lastSwipe = null;
   state.account = null;
   state.accountStatus = 'idle';

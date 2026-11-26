@@ -27,26 +27,34 @@ test('login explicitly refreshes session after the unsafe request', async () => 
   assert.deepEqual(session, {authenticated: true, id: 9, email: 'fresh@example.com'});
 });
 
-test('collection helpers follow DRF next links and combine results', async () => {
+test('catalog requests one page and forwards filters, pagination and cancellation', async () => {
   const calls = [];
-  const client = {
-    async request(path, options = {}) {
+  const page = {count: 400, next: '/api/v1/recipes/?offset=30', previous: null, results: [{id: 1}]};
+  const client = {request: async (path, options) => { calls.push({path, options}); return page; }};
+  const api = new RealApi(client);
+  const {signal} = new AbortController();
+  const filters = {query: 'ёжики', meal: 'lunch', maxTime: 30, favorites: true, sort: 'time', signal};
+  assert.equal(await api.getRecipes(filters), page);
+  assert.equal(calls.length, 1);
+  await api.getRecipes({...filters, offset: 30});
+  assert.deepEqual(calls, [0, 30].map((offset) => ({
+    path: 'recipes/',
+    options: {query: {q: 'ёжики', meal: 'lunch', max_time: 30, favorites: 1, sort: 'time', limit: 30, offset}, signal},
+  })));
+});
+
+test('favorites and plans still follow DRF next links', async () => {
+  for (const endpoint of ['preferences/favorites/', 'meal-plans/']) {
+    const next = `/api/v1/${endpoint}?limit=100&offset=100`;
+    const calls = [];
+    const client = {request: async (path, options = {}) => {
       calls.push({path, options});
-      if (path === 'recipes/') {
-        return {
-          count: 2,
-          next: 'http://testserver/api/v1/recipes/?limit=100&offset=100',
-          previous: null,
-          results: [{id: 1}],
-        };
-      }
-      return {count: 2, next: null, previous: '/api/v1/recipes/?limit=100', results: [{id: 2}]};
-    },
-  };
-  const recipes = await new RealApi(client).getRecipes();
-  assert.deepEqual(recipes, [{id: 1}, {id: 2}]);
-  assert.equal(calls[0].options.query.limit, 100);
-  assert.equal(calls[1].path, 'http://testserver/api/v1/recipes/?limit=100&offset=100');
+      return path === endpoint ? {next, results: [{id: 1}]} : {next: null, results: [{id: 2}]};
+    }};
+    const api = new RealApi(client);
+    assert.deepEqual(await (endpoint === 'meal-plans/' ? api.getPlans() : api.getFavorites()), [{id: 1}, {id: 2}]);
+    assert.deepEqual(calls, [{path: endpoint, options: {query: {limit: 100, offset: 0}}}, {path: next, options: {}}]);
+  }
 });
 
 test('feed always requests the first page', async () => {
