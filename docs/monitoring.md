@@ -11,38 +11,38 @@ WAL, текущий head и промежуточные файлы компакт
 
 ## Запуск и доступ
 
-Выполните на VM с кодом развёрнутого SHA. Создайте новый файл только при
-первой настройке. Если файл существует, он сохраняется вместе с паролем.
+Каждый одобренный production deploy автоматически запускает Prometheus,
+Grafana и node_exporter после проверки приложения. Не нужны .env.monitoring,
+отдельный пароль Grafana, SSH-туннель или новые публичные порты.
 
-```sh
-cd /opt/foodtinder
-umask 077
-test -e .env.monitoring || (set -C; printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "$(openssl rand -hex 24)" > .env.monitoring)
-export IMAGE_TAG=<развёрнутый-sha>
-sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f compose.prod.yaml --env-file .env.prod \
-  --profile monitoring up -d --no-deps prometheus grafana node-exporter
-```
+Откройте на том же origin, что FoodTinder:
 
-С рабочего компьютера поднимите туннель и откройте `http://127.0.0.1:3000`.
-Используйте `admin` и пароль из `.env.monitoring`, переданный защищённым каналом.
-Гостевой вход и самостоятельная регистрация отключены. Пароль из окружения
-применяется при первом создании базы Grafana. Для ротации существующего пароля
-используйте Grafana, а затем синхронизируйте локальный файл.
+- /grafana/ — Grafana, домашний дашборд FoodTinder (также /grafana/d/foodtinder/foodtinder).
+- /prometheus/ — интерфейс и API Prometheus.
+- /admin/ — вход с существующим staff-аккаунтом Django.
 
-```sh
-ssh -N -L 127.0.0.1:3000:127.0.0.1:3000 <vm-user>@<vm-host>
-```
+Гость перенаправляется на вход Django Admin, обычный пользователь получает 403.
+Caddy проверяет активную staff-сессию на каждом запросе, включая ресурсы и API.
+Grafana получает проверенный идентификатор staff через auth proxy, создаёт
+Viewer при первом входе и не требует собственного пароля. Вход Grafana по
+паролю и анонимный доступ выключены. Выход из Django Admin закрывает дальнейший
+доступ к обоим сервисам. Django cookies и Authorization не передаются
+мониторингу. Prometheus не включает admin/lifecycle API.
 
-Порты 9090, 9100, 9180 и 8000 доступны только в приватных сетях Compose.
-Grafana публикуется на 127.0.0.1. Публичный Caddy блокирует `/metrics`
-и `/_metrics/`. Prometheus подключён к обеим сетям, а Grafana и node_exporter
-находятся в отдельной сети без доступа к PostgreSQL. У node_exporter нет
-Docker socket, привилегированного режима и Linux capabilities. Read-only
-mount корня нужен для statfs корневого раздела, `/proc` и `/proc/1/net`
-поставляют счётчики хоста и его интерфейсов. Включены только CPU, RAM,
-файловая система, диск, сеть и PSI. Для контейнеров используйте `docker stats`
-при диагностике. Проверка PostgreSQL показывает readiness через приложение.
-Для неё не требуется отдельный пользователь или передача реквизитов экспортёру.
+Grafana строит root URL из первого значения CSRF_TRUSTED_ORIGINS, которое
+должно быть точным основным origin (как в production-инструкции).
+Для текущего временного HTTP-развёртывания это http://130.193.45.53.
+На HTTPS-домене используйте существующий HTTPS origin. HTTP не шифрует
+staff-сессию: используйте HTTPS перед реальной эксплуатацией.
+
+Порты 3000, 9090, 9100, 9180 и 8000 не публикуются на хосте. Caddy
+блокирует /metrics, /_metrics/ и внутренний маршрут авторизации.
+Prometheus и Caddy подключены к обеим сетям, Grafana и node_exporter
+находятся в отдельной сети без прямого доступа к PostgreSQL.
+У node_exporter нет Docker socket, привилегированного режима и Linux
+capabilities. Read-only mount корня нужен для statfs корневого раздела,
+а /proc и /proc/1/net поставляют счётчики хоста и его интерфейсов.
+Для контейнеров используйте docker stats; готовность PostgreSQL проверяет Django.
 
 ## Интерпретация дашборда
 
@@ -78,7 +78,7 @@ compose() {
 compose ps
 compose logs --tail 50 prometheus grafana node-exporter
 compose exec -T prometheus promtool check config /etc/foodtinder/prometheus.yml
-compose exec -T prometheus wget -qO- http://127.0.0.1:9090/api/v1/targets
+compose exec -T prometheus wget -qO- http://127.0.0.1:9090/prometheus/api/v1/targets
 compose exec -T prometheus wget -qO- http://web:8000/_metrics/
 compose exec -T prometheus wget -qO- http://proxy:9180/metrics
 compose stats --no-stream
@@ -90,15 +90,16 @@ compose stats --no-stream
 `docker system df -v`. Сравните с работой без профиля. Фактический расход
 зависит от числа серий, нагрузки и сохраняемой истории.
 
-Остановить мониторинг можно командой `compose stop prometheus grafana node-exporter`.
-Чтобы очередной деплой не запустил профиль снова, переименуйте свой
-`.env.monitoring` в `.env.monitoring.disabled` с сохранением прав 600. Эти действия
-сохраняют приложение и оба тома мониторинга. При необходимости отключить сбор
+Остановить мониторинг до следующего деплоя можно командой
+`compose stop prometheus grafana node-exporter`. Это сохраняет приложение и
+оба тома мониторинга. Следующий одобренный деплой запускает профиль снова.
+При необходимости отключить сбор
 метрик Django задайте `FOODTINDER_METRICS_ENABLED=0` в `.env.prod` и
 пересоздайте только `web`. Корреляция запросов сохраняется.
 
-Deploy по одобренному SHA обновляет опциональный профиль после проверки
-приложения, если есть непустой `.env.monitoring`. Для ручного обновления
+Deploy по одобренному SHA всегда обновляет профиль после проверки приложения
+и проверяет четыре цели Prometheus. Ошибка мониторинга отмечает deploy как
+неуспешный, не останавливая уже проверенное приложение. Для ручного обновления
 выполните `compose pull prometheus grafana node-exporter`, затем
 `compose up -d --no-deps --force-recreate prometheus grafana node-exporter`.
 Остановка и обновление сохраняют именованные `prometheus_data` и `grafana_data`.

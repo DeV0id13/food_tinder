@@ -50,7 +50,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on: [web]
-    networks: [internal]
+    networks: [internal, monitoring]
     logging: *bounded_logs
   prometheus:
     image: prom/prometheus:v3.15.1
@@ -65,11 +65,13 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=7d
       - --storage.tsdb.retention.size=512MB
+      - --web.external-url=/prometheus/
+      - --web.route-prefix=/prometheus
     volumes:
       - ./deploy/monitoring/prometheus:/etc/foodtinder:ro
       - prometheus_data:/prometheus
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/prometheus/-/ready"]
       interval: 15s
       timeout: 3s
       retries: 3
@@ -82,11 +84,21 @@ services:
     restart: unless-stopped
     cpus: 0.35
     mem_limit: 240m
-    env_file:
-      - path: .env.monitoring
-        required: false
     environment:
+      FOODTINDER_PUBLIC_ORIGIN: ${CSRF_TRUSTED_ORIGINS:-http://localhost}
       GOMEMLIMIT: 160MiB
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-FoodTinder-Monitoring-User
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN: "false"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_DISABLE_SIGNOUT_MENU: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/foodtinder.json
       GF_UNIFIED_ALERTING_ENABLED: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
@@ -98,19 +110,18 @@ services:
       - /bin/sh
       - -ec
       - |
-        test "$${#GF_SECURITY_ADMIN_PASSWORD}" -ge 24 || {
-          echo 'Set a generated GF_SECURITY_ADMIN_PASSWORD (at least 24 characters) in .env.monitoring.' >&2
-          exit 1
-        }
+        origin="${FOODTINDER_PUBLIC_ORIGIN%%,*}"
+        export GF_SERVER_ROOT_URL="${origin%/}/grafana/"
+        # No default Grafana password is exposed; Django authenticates staff.
+        GF_SECURITY_ADMIN_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d '[:space:]')"
+        export GF_SECURITY_ADMIN_PASSWORD
         exec /run.sh
-    ports:
-      - "127.0.0.1:3000:3000"
     volumes:
       - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/grafana/api/health"]
       interval: 15s
       timeout: 3s
       retries: 3

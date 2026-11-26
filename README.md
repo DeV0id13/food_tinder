@@ -83,6 +83,8 @@ pnpm dev
 В режиме разработки Swagger UI доступен на `http://localhost:8000/api/docs/`,
 схема на `/api/schema/`, ReDoc на `/api/redoc/`. `GET /api/v1/health/`
 показывает, что HTTP-процесс жив. `GET /api/v1/ready/` проверяет PostgreSQL.
+После production deploy мониторинг доступен на `/grafana/` и `/prometheus/`
+того же origin с существующей staff-сессией Django (без SSH и отдельного пароля).
 
 ## Проверки
 

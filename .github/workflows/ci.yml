@@ -300,6 +300,8 @@ jobs:
           grep -Eiq '^X-Request-ID: [a-f0-9-]{36}' /tmp/foodtinder-headers
           curl -4 --fail --silent --show-error --max-time 4 http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics
           grep '^foodtinder_api_requests_total{.*"health".*} 1.0$' /tmp/foodtinder-metrics
+      - name: Test browser monitoring access through Caddy
+        run: bash deploy/test-monitoring.sh
       - name: Trivy full vulnerability report (all severities)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
@@ -448,12 +450,10 @@ jobs:
             allowed_host="$(compose exec -T web python -c 'import config.settings as settings; print(settings.ALLOWED_HOSTS[0])' </dev/null)"
             bash deploy/check-http.sh http://127.0.0.1 "$allowed_host" </dev/null
           fi
-          # An optional monitoring failure must leave the verified application running.
-          if [ -s .env.monitoring ]; then
-            if ! compose --profile monitoring pull prometheus grafana node-exporter ||
-               ! compose --profile monitoring up -d --no-deps --force-recreate --wait --wait-timeout 90 prometheus grafana node-exporter; then
-              echo "Monitoring update failed. Check the monitoring profile on the VM." >&2
-            fi
-          fi
+          # Monitoring is part of every approved deploy, without extra VM setup.
+          # Failure is reported without stopping the verified application.
+          compose --profile monitoring pull prometheus grafana node-exporter
+          compose --profile monitoring up -d --no-deps --force-recreate --wait --wait-timeout 120 prometheus grafana node-exporter
+          bash deploy/check-monitoring.sh "$IMAGE_TAG" </dev/null
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts

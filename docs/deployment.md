@@ -105,10 +105,12 @@ or volumes are deleted by the workflow.
 7. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
    `sudo env IMAGE_TAG=...` rather than relying on exported shell variables.
 
-If `.env.monitoring` exists and is nonempty, deployment updates the optional
-monitoring profile after application readiness succeeds. Prometheus and exporters
-remain inside Compose. Grafana binds to loopback. See [monitoring operations](monitoring.md)
-for credentials, inspection, and independent shutdown.
+Deployment starts the monitoring profile automatically after application readiness.
+Open /grafana/ and /prometheus/ on the existing site origin; both require an active
+Django staff session. No separate credentials, .env.monitoring or SSH tunnel are
+required. Service ports remain private. Monitoring startup/scrape failures fail
+the deploy job without stopping the already verified application. See
+[monitoring operations](monitoring.md) for access, inspection and independent shutdown.
 
 Routine application deployments deliberately do not `docker compose pull`
 PostgreSQL. Update PostgreSQL independently after a verified backup and

@@ -108,6 +108,7 @@ def test_deploy_heredoc_passes_no_stdin_to_checks(tmp_path):
     (tmp_path / ".env.prod").write_text("SITE_ADDRESS=:80\n")
     (tmp_path / "deploy").mkdir()
     (tmp_path / "deploy/check-http.sh").write_text('printf "public %s %s\\n" "$1" "$2"\n')
+    (tmp_path / "deploy/check-monitoring.sh").write_text('printf "monitoring %s\\n" "$1"\n')
     stub("git", '#!/bin/sh\nif [ "$1" = rev-parse ]; then printf "test-sha\\n"; fi\n')
     stub(
         "sudo",
@@ -144,5 +145,6 @@ esac
     assert result.stdout.splitlines() == [
         "internal check",
         f"public http://127.0.0.1 {HOST}",
+        "monitoring test-sha",
         "heredoc complete",
     ]

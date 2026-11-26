@@ -31,10 +31,13 @@ flowchart LR
     subgraph monitoring["Профиль monitoring на той же VM"]
         node["node_exporter · ресурсы Linux"]
         prom[("Prometheus · prometheus_data")]
-        graf["Grafana · loopback / SSH"]
+        graf["Grafana · /grafana/"]
         prom -->|"scrape"| node
         graf -->|"PromQL"| prom
     end
+    caddy -->|"/grafana/ · staff"| graf
+    caddy -->|"/prometheus/ · staff"| prom
+    caddy -->|"проверка staff-сессии"| django
     prom -->|"внутренний HTTP · весь трафик"| caddy
     prom -->|"внутренний HTTP · Django API и readiness"| django
 ```
