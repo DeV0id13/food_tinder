@@ -1,6 +1,6 @@
 # Shared Trivy policy for both PR builds and the weekly master re-scan.
-# Severity thresholds and report formats are set explicitly in the workflow,
-# so the complete report retains LOW/MEDIUM/UNKNOWN while HIGH/CRITICAL block.
+# The workflow scans every severity once; check_trivy.py blocks HIGH/CRITICAL
+# from the same JSON report, including findings without available fixes.
 vulnerability:
   type:
     - os

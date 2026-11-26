@@ -126,7 +126,7 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U foodtinder_ci -d foodtinder_ci"
-          --health-interval 5s
+          --health-interval 2s
           --health-timeout 5s
           --health-retries 10
     env:
@@ -204,9 +204,11 @@ jobs:
       - name: Verify build artifact
         run: test -f dist/index.html
 
-      # The small frontend builds faster than exporting its Node layers to GHA.
-      - name: Build frontend image (no redundant remote cache export)
-        run: docker build -f ../deploy/Dockerfile.frontend -t foodtinder-frontend:ci ..
+      # Package the exact Vite output already built on this runner; do not build Node again.
+      - name: Package verified frontend build in Caddy
+        run: >-
+          docker build --target ci-prebuilt --build-context frontend_dist=./dist
+          -f ../deploy/Dockerfile.frontend -t foodtinder-frontend:ci ..
       - name: Validate released Caddy configuration
         run: |
           docker run --rm -e SITE_ADDRESS=:80 foodtinder-frontend:ci caddy validate --config /etc/caddy/Caddyfile
@@ -232,18 +234,19 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Initialize Trivy report artifact
-        run: printf 'Trivy has not completed yet. Inspect workflow logs.\\n' > trivy-full.txt
+        run: printf 'Trivy has not completed yet. Inspect workflow logs.\n' > trivy-status.txt
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-      - name: Build development target
+      - name: Validate development target without exporting an unused image
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           file: Dockerfile
           target: development
-          load: true
-          tags: foodtinder-backend:ci-dev
-          cache-from: type=gha,scope=foodtinder-backend-dev
+          outputs: type=cacheonly
+          cache-from: |
+            type=gha,scope=foodtinder-backend-dev
+            type=gha,scope=foodtinder-backend-prod
           cache-to: type=gha,mode=max,scope=foodtinder-backend-dev
       - name: Build production target for scan and release
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
@@ -300,9 +303,7 @@ jobs:
           grep -Eiq '^X-Request-ID: [a-f0-9-]{36}' /tmp/foodtinder-headers
           curl -4 --fail --silent --show-error --max-time 4 http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics
           grep '^foodtinder_api_requests_total{.*"health".*} 1.0$' /tmp/foodtinder-metrics
-      - name: Test browser monitoring access through Caddy
-        run: bash deploy/test-monitoring.sh
-      - name: Trivy full vulnerability report (all severities)
+      - name: Trivy vulnerability scan (all severities, single pass)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           version: v0.76.2
@@ -310,28 +311,15 @@ jobs:
           scan-type: image
           scanners: vuln
           vuln-type: os,library
-          format: table
+          format: json
           exit-code: "0"
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: "false"
           trivy-config: .github/security/trivy.yaml
           cache: "true"
-          output: trivy-full.txt
-      - name: Trivy HIGH/CRITICAL blocking gate
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
-        with:
-          version: v0.76.2
-          image-ref: foodtinder-backend:ci-prod
-          scan-type: image
-          scanners: vuln
-          vuln-type: os,library
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: "false"
-          trivy-config: .github/security/trivy.yaml
-          cache: "true"
-          output: trivy-blocking.txt
+          output: trivy-full.json
+      - name: Trivy HIGH/CRITICAL blocking gate (same scan)
+        run: python3 .github/scripts/check_trivy.py trivy-full.json trivy-blocking.txt
       # Publish the exact local image that passed Trivy, without rebuilding it.
       - name: Login to GHCR for master only
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -356,7 +344,8 @@ jobs:
         with:
           name: trivy-ci
           path: |
-            trivy-full.txt
+            trivy-status.txt
+            trivy-full.json
             trivy-blocking.txt
           if-no-files-found: error
 
@@ -407,7 +396,9 @@ jobs:
           git reset --hard "$IMAGE_TAG"
           test -f .env.prod || { echo "Missing .env.prod" >&2; exit 1; }
           export IMAGE_TAG
-          compose() { sudo -n env IMAGE_TAG="$IMAGE_TAG" docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
+          # Compose compares this tree SHA to detect changed bind-mounted configuration.
+          MONITORING_CONFIG_SHA="$(git rev-parse "$IMAGE_TAG:deploy/monitoring")"
+          compose() { sudo -n env IMAGE_TAG="$IMAGE_TAG" MONITORING_CONFIG_SHA="$MONITORING_CONFIG_SHA" docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
           # Fail early if production interpolation is incomplete.
           compose config --quiet
           # Do not pull/recreate PostgreSQL during routine app releases.
@@ -452,8 +443,8 @@ jobs:
           fi
           # Monitoring is part of every approved deploy, without extra VM setup.
           # Failure is reported without stopping the verified application.
-          compose --profile monitoring pull prometheus grafana node-exporter
-          compose --profile monitoring up -d --no-deps --force-recreate --wait --wait-timeout 120 prometheus grafana node-exporter
+          # Reuse healthy services and pinned images; recreate only on changed config/tag.
+          compose --profile monitoring up -d --no-deps --pull missing --wait --wait-timeout 120 prometheus grafana node-exporter
           bash deploy/check-monitoring.sh "$IMAGE_TAG" </dev/null
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts

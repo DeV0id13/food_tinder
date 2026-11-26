@@ -4,8 +4,8 @@ The production deploy job is part of the same GitHub Actions CI graph.
 On a push to `master` (including a PR merge), all seven CI jobs run in parallel.
 The `frontend` job builds/tests the client and publishes its immutable SHA-tagged
 image; the `docker` job builds the backend once, scans that exact production
-image with Trivy, and publishes it with the same commit SHA **only after both
-Trivy scans pass**. Pull request and manual CI runs build and scan but never
+image with Trivy, and publishes it with the same commit SHA **only after the
+single Trivy scan and its HIGH/CRITICAL gate pass**. Pull request and manual CI runs build and scan but never
 publish images or deploy. After **all seven checks** pass, the deploy job
 **waits for the required reviewer approval** from the `production` GitHub
 Environment. The deploy job never rebuilds an image. Configure required reviewers when setting

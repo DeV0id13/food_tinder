@@ -6,6 +6,13 @@ RUN corepack prepare pnpm@11.28.13 --activate && pnpm install --frozen-lockfile
 COPY frontend/ ./
 RUN pnpm build
 
-FROM caddy:2-alpine
-COPY --from=build /src/dist/ /srv/frontend/
+FROM caddy:2-alpine AS runtime
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
+
+# CI passes the verified Vite output as a separate BuildKit context.
+FROM runtime AS ci-prebuilt
+COPY --from=frontend_dist / /srv/frontend/
+
+# Default target still builds from source for Docker Compose and make demo.
+FROM runtime AS production
+COPY --from=build /src/dist/ /srv/frontend/

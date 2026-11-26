@@ -102,9 +102,10 @@ must be fixed by the module owner, not hidden in FT-07.
   Frontend Docker caching is deliberately off: cache export previously took 29 s.
 - `docker`: builds both Docker targets and scans **the just-built production
   image**, packages from OS and Python including transitives. Trivy gets a full
-  table report (all severities); its separate HIGH/CRITICAL gate fails the job,
-  including unpatched issues. The full and blocking reports are artifacts even
-  if the gate fails. Scanner errors also fail, never treated as a clean run.
+  JSON report (all severities) in one scan; the gate evaluates that same report
+  and fails on HIGH/CRITICAL, including unpatched issues. Full and blocking
+  reports are artifacts even if the gate fails. Scanner errors and invalid
+  reports fail closed.
 
 A pinned rule set can miss novel issues; Semgrep/Trivy are not substitutes
 for tests of permissions, CSRF or business logic. Production image scanning
