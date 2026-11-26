@@ -288,12 +288,18 @@ jobs:
             -e SECURE_SSL_REDIRECT=false -e POSTGRES_HOST=127.0.0.1 \
             -p 127.0.0.1:18000:8000 foodtinder-backend:ci-prod
           trap 'docker stop ft-ci-http >/dev/null; rm -f .env.prod .env.demo' EXIT
-          curl --fail --silent --show-error --retry 12 --retry-connrefused --retry-delay 1 \
+          # During container startup the published socket can reset a request before either worker is ready.
+          if ! curl -4 --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 1 --max-time 4 \
+              http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics-startup; then
+            docker logs ft-ci-http
+            exit 1
+          fi
+          grep '^foodtinder_database_ready 0.0$' /tmp/foodtinder-metrics-startup
+          curl -4 --fail --silent --show-error --max-time 4 \
             -D /tmp/foodtinder-headers http://localhost:18000/api/v1/health/
           grep -Eiq '^X-Request-ID: [a-f0-9-]{36}' /tmp/foodtinder-headers
-          curl --fail --silent --show-error http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics
+          curl -4 --fail --silent --show-error --max-time 4 http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics
           grep '^foodtinder_api_requests_total{.*"health".*} 1.0$' /tmp/foodtinder-metrics
-          grep '^foodtinder_database_ready 0.0$' /tmp/foodtinder-metrics
       - name: Trivy full vulnerability report (all severities)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
