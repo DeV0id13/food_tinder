@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 20s
+  scrape_timeout: 5s
+  evaluation_interval: 20s
+
+scrape_configs:
+  - job_name: prometheus
+    metrics_path: /prometheus/metrics
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: django
+    metrics_path: /_metrics/
+    sample_limit: 5000
+    static_configs:
+      - targets: ['web:8000']
+
+  - job_name: caddy
+    sample_limit: 3000
+    static_configs:
+      - targets: ['proxy:9180']
+    metric_relabel_configs:
+      # The outer subroute handler wraps the entire public request once.
+      - source_labels: [__name__, server, handler]
+        regex: 'caddy_http_(requests_total|requests_in_flight|request_duration_seconds_(bucket|sum|count));edge_(http|https);subroute|caddy_http_(requests_total|requests_in_flight|request_duration_seconds_(bucket|sum|count));remaining_auto_https_redirects;static_response'
+        action: keep
+
+  - job_name: node
+    sample_limit: 2000
+    static_configs:
+      - targets: ['node-exporter:9100']

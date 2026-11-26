@@ -1,0 +1,692 @@
+{
+  "uid": "foodtinder",
+  "title": "FoodTinder · RED / USE",
+  "tags": [
+    "FoodTinder"
+  ],
+  "description": "RED приложения и ресурсы VM. Caddy включает API, HTML, статику и медиа. Django API показан отдельно, складывать два ряда нельзя. Окно rate 2 минуты.",
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "refresh": "20s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Запросы HTTP и API",
+      "description": "API входит в общий HTTP-трафик Caddy. Прямые внутренние readiness-запросы видны только в Django.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(caddy_http_requests_total[2m]))",
+          "legendFormat": "Caddy · весь HTTP",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(foodtinder_api_requests_total[2m]))",
+          "legendFormat": "Django · API",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Успешные ответы 2xx",
+      "description": "2xx / все ответы. Перенаправления входят в знаменатель. При нулевом знаменателе доля не определена.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(caddy_http_request_duration_seconds_count{code=~\"2..\"}[2m])) or (0 * sum(rate(caddy_http_request_duration_seconds_count[2m])))) / sum(rate(caddy_http_request_duration_seconds_count[2m]))",
+          "legendFormat": "Caddy",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "(sum(rate(foodtinder_api_requests_total{status=\"2xx\"}[2m])) or (0 * sum(rate(foodtinder_api_requests_total[2m])))) / sum(rate(foodtinder_api_requests_total[2m]))",
+          "legendFormat": "Django API",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Ошибки HTTP · Caddy",
+      "description": "Серверные ответы. Клиентские тайм-ауты k6 измеряются на генераторе.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(caddy_http_request_duration_seconds_count{code=~\"4..\"}[2m]))",
+          "legendFormat": "4xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(caddy_http_request_duration_seconds_count{code=~\"5..\"}[2m]))",
+          "legendFormat": "5xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Ошибки API · Django",
+      "description": "Серверные ответы. Клиентские тайм-ауты k6 измеряются на генераторе.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(foodtinder_api_requests_total{status=\"4xx\"}[2m]))",
+          "legendFormat": "4xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(foodtinder_api_requests_total{status=\"5xx\"}[2m]))",
+          "legendFormat": "5xx",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Задержка HTTP · Caddy",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(caddy_http_request_duration_seconds_bucket[2m])))",
+          "legendFormat": "p50",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(caddy_http_request_duration_seconds_bucket[2m])))",
+          "legendFormat": "p95",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(caddy_http_request_duration_seconds_bucket[2m])))",
+          "legendFormat": "p99",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Задержка API · Django",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(foodtinder_api_duration_seconds_bucket[2m])))",
+          "legendFormat": "p50",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(foodtinder_api_duration_seconds_bucket[2m])))",
+          "legendFormat": "p95",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(foodtinder_api_duration_seconds_bucket[2m])))",
+          "legendFormat": "p99",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Выполняемые запросы",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(caddy_http_requests_in_flight)",
+          "legendFormat": "Caddy",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "foodtinder_api_in_flight",
+          "legendFormat": "Django API",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Доступность сборщиков и PostgreSQL",
+      "description": "1 — доступен, 0 — проверка завершилась ошибкой, пропуск — метрика отсутствует.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up",
+          "legendFormat": "{{job}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "foodtinder_database_ready",
+          "legendFormat": "Готовность БД",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "CPU VM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[2m]))",
+          "legendFormat": "Занято",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "avg(rate(node_cpu_seconds_total{mode=\"iowait\"}[2m]))",
+          "legendFormat": "Ожидание I/O",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Память VM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "Использовано",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "node_memory_MemAvailable_bytes",
+          "legendFormat": "Доступно",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Корневой диск VM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}",
+          "legendFormat": "Занято",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_disk_io_time_seconds_total[2m])",
+          "legendFormat": "Занято I/O · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Сеть VM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 40,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_network_receive_bytes_total[2m])",
+          "legendFormat": "Вход · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_network_transmit_bytes_total[2m])",
+          "legendFormat": "Выход · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Сетевые ошибки и потери VM",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_network_receive_errs_total[2m])",
+          "legendFormat": "Ошибки RX · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_network_transmit_errs_total[2m])",
+          "legendFormat": "Ошибки TX · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "rate(node_network_receive_drop_total[2m])",
+          "legendFormat": "Потери RX · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "D",
+          "expr": "rate(node_network_transmit_drop_total[2m])",
+          "legendFormat": "Потери TX · {{device}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Давление на ресурсы VM",
+      "description": "Доля времени ожидания по Linux PSI. На ядрах без PSI ряд отсутствует.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "foodtinder-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 48,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(node_pressure_cpu_waiting_seconds_total[2m])",
+          "legendFormat": "CPU",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "rate(node_pressure_memory_waiting_seconds_total[2m])",
+          "legendFormat": "MEMORY",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "rate(node_pressure_io_waiting_seconds_total[2m])",
+          "legendFormat": "IO",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "foodtinder-prometheus"
+          }
+        }
+      ]
+    }
+  ]
+}

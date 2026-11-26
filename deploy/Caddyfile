@@ -1,27 +1,105 @@
 {
-    admin off
+	admin off
+	metrics
+	servers :80 {
+		name edge_http
+	}
+	servers :443 {
+		name edge_https
+	}
+	servers :9180 {
+		name monitoring
+	}
+	log {
+		format filter {
+			wrap json
+			fields {
+				request delete
+				resp_headers delete
+			}
+		}
+	}
+}
+
+:9180 {
+	metrics /metrics
 }
 
 {$SITE_ADDRESS} {
-    encode zstd gzip
+	log {
+		format filter {
+			wrap json
+			fields {
+				request delete
+				resp_headers delete
+				user_id delete
+			}
+		}
+	}
 
-    @django path /api/* /admin*
-    handle @django {
-        reverse_proxy web:8000 {
-            header_up X-FoodTinder-Client-IP {remote_host}
-        }
-    }
-    handle_path /static/* {
-        root * /srv/static
-        file_server
-    }
-    handle_path /media/* {
-        root * /srv/media
-        file_server
-    }
-    handle {
-        root * /srv/frontend
-        try_files {path} /index.html
-        file_server
-    }
+	route {
+		vars request_id {http.request.uuid}
+		log_append <request_id {vars.request_id}
+		header X-Request-ID {vars.request_id}
+		encode zstd gzip
+
+		@metrics path /metrics /metrics/* /_metrics /_metrics/* /_monitoring_auth /_monitoring_auth/*
+		respond @metrics 404
+
+		# Every UI, asset and API request requires a Django staff session.
+		redir /grafana /grafana/ 308
+		redir /prometheus /prometheus/ 308
+
+		handle /grafana/* {
+			route {
+				request_header -X-FoodTinder-Monitoring-User
+				forward_auth web:8000 {
+					uri /_monitoring_auth/grafana/
+					copy_headers X-FoodTinder-Monitoring-User
+					header_up X-Request-ID {vars.request_id}
+				}
+				reverse_proxy grafana:3000 {
+					header_up -Cookie
+					header_up -Authorization
+					header_down Cache-Control "no-store"
+				}
+			}
+		}
+		handle /prometheus/* {
+			route {
+				request_header -X-FoodTinder-Monitoring-User
+				forward_auth web:8000 {
+					uri /_monitoring_auth/prometheus/
+					header_up X-Request-ID {vars.request_id}
+				}
+				reverse_proxy prometheus:9090 {
+					header_up -Cookie
+					header_up -Authorization
+					header_down Cache-Control "no-store"
+				}
+			}
+		}
+
+		@django path /api/* /admin*
+		handle @django {
+			reverse_proxy web:8000 {
+				header_up X-FoodTinder-Client-IP {remote_host}
+				header_up X-Request-ID {vars.request_id}
+				header_down -X-Request-ID
+			}
+		}
+		handle_path /static/* {
+			root * /srv/static
+			file_server
+		}
+		handle_path /media/* {
+			root * /srv/media
+			file_server
+		}
+		handle {
+			root * /srv/frontend
+			try_files {path} /index.html
+			file_server
+		}
+	}
 }

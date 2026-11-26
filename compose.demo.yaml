@@ -1,0 +1,63 @@
+name: foodtinder-demo
+
+services:
+  postgres:
+    image: postgres:16
+    env_file: .env.demo
+    environment:
+      POSTGRES_DB: foodtinder_demo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      target: production
+    env_file: .env.demo
+    environment:
+      POSTGRES_DB: foodtinder_demo
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      FOODTINDER_DEMO: "1"
+      AUTH_RATE_LIMIT_TRUST_PROXY: "true"
+    volumes:
+      - staticfiles:/app/staticfiles
+      - recipe_photos:/app/media/recipes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/v1/ready/', timeout=3).close()"]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+
+  proxy:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    environment:
+      SITE_ADDRESS: ":80"
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - staticfiles:/srv/static:ro
+      - recipe_photos:/srv/media/recipes:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/v1/ready/"]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+
+volumes:
+  postgres_data:
+  staticfiles:
+  recipe_photos:

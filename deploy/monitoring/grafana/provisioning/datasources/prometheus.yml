@@ -1,0 +1,11 @@
+apiVersion: 1
+datasources:
+  - name: FoodTinder Prometheus
+    uid: foodtinder-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090/prometheus
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 20s

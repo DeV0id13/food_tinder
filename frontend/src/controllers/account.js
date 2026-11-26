@@ -41,6 +41,7 @@ export class AccountController {
         this.state.busy = null;
       }
       this.app.recipes.clearSwipeNotice();
+      this.app.recipes.invalidateCatalog();
       clearPrivateState(this.state);
       this.state.feed = null;
       this.state.feedStatus = 'idle';

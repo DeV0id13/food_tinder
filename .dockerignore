@@ -22,3 +22,8 @@ catalog-import
 **/node_modules
 **/dist
 **/.pnpm-store
+
+.agents
+.codex
+.aws
+loadtests

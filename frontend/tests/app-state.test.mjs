@@ -18,6 +18,10 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
+function recipePage(results = [], options = {}) {
+  return {results, count: results.length, next: null, previous: null, ...options};
+}
+
 function savedPlan(id = 1, slots = []) {
   return {id, title: '', version: 1, start_date: '2026-11-20', duration_days: 3, enabled_meals: ['lunch'], slots};
 }
@@ -39,6 +43,7 @@ function createApp(overrides = {}, browser) {
   });
   const api = {
     getFeed: async () => ({count: 0, results: []}),
+    getRecipes: async () => recipePage(),
     getFavorites: async () => [{id: 22}],
     getPlans: async () => [],
     getSession: async () => guest,
@@ -361,60 +366,65 @@ test('liking a recipe refreshes favorites in the frontend', async () => {
   assert.ok(app.messages.includes('Добавлено в избранное'));
 });
 
-test('catalog search updates results without rerendering the input', () => {
-  const app = createApp();
-  app.state.catalogStatus = 'ready';
-  app.state.catalog = [
-    {id: 1, title: 'Борщ с говядиной', meal_types: ['lunch'], cooking_time_minutes: 60, difficulty: 2},
-    {id: 2, title: 'Омлет с сыром', meal_types: ['breakfast'], cooking_time_minutes: 15, difficulty: 1},
-  ];
+test('catalog search debounces and immediately invalidates an older response without replacing the input', async (t) => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const stale = deferred();
+  const fresh = deferred();
+  const calls = [];
+  const app = createApp({getRecipes: (request) => {
+    calls.push(request);
+    return calls.length === 1 ? stale.promise : fresh.promise;
+  }});
+  app.state.catalogOffset = 30;
+  const pending = app.recipes.loadCatalog();
   const results = {innerHTML: ''};
   const count = {textContent: ''};
   app.root.querySelector = (selector) => ({
-    '[data-catalog-results]': results,
-    '[data-catalog-count]': count,
+    '[data-catalog-results]': results, '[data-catalog-count]': count,
   })[selector];
-  app.onInput({target: {dataset: {input: 'recipe-search'}, value: 'омлет'}});
-  assert.equal(app.state.catalogQuery, 'омлет');
+  for (const value of ['ом', 'омле', 'омлет']) {
+    app.onInput({target: {dataset: {input: 'recipe-search'}, value}});
+    t.mock.timers.tick(60);
+  }
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].signal.aborted, true);
+  stale.resolve(recipePage([{id: 1, title: 'Борщ'}]));
+  await pending;
+  assert.match(results.innerHTML, /Загружаем каталог/);
+  t.mock.timers.tick(200);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].query, 'омлет');
+  assert.equal(calls[1].offset, 0);
+  fresh.resolve(recipePage([{id: 2, title: 'Омлет с сыром'}]));
+  await new Promise(setImmediate);
   assert.match(results.innerHTML, /Омлет с сыром/);
-  assert.doesNotMatch(results.innerHTML, /Борщ с говядиной/);
-  assert.equal(count.textContent, 'Найдено: 1 из 2');
-  assert.match(app.root.innerHTML, /^$/);
+  assert.equal(count.textContent, 'Показано: 1–1 из 1');
+  assert.equal(app.root.innerHTML, '');
 });
 
-test('catalog combines all filters, preserves them on navigation and drops private filters on user change', async () => {
-  const app = createApp();
-  app.state.catalogStatus = 'ready';
-  app.state.catalog = [
-    {id: 1, title: 'Суп с копчёностями', meal_types: ['lunch', 'dinner'], cooking_time_minutes: 60},
-    {id: 2, title: 'Суп с грибами', meal_types: ['lunch'], cooking_time_minutes: 70},
-    {id: 3, title: 'Суп-пюре', meal_types: ['dinner'], cooking_time_minutes: 25},
-    {id: 4, title: 'Суп с фасолью', meal_types: ['lunch'], cooking_time_minutes: 30},
-  ];
-  app.state.favoritesStatus = 'ready';
-  setFavorites(app.state, app.state.catalog.slice(0, 3));
-  const results = {innerHTML: ''};
-  const count = {textContent: ''};
-  app.root.querySelector = (selector) => ({
-    '[data-catalog-results]': results,
-    '[data-catalog-count]': count,
-  })[selector];
+test('catalog sends combined filters and clears user-specific results on session change', async () => {
+  const requests = [];
+  const app = createApp({getRecipes: async (request) => {
+    requests.push(request);
+    return recipePage([{id: 1, title: 'Суп с копчёностями'}]);
+  }});
+  app.state.view = 'recipes';
   app.onInput({target: {dataset: {input: 'recipe-search'}, value: '  СУП  '}});
   await app.onChange({target: {dataset: {change: 'catalog-meal'}, value: 'lunch'}});
   await app.onChange({target: {dataset: {change: 'catalog-time'}, value: '60'}});
+  await app.onChange({target: {dataset: {change: 'catalog-sort'}, value: 'time'}});
   await app.onChange({target: {dataset: {change: 'catalog-favorites'}, checked: true}});
-  assert.match(results.innerHTML, /Суп с копчёностями/);
-  assert.doesNotMatch(results.innerHTML, /Суп с грибами|Суп-пюре|Суп с фасолью/);
-  assert.equal(count.textContent, 'Найдено: 1 из 4');
+  const {query, meal, maxTime, favorites, sort} = requests.at(-1);
+  assert.deepEqual({query, meal, maxTime, favorites, sort}, {query: 'СУП', meal: 'lunch', maxTime: 60, favorites: true, sort: 'time'});
   await app.navigation.navigate('feed');
   await app.navigation.navigate('recipes');
-  assert.equal(app.state.catalogFavoritesOnly, true);
+  assert.equal(requests.at(-1).favorites, true);
   app.account.setSession(userB);
   assert.equal(app.state.catalogFavoritesOnly, false);
-  assert.equal(app.state.favoriteIds.size, 0);
+  assert.equal(app.state.catalog, null);
   assert.equal(app.state.catalogMeal, 'lunch');
   await app.onClick({target: {closest: () => ({dataset: {action: 'reset-catalog'}})}});
-  assert.deepEqual([app.state.catalogQuery, app.state.catalogMeal, app.state.catalogMaxTime], ['', '', 0]);
+  assert.deepEqual([app.state.catalogQuery, app.state.catalogMeal, app.state.catalogMaxTime, app.state.catalogSort], ['', '', 0, 'id']);
 });
 
 test('guests can undo the last local hide without restoring earlier hides', async () => {
@@ -639,7 +649,9 @@ test('catalog URL restores filters across reload and browser history without an 
     {id: 1, title: 'Суп с копчёностями', meal_types: ['lunch'], cooking_time_minutes: 45},
     {id: 2, title: 'Суп с грибами', meal_types: ['lunch'], cooking_time_minutes: 25},
   ];
-  const api = {getSession: async () => userA, getRecipes: async () => catalog, getFavorites: async () => catalog.slice(0, 1)};
+  const api = {getSession: async () => userA, getRecipes: async ({favorites, offset}) => recipePage(
+    favorites ? catalog.slice(0, 1) : catalog, {count: 60, next: offset ? null : "next", previous: offset ? "prev" : null},
+  ), getFavorites: async () => catalog.slice(0, 1)};
   const app = createApp(api, browser);
   app.root.querySelector = () => null;
   await app.start();
@@ -648,6 +660,8 @@ test('catalog URL restores filters across reload and browser history without an 
   await app.onChange({target: {dataset: {change: 'catalog-meal'}, value: 'lunch'}});
   await app.onChange({target: {dataset: {change: 'catalog-time'}, value: '60'}});
   await app.onChange({target: {dataset: {change: 'catalog-favorites'}, checked: true}});
+  await app.recipes.changeCatalogPage(30);
+  assert.equal(browser.location.searchParams.get('offset'), '30');
   const filteredUrl = browser.location.pathname + browser.location.search;
   assert.equal(browser.location.searchParams.get('favorites'), '1');
   const reloaded = createApp(api, createBrowser(filteredUrl));
@@ -657,13 +671,18 @@ test('catalog URL restores filters across reload and browser history without an 
   assert.equal(reloaded.state.catalogMeal, 'lunch');
   assert.equal(reloaded.state.catalogMaxTime, 60);
   assert.equal(reloaded.state.catalogFavoritesOnly, true);
-  assert.match(reloaded.root.innerHTML, /Найдено: 1 из 2/);
+  assert.equal(reloaded.state.catalogOffset, 30);
+  assert.match(reloaded.root.innerHTML, /Показано: 31–31 из 60/);
   await app.navigation.navigate('plans');
   browser.history.back();
   assert.equal(app.state.view, 'recipes');
   assert.equal(app.state.catalogQuery, 'копчен');
+  assert.equal(app.state.catalogOffset, 30);
+  browser.history.back();
+  assert.equal(app.state.catalogOffset, 0);
   browser.history.back();
   assert.equal(app.state.view, 'feed');
+  browser.history.forward();
   browser.history.forward();
   browser.history.forward();
   assert.equal(app.state.view, 'plans');
@@ -1068,7 +1087,7 @@ for (const [count, view, options] of [
     browser.confirm = () => assert.fail('Internal navigation opened a system dialog');
     const api = {
       getSession: async () => userA, getPlan: async (id) => savedPlan(id), getPlans: async () => [savedPlan()],
-      getRecipes: async () => [], getShoppingList: async (id) => ({plan_id: id, items: []}),
+      getRecipes: async () => recipePage(), getShoppingList: async (id) => ({plan_id: id, items: []}),
       updatePlan: () => assert.fail('Leaving without saving sent a plan write'),
     };
     const app = createApp(api, browser);
@@ -1186,7 +1205,7 @@ test('Forward asks before leaving a dirty plan and replays the original destinat
   const app = createApp({
     getSession: async () => userA,
     getPlan: async (id) => savedPlan(id),
-    getRecipes: async () => [],
+    getRecipes: async () => recipePage(),
     updatePlan: async (id, data) => ({...savedPlan(id), ...data, version: 2}),
   }, browser);
   await app.start();

@@ -28,6 +28,18 @@ flowchart LR
     django -->|"ORM и транзакции"| postgres[("PostgreSQL · postgres_data")]
     django -->|"collectstatic в deploy"| static
     django -->|"загрузка фото в Admin"| media
+    subgraph monitoring["Профиль monitoring на той же VM"]
+        node["node_exporter · ресурсы Linux"]
+        prom[("Prometheus · prometheus_data")]
+        graf["Grafana · /grafana/"]
+        prom -->|"scrape"| node
+        graf -->|"PromQL"| prom
+    end
+    caddy -->|"/grafana/ · staff"| graf
+    caddy -->|"/prometheus/ · staff"| prom
+    caddy -->|"проверка staff-сессии"| django
+    prom -->|"внутренний HTTP · весь трафик"| caddy
+    prom -->|"внутренний HTTP · Django API и readiness"| django
 ```
 
 Каждое Django-приложение изменяет принадлежащие ему данные. Shopping обновляет

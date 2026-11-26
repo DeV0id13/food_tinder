@@ -1,5 +1,5 @@
 import {ApiError} from './api/errors.js';
-import {createInitialState, defaultFavoriteFilters} from './state/state.js';
+import {createInitialState, defaultCatalogFilters, defaultFavoriteFilters} from './state/state.js';
 import {readRoute} from './utils/routes.js';
 import {renderShell} from './views/shell.js';
 import {renderLibraryResults} from './views/plan-library.js';
@@ -143,7 +143,7 @@ export class FoodTinderApp {
     }
     if (view === 'recipes') {
       await Promise.all([
-        this.state.catalog ? undefined : this.recipes.loadCatalog(),
+        this.recipes.loadCatalog(),
         needsFavorites ? this.recipes.loadFavorites() : undefined,
       ]);
     }
@@ -177,12 +177,13 @@ export class FoodTinderApp {
     }
     if (action === 'retry-feed') return this.recipes.loadFeed();
     if (action === 'retry-recipes') return this.recipes.loadCatalog();
+    if (action === 'catalog-page') return this.recipes.changeCatalogPage(Number(control.dataset.offset));
     if (action === 'reset-catalog') {
-      Object.assign(this.state, {catalogQuery: '', catalogMeal: '', catalogMaxTime: 0, catalogFavoritesOnly: false});
-      this.navigation.writeRoute(true);
+      Object.assign(this.state, defaultCatalogFilters());
+      const loading = this.recipes.changeCatalogFilters();
       this.render();
       this.root.querySelector?.('#recipe-search')?.focus();
-      return;
+      return loading;
     }
     if (action === 'reset-favorites') {
       this.state.favoriteFilters = defaultFavoriteFilters();
@@ -277,30 +278,30 @@ export class FoodTinderApp {
     }
     if (event.target.dataset.input === 'favorite-search') {
       this.state.favoriteFilters.query = event.target.value;
-      return this.recipes.updateRecipeResults('favorites');
+      return this.recipes.updateFavoriteResults();
     }
     if (event.target.dataset.input !== 'recipe-search') return;
     this.state.catalogQuery = event.target.value;
-    this.recipes.updateRecipeResults('catalog');
+    this.recipes.changeCatalogFilters({debounce: true});
   }
 
   async onChange(event) {
     const {change} = event.target.dataset;
-    if (change === 'catalog-meal' || change === 'catalog-time' || change === 'catalog-favorites') {
+    if (['catalog-meal', 'catalog-time', 'catalog-favorites', 'catalog-sort'].includes(change)) {
       if (change === 'catalog-meal') this.state.catalogMeal = event.target.value;
       if (change === 'catalog-time') this.state.catalogMaxTime = Number(event.target.value);
       if (change === 'catalog-favorites' && this.state.session.authenticated) {
         this.state.catalogFavoritesOnly = event.target.checked;
       }
-      this.recipes.updateRecipeResults('catalog');
-      return;
+      if (change === 'catalog-sort') this.state.catalogSort = event.target.value;
+      return this.recipes.changeCatalogFilters();
     }
     if (['favorites-meal', 'favorites-time', 'favorites-sort'].includes(change)) {
       const {value} = event.target;
       if (change === 'favorites-meal') this.state.favoriteFilters.meal = value;
       if (change === 'favorites-time') this.state.favoriteFilters.maxTime = Number(value);
       if (change === 'favorites-sort') this.state.favoriteFilters.sort = value;
-      this.recipes.updateRecipeResults('favorites');
+      this.recipes.updateFavoriteResults();
       return;
     }
     if (this.state.busy) return;

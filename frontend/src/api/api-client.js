@@ -85,7 +85,7 @@ export class ApiClient {
     return this.csrfRequest;
   }
 
-  async request(path, {method = 'GET', query, body, headers = {}, responseType = 'json', skipCsrf = false} = {}) {
+  async request(path, {method = 'GET', query, body, signal, headers = {}, responseType = 'json', skipCsrf = false} = {}) {
     const normalizedMethod = method.toUpperCase();
     const requestHeaders = new Headers(headers);
     requestHeaders.set('Accept', responseType === 'blob' ? '*/*' : 'application/json');
@@ -115,6 +115,7 @@ export class ApiClient {
         credentials: 'include',
         headers: requestHeaders,
         body: payload,
+        signal,
       });
     } catch (cause) {
       throw new ApiError({type: 'network', details: cause});

@@ -4,6 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from apps.catalog.models import Ingredient, Recipe, RecipeIngredient
+from apps.preferences.models import UserRecipeState
 
 pytestmark = pytest.mark.django_db
 
@@ -28,8 +29,8 @@ def catalog_urls(settings):
     settings.ROOT_URLCONF = "tests.catalog.urls"
 
 
-def create_recipe(slug, *, active=True):
-    return Recipe.objects.create(
+def create_recipe(slug, *, active=True, **fields):
+    defaults = dict(
         slug=slug,
         title=slug,
         description="Описание",
@@ -41,6 +42,7 @@ def create_recipe(slug, *, active=True):
         steps=["Приготовьте блюдо."],
         is_active=active,
     )
+    return Recipe.objects.create(**(defaults | fields))
 
 
 def test_guest_list_has_only_active_recipes_in_id_order(client):
@@ -176,3 +178,80 @@ def test_catalog_has_no_write_methods(client, recipe_line):
     assert client.post("/api/v1/recipes/", data={}).status_code == 405
     assert client.patch(f"/api/v1/recipes/{recipe_line.recipe.pk}/", data={}).status_code == 405
     assert client.delete(f"/api/v1/recipes/{recipe_line.recipe.pk}/").status_code == 405
+
+
+def test_catalog_search_meal_and_inclusive_time_work_individually_and_together(client):
+    first = create_recipe("first", title="Ёжики", meal_types=["lunch", "dinner"])
+    long = create_recipe("long", title="Гречневые ёжики", cooking_time_minutes=16)
+    dinner = create_recipe("dinner", title="Ёжики", meal_types=["dinner"])
+    unmatched = create_recipe("unmatched", title="Борщ")
+    create_recipe("hidden", active=False, title="Ёжики")
+
+    def ids(**params):
+        page = client.get("/api/v1/recipes/", params).json()
+        assert page["count"] == len(page["results"])
+        return [row["id"] for row in page["results"]]
+
+    assert ids(q="  ЕЖИКИ ") == [first.pk, long.pk, dinner.pk]
+    assert ids(meal="dinner") == [first.pk, dinner.pk]
+    assert ids(max_time=15) == [first.pk, dinner.pk, unmatched.pk]
+    assert ids(q="ежики", meal="lunch", max_time=15) == [first.pk]
+    assert ids(q="%") == []
+
+
+def test_favorites_filter_is_private_and_works_with_other_filters(client):
+    user = get_user_model().objects.create_user("owner@example.test")
+    other = get_user_model().objects.create_user("other@example.test")
+    matching = create_recipe("matching", title="Суп")
+    unrelated = create_recipe("unrelated", title="Суп")
+    inactive = create_recipe("inactive", active=False, title="Суп")
+    excluded = create_recipe("excluded", title="Каша", meal_types=["breakfast"])
+    for recipe in (matching, inactive, excluded):
+        UserRecipeState.objects.create(user=user, recipe=recipe, is_favorite=True)
+    UserRecipeState.objects.create(user=other, recipe=unrelated, is_favorite=True)
+    url = "/api/v1/recipes/?q=суп&meal=lunch&favorites=1"
+
+    assert client.get(url).json() == {"count": 0, "next": None, "previous": None, "results": []}
+    client.force_login(user)
+    assert [row["id"] for row in client.get(url).json()["results"]] == [matching.pk]
+    assert client.get("/api/v1/recipes/?favorites=0").json()["count"] == 3
+
+
+@pytest.mark.parametrize("sort", ["time", "title", "id"])
+def test_catalog_sort_and_tie_breaker_are_stable_across_pages(client, sort):
+    first = create_recipe("first", title="Bravo")
+    tied = create_recipe("tied", title="BRAVO")
+    earlier = create_recipe("earlier", title="Alpha", cooking_time_minutes=10)
+    expected = [first.pk, tied.pk, earlier.pk] if sort == "id" else [earlier.pk, first.pk, tied.pk]
+    observed = []
+    url = f"/api/v1/recipes/?sort={sort}&limit=1"
+    for _ in expected:
+        page = client.get(url).json()
+        assert page["count"] == 3
+        observed.append(page["results"][0]["id"])
+        url = page["next"]
+    assert url is None
+    assert observed == expected
+    page = client.get("/api/v1/recipes/?offset=2147483647").json()
+    assert page["count"] == 3 and page["results"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("meal", "Lunch"),
+        ("max_time", "0"),
+        ("favorites", "true"),
+        ("sort", "bogus"),
+        ("limit", "0"),
+        ("limit", "1.0"),
+        ("limit", "2147483648"),
+        ("offset", "-1"),
+        ("offset", ""),
+        ("q", "а" * 201),
+    ],
+)
+def test_catalog_invalid_query_returns_400(client, field, value):
+    response = client.get("/api/v1/recipes/", {field: value})
+    assert response.status_code == 400
+    assert field in response.json()
