@@ -24,10 +24,10 @@ jobs:
         with:
           ref: master
       - name: Initialize Trivy report artifact
-        run: printf 'Trivy has not completed yet. Inspect workflow logs.\\n' > trivy-full.txt
+        run: printf 'Trivy has not completed yet. Inspect workflow logs.\n' > trivy-status.txt
       - name: Build fresh production image
         run: docker build --pull --target production -t foodtinder-backend:weekly .
-      - name: Trivy full vulnerability report (all severities)
+      - name: Trivy vulnerability scan (all severities, single pass)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           version: v0.76.2
@@ -35,28 +35,17 @@ jobs:
           scan-type: image
           scanners: vuln
           vuln-type: os,library
-          format: table
+          format: json
           exit-code: "0"
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
           ignore-unfixed: "false"
           trivy-config: .github/security/trivy.yaml
           cache: "false"
-          output: trivy-full.txt
-      - name: Trivy HIGH/CRITICAL blocking gate
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
-        with:
-          version: v0.76.2
-          image-ref: foodtinder-backend:weekly
-          scan-type: image
-          scanners: vuln
-          vuln-type: os,library
-          format: table
-          exit-code: "1"
-          severity: HIGH,CRITICAL
-          ignore-unfixed: "false"
-          trivy-config: .github/security/trivy.yaml
-          cache: "false"
-          output: trivy-blocking.txt
+          output: trivy-full.json
+      - name: Trivy HIGH/CRITICAL blocking gate (same scan)
+        run: |
+          printf 'Trivy scan completed. See the JSON and blocking report.\n' > trivy-status.txt
+          python3 .github/scripts/check_trivy.py trivy-full.json trivy-blocking.txt
       - name: Show blocking CVEs in job log for triage
         if: failure()
         run: |
@@ -69,6 +58,7 @@ jobs:
         with:
           name: trivy-weekly
           path: |
-            trivy-full.txt
+            trivy-status.txt
+            trivy-full.json
             trivy-blocking.txt
           if-no-files-found: error

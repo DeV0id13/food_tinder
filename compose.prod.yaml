@@ -18,6 +18,8 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
+      start_period: 20s
+      start_interval: 2s
       timeout: 5s
       retries: 10
     networks: [internal]
@@ -54,6 +56,8 @@ services:
     logging: *bounded_logs
   prometheus:
     image: prom/prometheus:v3.15.1
+    labels:
+      foodtinder.monitoring.config: ${MONITORING_CONFIG_SHA:-manual}
     profiles: [monitoring]
     restart: unless-stopped
     cpus: 0.35
@@ -73,6 +77,8 @@ services:
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/prometheus/-/ready"]
       interval: 15s
+      start_period: 30s
+      start_interval: 2s
       timeout: 3s
       retries: 3
     networks: [internal, monitoring]
@@ -80,6 +86,8 @@ services:
 
   grafana:
     image: grafana/grafana:13.3.0
+    labels:
+      foodtinder.monitoring.config: ${MONITORING_CONFIG_SHA:-manual}
     profiles: [monitoring]
     restart: unless-stopped
     cpus: 0.35
@@ -123,6 +131,8 @@ services:
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/grafana/api/health"]
       interval: 15s
+      start_period: 30s
+      start_interval: 2s
       timeout: 3s
       retries: 3
     networks: [monitoring]

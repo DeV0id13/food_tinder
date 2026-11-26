@@ -99,12 +99,14 @@ must be fixed by the module owner, not hidden in FT-07.
   detection, apply migrations on clean DB, complete pytest suite.
 - `frontend`: Node.js 22, pnpm 11.28.13, `pnpm install --frozen-lockfile`,
   `pnpm test`, `pnpm run build`, artifact validation and a Caddy frontend image.
-  Frontend Docker caching is deliberately off: cache export previously took 29 s.
+  The image packages the verified Vite build without a second Node build.
+  This parallel job also validates Compose and Prometheus configuration.
 - `docker`: builds both Docker targets and scans **the just-built production
   image**, packages from OS and Python including transitives. Trivy gets a full
-  table report (all severities); its separate HIGH/CRITICAL gate fails the job,
-  including unpatched issues. The full and blocking reports are artifacts even
-  if the gate fails. Scanner errors also fail, never treated as a clean run.
+  JSON report (all severities) in one scan; the gate evaluates that same report
+  and fails on HIGH/CRITICAL, including unpatched issues. Full and blocking
+  reports are artifacts even if the gate fails. Scanner errors and invalid
+  reports fail closed.
 
 A pinned rule set can miss novel issues; Semgrep/Trivy are not substitutes
 for tests of permissions, CSRF or business logic. Production image scanning

@@ -37,8 +37,8 @@ increase total wall-clock time and is intentionally retained.
    job, GHCR publication, or production Environment approval should occur.
 2. Review `backend` logs: `uv run --locked --only-group dev pytest --durations=20`
    must report the slowest tests without reducing test count.
-3. Review `docker` logs: the production image is scanned twice (full report and
-   blocking HIGH/CRITICAL gate). Failed scans must prevent publish and deploy.
+3. Review `docker` logs: one full JSON scan plus the HIGH/CRITICAL gate on
+   that exact report. Failed scans or a failed gate must prevent publish and deploy.
 4. Compare cold/warm runs for backend Buildx cache scopes
    `foodtinder-backend-dev` and `foodtinder-backend-prod`; frontend builds
    without GHA Docker cache export. CI must pass `uv lock --check`.
@@ -60,3 +60,34 @@ master; backend job 40 s vs ~90 s before. Docker cache reduced the
 development target from 45 s to 8 s on warm cache. Re-run all seven checks
 after migrating to uv and compare the new measurements; production speed remains
 unverified until an approved merge and full deploy.
+
+## Follow-up: 26 Nov 2026
+
+Master run #70 (68363b7) measured 170 s for docker, 57 s for backend,
+31 s for frontend. The full browser monitoring Compose test consumed 66 s,
+including a second frontend image build, image downloads and service startup.
+The previous master run #64 measured 109 s for docker; #60 measured 81 s.
+
+Changes in the follow-up:
+
+- Remove the full Caddy monitoring integration test and its script per project
+  owner decision. Keep Django authorization tests, Caddy config validation,
+  Compose/promtool checks (in the parallel frontend job), Gunicorn metrics smoke,
+  and the four-target
+  production check. This removes automated end-to-end coverage of monitoring
+  browser routes; check them manually after a change to monitoring.
+- Frontend packages the existing Vite dist via a separate BuildKit context.
+  The default Dockerfile target still builds from source for make demo.
+- Validate the development target without loading an unused image. Retain
+  dependency-layer caches and scan/publish the exact production image.
+- One full JSON Trivy scan, with a fail-closed HIGH/CRITICAL gate on the same
+  report and unit tests for the gate. Weekly scans use the same policy.
+- Faster initial healthcheck polling, unchanged steady-state intervals for
+  production services. Reuse unchanged healthy monitoring containers and
+  pinned local images; the git tree SHA in their labels invalidates the
+  containers when bind-mounted monitoring configuration changes.
+
+The seven required jobs and approval are unchanged. There is no artifact
+transfer between jobs because each image is now only needed in its own job.
+Measure the new critical path in GitHub Actions; the target is approximately
+60–90 seconds for CI with warm caches, not a guaranteed duration.

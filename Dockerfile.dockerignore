@@ -31,8 +31,10 @@ deploy
 !.github/
 !.github/scripts/
 !.github/scripts/run_mypy.py
+!.github/scripts/check_trivy.py
 
 .agents
 .codex
 .aws
 loadtests
+benchmarks
