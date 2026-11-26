@@ -72,7 +72,8 @@ Changes in the follow-up:
 
 - Remove the full Caddy monitoring integration test and its script per project
   owner decision. Keep Django authorization tests, Caddy config validation,
-  Compose/promtool checks, Gunicorn metrics smoke, and the four-target
+  Compose/promtool checks (in the parallel frontend job), Gunicorn metrics smoke,
+  and the four-target
   production check. This removes automated end-to-end coverage of monitoring
   browser routes; check them manually after a change to monitoring.
 - Frontend packages the existing Vite dist via a separate BuildKit context.

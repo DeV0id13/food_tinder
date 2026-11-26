@@ -99,7 +99,8 @@ must be fixed by the module owner, not hidden in FT-07.
   detection, apply migrations on clean DB, complete pytest suite.
 - `frontend`: Node.js 22, pnpm 11.28.13, `pnpm install --frozen-lockfile`,
   `pnpm test`, `pnpm run build`, artifact validation and a Caddy frontend image.
-  Frontend Docker caching is deliberately off: cache export previously took 29 s.
+  The image packages the verified Vite build without a second Node build.
+  This parallel job also validates Compose and Prometheus configuration.
 - `docker`: builds both Docker targets and scans **the just-built production
   image**, packages from OS and Python including transitives. Trivy gets a full
   JSON report (all severities) in one scan; the gate evaluates that same report

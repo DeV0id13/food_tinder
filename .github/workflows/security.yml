@@ -43,7 +43,9 @@ jobs:
           cache: "false"
           output: trivy-full.json
       - name: Trivy HIGH/CRITICAL blocking gate (same scan)
-        run: python3 .github/scripts/check_trivy.py trivy-full.json trivy-blocking.txt
+        run: |
+          printf 'Trivy scan completed. See the JSON and blocking report.\n' > trivy-status.txt
+          python3 .github/scripts/check_trivy.py trivy-full.json trivy-blocking.txt
       - name: Show blocking CVEs in job log for triage
         if: failure()
         run: |
