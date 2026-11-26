@@ -9,7 +9,26 @@ FoodTinder помогает выбирать рецепты, составлят�
 Зависимости закреплены в `uv.lock` и `frontend/pnpm-lock.yaml`. В production
 Gunicorn запускает Django, а Caddy раздаёт сайт, static и media на одном origin.
 
-## Быстрый старт
+## Демонстрация
+
+После клонирования нужны Docker с Compose v2 и make. Из корня выполните:
+
+```sh
+make demo
+```
+
+Откройте [FoodTinder на 127.0.0.1:8080](http://127.0.0.1:8080/).
+Команда собирает образы с закреплёнными зависимостями, генерирует отдельный
+`.env.demo` и загружает 24 демонстрационных рецепта. Повторный запуск
+сохраняет учётные записи, правки и тома. Для остановки используйте
+`make demo-stop`, для просмотра журналов — `make demo-logs`.
+
+На демонстрации отфильтруйте каталог по завтракам, зарегистрируйте аккаунт,
+добавьте рецепт в избранное, составьте рацион на день и экспортируйте покупки.
+Для проверки Admin создайте пользователя через
+`docker compose --env-file .env.demo -f compose.demo.yaml exec web python manage.py createsuperuser`.
+
+## Среда разработки
 
 Нужны Git, Docker с Compose v2, Node.js 22.13+ (подходит Node.js 24) и pnpm 11.
 Из корня репозитория создайте локальный `.env` со случайными секретами:
@@ -58,6 +77,8 @@ pnpm dev
 - [Зачем приняты архитектурные решения](docs/adr/README.md)
 - [API, Swagger UI, ReDoc и сессии](docs/api.md)
 - [Готовность, логирование, лимиты и production](docs/deployment.md)
+- [Gunicorn, производительность и замеры каталога](docs/performance.md)
+- [Мониторинг Prometheus и Grafana](docs/monitoring.md)
 
 В режиме разработки Swagger UI доступен на `http://localhost:8000/api/docs/`,
 схема на `/api/schema/`, ReDoc на `/api/redoc/`. `GET /api/v1/health/`

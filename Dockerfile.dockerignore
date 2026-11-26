@@ -31,3 +31,8 @@ deploy
 !.github/
 !.github/scripts/
 !.github/scripts/run_mypy.py
+
+.agents
+.codex
+.aws
+loadtests
