@@ -39,4 +39,4 @@ RUN mkdir -p /app/staticfiles /app/media/recipes \
 COPY --chown=app:app . /app/
 USER app
 EXPOSE 8000
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--access-logfile", "-", "--error-logfile", "-"]
+CMD ["sh", "/app/docker/start_gunicorn.sh"]

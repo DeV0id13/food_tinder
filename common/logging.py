@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from traceback import extract_tb
 
+from .observability import request_id
+
 AUTH_EVENTS = {"registration_succeeded", "login_succeeded", "auth_rate_limited"}
 
 
@@ -26,6 +28,8 @@ def _event_fields(record: logging.LogRecord) -> dict[str, object]:
         "logger": record.name,
         "event": event,
     }
+    if current_id := request_id.get():
+        fields["request_id"] = current_id
     status = getattr(record, "status_code", None)
     if type(status) is int:
         fields["status"] = status

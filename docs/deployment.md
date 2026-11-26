@@ -58,8 +58,8 @@ SITE_ADDRESS=YOUR_DOMAIN
 The proxy automatically provisions TLS certificates when a real DNS name
 resolves to the VM and ports 80/443 are reachable. Use HTTPS before real user
 accounts. For **temporary local/public-IP troubleshooting only**, use
-`SITE_ADDRESS=:80`, `DJANGO_ALLOWED_HOSTS=130.193.45.53`,
-`CSRF_TRUSTED_ORIGINS=http://130.193.45.53`,
+`SITE_ADDRESS=:80`, `DJANGO_ALLOWED_HOSTS=YOUR_PUBLIC_IP`,
+`CSRF_TRUSTED_ORIGINS=http://YOUR_PUBLIC_IP`,
 `SECURE_SSL_REDIRECT=false`, `SESSION_COOKIE_SECURE=false` and
 `CSRF_COOKIE_SECURE=false`. Do not use that HTTP setup for real accounts.
 
@@ -104,6 +104,11 @@ or volumes are deleted by the workflow.
    Keep required Environment reviewers and master branch protection enabled.
 7. To diagnose `IMAGE_TAG is missing`, ensure Compose gets the tag through
    `sudo env IMAGE_TAG=...` rather than relying on exported shell variables.
+
+If `.env.monitoring` exists and is nonempty, deployment updates the optional
+monitoring profile after application readiness succeeds. Prometheus and exporters
+remain inside Compose. Grafana binds to loopback. See [monitoring operations](monitoring.md)
+for credentials, inspection, and independent shutdown.
 
 Routine application deployments deliberately do not `docker compose pull`
 PostgreSQL. Update PostgreSQL independently after a verified backup and
@@ -170,3 +175,36 @@ The 2 GiB VM has limited memory; the images are built on GitHub-hosted runners.
 Monitor RAM, disk, Docker image buildup, Yandex Cloud spending and logs.
 The first run may require making GHCR packages public or configuring registry
 authentication on the server. Do not run production with demo/default secrets.
+
+## Gunicorn settings and rollback
+
+The production image defaults to two `gthread` workers with two threads each.
+Set `GUNICORN_WORKERS` and `GUNICORN_THREADS` in `.env.prod` for a persistent
+override. Provide positive integers. Gunicorn applies `GUNICORN_CMD_ARGS`
+after the configuration file and CLI arguments last. Gunicorn itself promotes
+`sync` to `gthread` if threads exceed one. Other worker classes paired with
+multiple threads are rejected during startup.
+
+If `.env.prod` already has a manual `GUNICORN_CMD_ARGS` override, edit the
+existing file in place with its current permissions. Remove only the old
+`--workers` / `-w`, `--threads`, and `--worker-class` / `-k` options after
+moving their desired values to the supported settings. Preserve unrelated
+options and secrets. An explicit `--worker-class sync` with one thread is
+available when reproducing the old single-process configuration.
+
+```sh
+compose() { sudo env IMAGE_TAG="$IMAGE_TAG" docker compose -f compose.prod.yaml --env-file .env.prod "$@"; }
+compose run --rm --no-deps -T web sh /app/docker/start_gunicorn.sh --print-config \
+  | grep -E '^(workers|threads|worker_class) '
+compose logs --tail 30 web
+compose exec -T web ps -o pid,ppid,args
+```
+
+The startup log reports the effective class, worker count and threads, followed
+by worker PIDs. After editing the environment, recreate only `web` with
+`compose up -d --no-deps --force-recreate web` and verify readiness.
+To roll back a release, first stop optional monitoring if it is enabled. Use
+the approved previous SHA, its matching Compose files and its published images.
+Restore the previous Gunicorn settings by editing only the relevant variables.
+Start web and proxy while preserving PostgreSQL and all named volumes. Check
+migration compatibility before using older images. FT-38 adds no migrations.

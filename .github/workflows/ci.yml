@@ -207,6 +207,10 @@ jobs:
       # The small frontend builds faster than exporting its Node layers to GHA.
       - name: Build frontend image (no redundant remote cache export)
         run: docker build -f ../deploy/Dockerfile.frontend -t foodtinder-frontend:ci ..
+      - name: Validate released Caddy configuration
+        run: |
+          docker run --rm -e SITE_ADDRESS=:80 foodtinder-frontend:ci caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm -e SITE_ADDRESS=foodtinder.example.test foodtinder-frontend:ci caddy validate --config /etc/caddy/Caddyfile
       - name: Login to GHCR for master only
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
@@ -253,9 +257,9 @@ jobs:
             type=gha,scope=foodtinder-backend-prod
             type=gha,scope=foodtinder-backend-dev
           cache-to: type=gha,mode=max,scope=foodtinder-backend-prod
-      - name: Validate production Compose with placeholder secrets
+      - name: Validate Compose and smoke-test production observability
         run: |
-          trap 'rm -f .env.prod' EXIT
+          trap 'rm -f .env.prod .env.demo' EXIT
           cat > .env.prod <<'EOF'
           DJANGO_SECRET_KEY=ci-compose-placeholder
           DJANGO_DEBUG=false
@@ -267,7 +271,29 @@ jobs:
           POSTGRES_HOST=postgres
           SITE_ADDRESS=:80
           EOF
-          IMAGE_TAG=ci-validation docker compose -f compose.prod.yaml --env-file .env.prod config --quiet
+          python3 docker/init_env.py --demo
+          docker compose --env-file .env.demo -f compose.demo.yaml config --quiet
+          IMAGE_TAG=ci-validation docker compose -f compose.prod.yaml --env-file .env.prod --profile monitoring config --quiet
+          docker run --rm --entrypoint /bin/promtool \
+            -v "$PWD/deploy/monitoring/prometheus:/etc/foodtinder:ro" prom/prometheus:v3.15.1 \
+            check config /etc/foodtinder/prometheus.yml
+
+          docker run --rm --env-file .env.prod foodtinder-backend:ci-prod \
+            sh /app/docker/start_gunicorn.sh --print-config > /tmp/foodtinder-gunicorn.txt
+          grep -Eq '^workers + = 2$' /tmp/foodtinder-gunicorn.txt
+          grep -Eq '^threads + = 2$' /tmp/foodtinder-gunicorn.txt
+          grep -Eq '^worker_class + = gthread$' /tmp/foodtinder-gunicorn.txt
+
+          docker run --rm --detach --name ft-ci-http --env-file .env.prod \
+            -e SECURE_SSL_REDIRECT=false -e POSTGRES_HOST=127.0.0.1 \
+            -p 127.0.0.1:18000:8000 foodtinder-backend:ci-prod
+          trap 'docker stop ft-ci-http >/dev/null; rm -f .env.prod .env.demo' EXIT
+          curl --fail --silent --show-error --retry 12 --retry-connrefused --retry-delay 1 \
+            -D /tmp/foodtinder-headers http://localhost:18000/api/v1/health/
+          grep -Eiq '^X-Request-ID: [a-f0-9-]{36}' /tmp/foodtinder-headers
+          curl --fail --silent --show-error http://localhost:18000/_metrics/ > /tmp/foodtinder-metrics
+          grep '^foodtinder_api_requests_total{.*"health".*} 1.0$' /tmp/foodtinder-metrics
+          grep '^foodtinder_database_ready 0.0$' /tmp/foodtinder-metrics
       - name: Trivy full vulnerability report (all severities)
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
@@ -415,6 +441,13 @@ jobs:
           if grep -qx 'SITE_ADDRESS=:80' .env.prod; then
             allowed_host="$(compose exec -T web python -c 'import config.settings as settings; print(settings.ALLOWED_HOSTS[0])' </dev/null)"
             bash deploy/check-http.sh http://127.0.0.1 "$allowed_host" </dev/null
+          fi
+          # An optional monitoring failure must leave the verified application running.
+          if [ -s .env.monitoring ]; then
+            if ! compose --profile monitoring pull prometheus grafana node-exporter ||
+               ! compose --profile monitoring up -d --no-deps --force-recreate --wait --wait-timeout 90 prometheus grafana node-exporter; then
+              echo "Monitoring update failed. Check the monitoring profile on the VM." >&2
+            fi
           fi
           REMOTE
           rm -f /tmp/deploy-key /tmp/deploy-known-hosts
